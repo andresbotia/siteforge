@@ -3,15 +3,19 @@ import type { PageId } from "@/lib/builder/limits";
 import { isPageId } from "@/lib/builder/validate";
 import { validateWebsiteSpec } from "@/lib/builder/validate";
 import type { Section, SiteCta, SpecPage, WebsiteSpec } from "@/lib/builder/types";
+import { TrackedCtaLink } from "@/components/builder/site/tracked-cta-link";
+import type { PreviewEventType } from "@/types";
 
 export function DraftSite({
   spec,
   pageId = "home",
   basePath,
+  trackingToken,
 }: {
   spec: unknown;
   pageId?: string;
   basePath: string;
+  trackingToken?: string;
 }) {
   const validated = validateWebsiteSpec(spec);
   if (!validated.ok) {
@@ -37,6 +41,7 @@ export function DraftSite({
           theme={theme}
           basePath={basePath}
           current={current}
+          trackingToken={trackingToken}
         />
       ))}
     </div>
@@ -49,6 +54,7 @@ function SectionView({
   theme,
   basePath,
   current,
+  trackingToken,
 }: {
   section: Section;
   page: SpecPage;
@@ -56,6 +62,7 @@ function SectionView({
   theme: (typeof PALETTE_STYLES)[keyof typeof PALETTE_STYLES];
   basePath: string;
   current: PageId;
+  trackingToken?: string;
 }) {
   switch (section.type) {
     case "announcement":
@@ -82,7 +89,7 @@ function SectionView({
             </nav>
             <div className="flex flex-wrap gap-2">
               {section.ctas.map((cta) => (
-                <CtaLink key={`${cta.kind}-${cta.label}`} cta={cta} className={theme.accent} basePath={basePath} />
+                <CtaLink key={`${cta.kind}-${cta.label}`} cta={cta} className={theme.accent} basePath={basePath} trackingToken={trackingToken} />
               ))}
             </div>
           </div>
@@ -101,7 +108,7 @@ function SectionView({
             <p className="mt-5 max-w-2xl text-lg opacity-90">{section.lede}</p>
             <div className="mt-8 flex flex-wrap gap-3">
               {section.ctas.map((cta) => (
-                <CtaLink key={`${cta.kind}-${cta.label}`} cta={cta} className={theme.accent} basePath={basePath} />
+                <CtaLink key={`${cta.kind}-${cta.label}`} cta={cta} className={theme.accent} basePath={basePath} trackingToken={trackingToken} />
               ))}
             </div>
             <div className="mt-12 h-24 rounded-2xl bg-white/10" aria-hidden="true" />
@@ -170,7 +177,7 @@ function SectionView({
             <p className={`mt-3 ${theme.muted}`}>{section.body}</p>
             <div className="mt-6 flex flex-wrap gap-3">
               {section.ctas.map((cta) => (
-                <CtaLink key={`${cta.kind}-${cta.label}`} cta={cta} className={theme.accent} basePath={basePath} />
+                <CtaLink key={`${cta.kind}-${cta.label}`} cta={cta} className={theme.accent} basePath={basePath} trackingToken={trackingToken} />
               ))}
             </div>
           </div>
@@ -217,19 +224,40 @@ function CtaLink({
   cta,
   className,
   basePath,
+  trackingToken,
 }: {
   cta: SiteCta;
   className: string;
   basePath: string;
+  trackingToken?: string;
 }) {
+  const href = resolveDraftHref(cta.href, basePath);
+  const linkClass = `inline-flex rounded-full px-4 py-2 text-sm font-medium ${className}`;
+  if (trackingToken) {
+    return (
+      <TrackedCtaLink
+        href={href}
+        label={cta.label}
+        className={linkClass}
+        token={trackingToken}
+        eventType={previewEventForCta(cta)}
+      />
+    );
+  }
   return (
     <a
-      href={resolveDraftHref(cta.href, basePath)}
-      className={`inline-flex rounded-full px-4 py-2 text-sm font-medium ${className}`}
+      href={href}
+      className={linkClass}
     >
       {cta.label}
     </a>
   );
+}
+
+function previewEventForCta(cta: SiteCta): PreviewEventType {
+  if (cta.kind === "phone" || cta.href.startsWith("tel:")) return "phone_cta_clicked";
+  if (cta.kind === "contact" || cta.href.startsWith("mailto:")) return "contact_cta_clicked";
+  return "cta_clicked";
 }
 
 function resolveDraftHref(href: string, basePath: string): string {

@@ -56,7 +56,7 @@ export async function listApprovals(): Promise<Approval[]> {
     const requestedTicks = parseTicks(
       payload.requested_cost_ticks ?? row.requested_cost_ticks,
     );
-    return {
+      return {
       id: row.id,
       leadId: row.lead_id ?? undefined,
       agentRunId: row.agent_run_id ?? undefined,
@@ -70,6 +70,7 @@ export async function listApprovals(): Promise<Approval[]> {
         ? (row.approval_type as ApprovalType)
         : "website_deployment",
       requestedAction: row.title,
+      payloadAction: typeof payload.action === "string" ? payload.action : null,
       reason: row.description ?? "",
       status: approvalStatuses.has(row.status as ApprovalStatus)
         ? (row.status as ApprovalStatus)
@@ -227,4 +228,3 @@ export async function approveGenericApproval(
   );
   return rows?.[0] ? { ok: true } : { ok: false, error: "Approval could not be updated." };
 }
-

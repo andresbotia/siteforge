@@ -7,6 +7,7 @@ import {
   SESSION_COOKIE_NAME,
 } from "@/lib/auth/config";
 import { timingSafeEqual, verifySessionToken } from "@/lib/auth/session";
+import { isPreviewEventPath, isPublicPreviewPath } from "@/lib/previews/routes";
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -22,6 +23,10 @@ export async function proxy(request: NextRequest) {
     if (authenticated) {
       return NextResponse.redirect(new URL(POST_LOGIN_PATH, request.url));
     }
+    return NextResponse.next();
+  }
+
+  if (isPublicPreviewPath(pathname) || isPreviewEventPath(pathname)) {
     return NextResponse.next();
   }
 

@@ -10,7 +10,11 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  if (pathname === "/login" || /^\/websites\/[^/]+\/preview$/.test(pathname)) {
+  if (
+    pathname === "/login" ||
+    /^\/websites\/[^/]+\/preview$/.test(pathname) ||
+    /^\/p\/[^/]+$/.test(pathname)
+  ) {
     return <div className="min-h-full bg-background">{children}</div>;
   }
 

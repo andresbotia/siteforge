@@ -20,6 +20,8 @@ That includes credentials for Supabase, Vercel, Resend, Stripe, GitHub, and simi
 
 Agents request actions through backend-controlled tools. The backend validates input, checks approval when required, performs the action with server-held credentials, logs the result, and returns a structured response.
 
+Milestone 7 public preview publication follows this rule: Builder drafts can be shared only after a human approves a `website_deployment` request. The public token is minted by server code, stored only as a hash, and previews remain separate from production deployments.
+
 ## Approval rule
 
 - Read actions may become autonomous.

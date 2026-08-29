@@ -136,6 +136,56 @@ export interface GeneratedWebsite {
   contentProvenance: Array<{ field: string; provenance: string; source: string | null }>;
 }
 
+export type PreviewDeploymentStatus = "active" | "revoked" | "expired";
+
+export type PreviewEventType =
+  | "preview_viewed"
+  | "cta_clicked"
+  | "phone_cta_clicked"
+  | "contact_cta_clicked";
+
+export type BotClassification = "human_likely" | "bot_likely" | "unknown";
+export type DeviceClass = "desktop" | "mobile" | "tablet" | "unknown";
+export type BrowserClass = "chrome" | "safari" | "firefox" | "edge" | "bot" | "unknown";
+
+export interface PreviewDeployment {
+  id: string;
+  generatedWebsiteId: string;
+  leadId: string;
+  approvalId: string | null;
+  tokenHint: string;
+  status: PreviewDeploymentStatus;
+  sourceRunId: string | null;
+  outreachId: string | null;
+  campaignId: string | null;
+  buildVersion: string | null;
+  expiresAt: string | null;
+  approvedAt: string;
+  revokedAt: string | null;
+  lastViewedAt: string | null;
+  viewCount: number;
+  createdAt: string;
+}
+
+export interface PreviewAnalytics {
+  deployment: PreviewDeployment | null;
+  pendingApprovalId: string | null;
+  totalEvents: number;
+  humanLikelyViews: number;
+  botLikelyViews: number;
+  ctaClicks: number;
+  uniqueVisitors: number;
+  lastEventAt: string | null;
+  recentEvents: Array<{
+    id: string;
+    eventType: PreviewEventType;
+    botClassification: BotClassification;
+    deviceClass: DeviceClass;
+    browserClass: BrowserClass;
+    occurredAt: string;
+  }>;
+}
+
 export type AgentId = "scout" | "auditor" | "builder" | "sales" | "manager";
 
 export type AgentRuntimeStatus = "disabled" | "inactive" | "not_configured";
@@ -206,6 +256,7 @@ export interface Approval {
   agentId: AgentId;
   type: ApprovalType;
   requestedAction: string;
+  payloadAction: string | null;
   reason: string;
   status: ApprovalStatus;
   riskLevel: RiskLevel;

@@ -4,9 +4,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/shared/badge";
 import { Button } from "@/components/shared/button";
+import { PreviewManagementCard } from "@/components/previews/preview-management-card";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { WebsiteStatusBadge } from "@/components/shared/status-badge";
+import { getPreviewAnalyticsForWebsite } from "@/data/previews";
 import { getWebsiteById } from "@/data/websites";
 import { formatDateTime } from "@/lib/format";
 
@@ -26,6 +28,7 @@ export default async function WebsiteDetailPage({ params }: WebsitePageProps) {
   const { id } = await params;
   const site = await getWebsiteById(id);
   if (!site) notFound();
+  const previewAnalytics = await getPreviewAnalyticsForWebsite(site.id);
 
   return (
     <>
@@ -76,6 +79,8 @@ export default async function WebsiteDetailPage({ params }: WebsitePageProps) {
           <Detail label="Internal preview" value={site.previewUrl || "—"} />
         </CardBody>
       </Card>
+
+      <PreviewManagementCard site={site} analytics={previewAnalytics} />
 
       <Card className="mt-4">
         <CardHeader

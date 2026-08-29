@@ -48,7 +48,18 @@ Agents never hold privileged infrastructure credentials, including `XAI_API_KEY`
 
 ## Current milestone
 
-Milestone 6 adds **Builder**: a manual, auditable website-draft workflow on audited leads.
+Milestone 7 adds **Preview Deployments + Tracking**: a manual, approval-gated way to share generated Builder drafts with prospects.
+
+- Public prospect previews use `/p/[token]` and remain separate from customer production deployments.
+- Publishing a public preview requires a pending `website_deployment` approval; approving that specific request mints the public token.
+- Full preview tokens are shown only immediately after approval. The database stores only a SHA-256 token hash and short token hint.
+- Private Builder preview at `/websites/[id]/preview` remains authenticated and unchanged.
+- Public previews render the trusted Builder `WebsiteSpec`; invalid, revoked, expired, or missing specs fail closed.
+- Tracking records privacy-conscious view and CTA events with bot/device/browser classification and a daily rotating visitor key. Raw IP addresses are not stored.
+- M8-ready attribution fields are present: `outreach_id`, `campaign_id`, and `attribution`.
+- No production deployment, domain/DNS change, outreach email, payment, or paid AI call is part of Milestone 7.
+
+Milestone 6 added **Builder**: a manual, auditable website-draft workflow on audited leads.
 
 - Builder answers “what replacement website should we draft?” Auditor still answers “what is wrong with the current site?”
 - Manual only (`/agents/builder` and **Build Website Draft** on lead detail). Not autonomous. Not on page load.
@@ -57,7 +68,7 @@ Milestone 6 adds **Builder**: a manual, auditable website-draft workflow on audi
 - Structured `WebsiteSpec` (JSON data, never executable code) rendered by an allowlisted component renderer
 - Factual integrity: sourced vs derived vs omitted. No invented phones, hours, menus, reviews, or testimonials
 - Auditor findings map to draft fixes (viewport, CTA, services nav, menu/reservation only when evidenced)
-- Internal authenticated preview at `/websites/[id]/preview`. Not public. Milestone 7 owns shareable hosting
+- Internal authenticated preview at `/websites/[id]/preview`. Public prospect preview is a separate approval-gated M7 flow.
 - Rebuilds insert a new `generated_websites` row. Eligible `audited` leads may advance to `website_built`
 - Writes `agent_runs` / `agent_tool_calls` / `activity_events`. No page-source dumps
 - Optional future AI copy must use `executeApprovedAiRun`. Builder does not import the provider
@@ -81,6 +92,7 @@ Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek,
 | Scout | Manual $0 catalog discovery + bounded inspection |
 | Auditor | Manual $0 deterministic website audit |
 | Builder | Manual $0 deterministic template draft |
+| Preview deployments | Approval-gated tokenized public previews; not production hosting |
 | Other agents | Disabled |
 | xAI provider layer | Implemented, mock-tested, live calls gated off |
 | Supabase database | Server-side reads/writes with a secret key after admin session check |
@@ -183,6 +195,7 @@ src/
   lib/scout/        Discovery, SSRF-safe inspection, scoring, dedupe
   lib/auditor/      Deterministic website audit pipeline and scoring
   lib/builder/      Deterministic template drafts and WebsiteSpec
+  lib/previews/     Public preview tokens, policy, and tracking helpers
   lib/supabase/     Server-only Supabase client
   lib/auth/         Temporary admin session
   agents/           Future agent packages (empty)
@@ -291,6 +304,7 @@ Schema and development seed live in:
 - `supabase/migrations/20260829210000_scout_lead_qualification.sql`
 - `supabase/migrations/20260829220000_auditor_website_audits.sql`
 - `supabase/migrations/20260829230000_builder_generated_websites.sql`
+- `supabase/migrations/20260830000000_preview_deployments_tracking.sql`
 
 Apply them to the hosted project with the Supabase CLI (after `supabase login` and `supabase link --project-ref afpjclfcajrcbpcrgzvd`):
 
@@ -309,6 +323,7 @@ Do not reset, reseed, or delete production rows.
 - Public publishable credentials cannot SELECT or write application tables.
 - RLS remains enabled on every application table.
 - `anon` and `authenticated` have no table grants or policies for application data.
+- Public preview routes do not use browser Supabase credentials; they resolve active previews server-side by hashed token only.
 - Budget RPCs are invoker-rights, execute revoked from `anon`/`authenticated`/`public`, granted to `service_role` only.
 - Future agents must go through this same server access layer and must not hold `SUPABASE_SECRET_KEY` or `XAI_API_KEY`.
 
@@ -320,7 +335,7 @@ Do not reset, reseed, or delete production rows.
 4. **Milestone 4** — Scout Agent
 5. **Milestone 5** — Auditor Agent
 6. **Milestone 6** — Builder Agent (this repo)
-7. **Milestone 7** — Preview deployments
+7. **Milestone 7** — Preview deployments (this repo)
 8. **Milestone 8** — Sales Agent + email approval
 9. **Milestone 9** — Stripe payments
 10. **Milestone 10** — Manager Agent + customer operations

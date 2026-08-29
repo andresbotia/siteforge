@@ -6,9 +6,12 @@ import {
   approvePaidAiUsage,
   rejectApproval,
 } from "@/data/approvals";
+import { approvePreviewPublicationApproval } from "@/data/previews";
 import { usdToTicks } from "@/lib/ai/money";
 
-export type ApprovalActionState = { ok: boolean; error?: string } | null;
+export type ApprovalActionState =
+  | { ok: boolean; error?: string; publicPath?: string }
+  | null;
 
 export async function rejectApprovalAction(
   _prev: ApprovalActionState,
@@ -30,6 +33,7 @@ export async function approveApprovalAction(
 ): Promise<ApprovalActionState> {
   const id = String(formData.get("approvalId") ?? "");
   const type = String(formData.get("approvalType") ?? "");
+  const payloadAction = String(formData.get("approvalPayloadAction") ?? "");
   if (!id) return { ok: false, error: "Missing approval." };
 
   if (type === "paid_ai_usage") {
@@ -42,6 +46,15 @@ export async function approveApprovalAction(
       revalidatePath("/approvals");
       revalidatePath("/agents");
       revalidatePath("/settings");
+    }
+    return result;
+  }
+
+  if (type === "website_deployment" && payloadAction === "public_preview_publication") {
+    const result = await approvePreviewPublicationApproval(id);
+    if (result.ok) {
+      revalidatePath("/approvals");
+      revalidatePath("/websites");
     }
     return result;
   }

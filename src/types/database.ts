@@ -180,6 +180,95 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      preview_deployments: {
+        Row: {
+          id: string;
+          generated_website_id: string;
+          lead_id: string;
+          approval_id: string | null;
+          token_hash: string;
+          token_hint: string;
+          status: string;
+          source_run_id: string | null;
+          outreach_id: string | null;
+          campaign_id: string | null;
+          build_version: string | null;
+          attribution: Json;
+          expires_at: string | null;
+          approved_at: string;
+          revoked_at: string | null;
+          last_viewed_at: string | null;
+          view_count: number;
+        } & Timestamps;
+        Insert: {
+          id?: string;
+          generated_website_id: string;
+          lead_id: string;
+          approval_id?: string | null;
+          token_hash: string;
+          token_hint: string;
+          status?: string;
+          source_run_id?: string | null;
+          outreach_id?: string | null;
+          campaign_id?: string | null;
+          build_version?: string | null;
+          attribution?: Json;
+          expires_at?: string | null;
+          approved_at?: string;
+          revoked_at?: string | null;
+          last_viewed_at?: string | null;
+          view_count?: number;
+        };
+        Update: {
+          status?: string;
+          revoked_at?: string | null;
+          last_viewed_at?: string | null;
+          view_count?: number;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      preview_events: {
+        Row: {
+          id: string;
+          preview_deployment_id: string;
+          generated_website_id: string;
+          lead_id: string;
+          event_type: string;
+          visitor_key: string | null;
+          bot_classification: string;
+          device_class: string;
+          browser_class: string;
+          country: string | null;
+          region: string | null;
+          city: string | null;
+          referrer: string | null;
+          path: string | null;
+          metadata: Json;
+          occurred_at: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          preview_deployment_id: string;
+          generated_website_id: string;
+          lead_id: string;
+          event_type: string;
+          visitor_key?: string | null;
+          bot_classification?: string;
+          device_class?: string;
+          browser_class?: string;
+          country?: string | null;
+          region?: string | null;
+          city?: string | null;
+          referrer?: string | null;
+          path?: string | null;
+          metadata?: Json;
+          occurred_at?: string;
+        };
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       agents: {
         Row: {
           id: string;
@@ -482,6 +571,10 @@ export type Database = {
 export type LeadRow = Database["public"]["Tables"]["leads"]["Row"];
 export type AuditRow = Database["public"]["Tables"]["website_audits"]["Row"];
 export type WebsiteRow = Database["public"]["Tables"]["generated_websites"]["Row"];
+export type PreviewDeploymentRow =
+  Database["public"]["Tables"]["preview_deployments"]["Row"];
+export type PreviewEventRow =
+  Database["public"]["Tables"]["preview_events"]["Row"];
 export type AgentRow = Database["public"]["Tables"]["agents"]["Row"];
 export type AgentRunRow = Database["public"]["Tables"]["agent_runs"]["Row"];
 export type ApprovalRow = Database["public"]["Tables"]["approvals"]["Row"];
