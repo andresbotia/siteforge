@@ -56,7 +56,7 @@ Milestone 1 is the dashboard foundation:
 - Dark-first operations UI
 - Navigation for the full future workflow
 - Centralized domain types and mock data
-- No API keys required
+- Temporary single-admin login so the deployed dashboard is not public
 - No scraping, email, payments, deployments, or live agents
 
 Everything you see in the UI is fictional sample data, including South Florida businesses. Those businesses are not real.
@@ -70,7 +70,7 @@ Everything you see in the UI is fictional sample data, including South Florida b
 | Approvals queue | Mock, local UI state only |
 | Agent cards and permissions | Documented, not implemented |
 | Supabase / xAI / Vercel / Resend / Stripe | Not connected |
-| Authentication | Not implemented |
+| Authentication | Temporary single-admin env credentials. Not Supabase. |
 | Email sending | Not implemented |
 | Payments | Not implemented |
 | Website generation and deploy | Not implemented |
@@ -93,8 +93,9 @@ src/
   components/    Layout, shared UI, and feature views
   data/          Centralized mock datasets and lookups
   types/         Domain types
-  lib/           Formatting, labels, class helpers, policy copy
+  lib/           Formatting, labels, class helpers, policy copy, temporary auth
   agents/        Future agent packages (empty in Milestone 1)
+  proxy.ts       Request gate for the temporary admin session
 ```
 
 Pages load mock data on the server where possible. Client Components are used only for filters, dialogs, tabs, mobile navigation, and local-only approval actions.
@@ -108,7 +109,23 @@ npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). No environment variables are required.
+Open [http://localhost:3000](http://localhost:3000). Unauthenticated visits redirect to `/login`.
+
+Create `.env.local` in the repository root (never commit this file):
+
+```bash
+SITEFORGE_ADMIN_EMAIL=your-admin-email
+SITEFORGE_ADMIN_PASSWORD=your-strong-password
+SITEFORGE_AUTH_SECRET=replace-with-a-long-random-value
+```
+
+Generate `SITEFORGE_AUTH_SECRET` with a cryptographically random value, for example:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
+```
+
+Restart `npm run dev` after changing environment variables.
 
 ```bash
 npm run lint
@@ -117,9 +134,31 @@ npm run build
 
 ## Environment variables
 
-Copy `.env.example` if you want a local env file. Values are placeholders for later milestones. The app does not read them in Milestone 1.
+Copy `.env.example` to `.env.local` and fill in values locally. Never commit real secrets. `.env*` files are gitignored except `.env.example`.
 
-Never commit real secrets. `.env*` files are gitignored except `.env.example`.
+### Temporary admin authentication
+
+These three variables are required to sign in. They are server-only and must not be prefixed with `NEXT_PUBLIC_`.
+
+| Variable | Purpose |
+| --- | --- |
+| `SITEFORGE_ADMIN_EMAIL` | The single allowed admin email |
+| `SITEFORGE_ADMIN_PASSWORD` | The single allowed admin password |
+| `SITEFORGE_AUTH_SECRET` | HMAC secret used to sign the session cookie (at least 16 characters) |
+
+If they are missing, the app fails closed: dashboard routes redirect to `/login`, and sign-in is rejected. Production must not be left publicly reachable because these values were omitted.
+
+This login is temporary and will be replaced by Supabase authentication in Milestone 2.
+
+### Vercel
+
+Set the same three variables in:
+
+Vercel Project → Settings → Environment Variables
+
+Enable them for **Production** and **Preview** as appropriate, then redeploy so the deployment picks them up.
+
+Later-milestone placeholders (`NEXT_PUBLIC_SUPABASE_URL`, `XAI_API_KEY`, and similar) are unused in this milestone.
 
 ## Roadmap
 

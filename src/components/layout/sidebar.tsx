@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { isActivePath, navSections } from "@/components/layout/nav-config";
+import { logout } from "@/lib/auth/actions";
 import { cn } from "@/lib/cn";
 
 export function Sidebar({
@@ -62,6 +63,14 @@ export function Sidebar({
       <div className="border-t border-border px-4 py-3">
         <p className="text-[11px] text-muted-foreground">Milestone 1</p>
         <p className="text-[11px] text-muted-foreground">Mock data only</p>
+        <form action={logout} className="mt-2">
+          <button
+            type="submit"
+            className="text-[11px] text-muted transition-colors hover:text-foreground"
+          >
+            Log out
+          </button>
+        </form>
       </div>
     </div>
   );

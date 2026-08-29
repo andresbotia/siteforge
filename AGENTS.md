@@ -55,6 +55,8 @@ Examples of privileged / approval-gated actions:
 
 Milestone 1 is the application foundation with mock data only.
 
+A temporary single-admin session (env credentials + signed HTTP-only cookie) protects the dashboard until Milestone 2. Do not replace it with Supabase unless that milestone is explicitly requested. Keep auth logic in `src/lib/auth` and `src/proxy.ts`.
+
 Do not implement Scout, Auditor, Builder, Sales, or Manager.
 Do not connect xAI, Supabase, Vercel, Resend, or Stripe.
 Do not scrape businesses, send email, process payments, or deploy generated websites.
