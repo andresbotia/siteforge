@@ -1,8 +1,18 @@
 import "server-only";
 
 import { readTable } from "@/lib/supabase/server";
-import { asRecord, asStringArray } from "@/lib/json";
-import type { Industry, Lead, LeadStatus, QualificationTier, WebsiteAudit } from "@/types";
+import { asNumber, asRecord, asStringArray } from "@/lib/json";
+import type {
+  AuditFinding,
+  AuditCategory,
+  AuditSeverity,
+  Industry,
+  InspectedUrlSummary,
+  Lead,
+  LeadStatus,
+  QualificationTier,
+  WebsiteAudit,
+} from "@/types";
 import type { AuditRow, LeadRow } from "@/types/database";
 
 const leadStatuses = new Set<LeadStatus>([
@@ -68,7 +78,51 @@ function mapLead(row: LeadRow, websiteScore = 0): Lead {
   };
 }
 
-function mapAudit(row: AuditRow): WebsiteAudit {
+const auditCategories = new Set<AuditCategory>(["technical", "seo", "ux", "content"]);
+const auditSeverities = new Set<AuditSeverity>(["info", "low", "medium", "high", "critical"]);
+
+function mapFinding(value: unknown): AuditFinding | null {
+  const row = asRecord(value);
+  const category = String(row.category ?? "");
+  const severity = String(row.severity ?? "");
+  if (!auditCategories.has(category as AuditCategory)) return null;
+  if (!auditSeverities.has(severity as AuditSeverity)) return null;
+  return {
+    category: category as AuditCategory,
+    code: String(row.code ?? "unknown"),
+    title: String(row.title ?? "Finding"),
+    severity: severity as AuditSeverity,
+    evidence: String(row.evidence ?? ""),
+    affectedUrl: typeof row.affected_url === "string" ? row.affected_url : null,
+    recommendation: String(row.recommendation ?? ""),
+    confidence: asNumber(row.confidence) ?? 0.5,
+  };
+}
+
+function mapInspectedUrl(value: unknown): InspectedUrlSummary | null {
+  const row = asRecord(value);
+  if (typeof row.url !== "string") return null;
+  return {
+    url: row.url,
+    kind: String(row.kind ?? "other"),
+    status: asNumber(row.status),
+    ok: row.ok === true,
+  };
+}
+
+export function mapAudit(row: AuditRow): WebsiteAudit {
+  const findings = Array.isArray(row.findings)
+    ? row.findings.flatMap((item) => {
+        const mapped = mapFinding(item);
+        return mapped ? [mapped] : [];
+      })
+    : [];
+  const inspectedUrls = Array.isArray(row.inspected_urls)
+    ? row.inspected_urls.flatMap((item) => {
+        const mapped = mapInspectedUrl(item);
+        return mapped ? [mapped] : [];
+      })
+    : [];
   return {
     id: row.id,
     leadId: row.lead_id,
@@ -78,9 +132,20 @@ function mapAudit(row: AuditRow): WebsiteAudit {
     seoScore: row.seo_score ?? 0,
     performanceScore: row.performance_score ?? 0,
     conversionScore: row.conversion_score,
+    technicalScore: row.technical_score,
+    uxScore: row.ux_score,
+    contentScore: row.content_score,
+    redesignOpportunityScore: row.redesign_opportunity_score,
     issues: asStringArray(row.issues),
     recommendations: asStringArray(row.recommendations),
     summary: row.summary,
+    findings,
+    inspectedUrls,
+    auditVersion: row.audit_version,
+    sourceRunId: row.source_run_id,
+    pagesInspected: row.pages_inspected ?? 0,
+    websiteUrl: row.website_url,
+    createdAt: row.created_at,
   };
 }
 
@@ -133,4 +198,22 @@ export async function getLatestAuditForLead(
       .maybeSingle(),
   );
   return row ? mapAudit(row) : null;
+}
+
+export async function getAuditById(id: string): Promise<WebsiteAudit | null> {
+  const row = await readTable<AuditRow | null>((client) =>
+    client.from("website_audits").select("*").eq("id", id).maybeSingle(),
+  );
+  return row ? mapAudit(row) : null;
+}
+
+export async function listAuditsForLead(leadId: string): Promise<WebsiteAudit[]> {
+  const rows = await readTable<AuditRow[]>((client) =>
+    client
+      .from("website_audits")
+      .select("*")
+      .eq("lead_id", leadId)
+      .order("created_at", { ascending: false }),
+  );
+  return (rows ?? []).map(mapAudit);
 }

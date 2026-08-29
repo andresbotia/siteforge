@@ -10,6 +10,7 @@ export async function recordActivityEvent(input: {
   title: string;
   description?: string;
   actorType?: string;
+  leadId?: string;
   metadata?: Json;
 }): Promise<void> {
   await mutateTable((client) =>
@@ -20,6 +21,7 @@ export async function recordActivityEvent(input: {
         actor_type: input.actorType ?? "admin",
         title: input.title,
         description: input.description ?? null,
+        lead_id: input.leadId ?? null,
         metadata: input.metadata ?? {},
       })
       .select("id")

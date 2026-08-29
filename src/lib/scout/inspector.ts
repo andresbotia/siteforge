@@ -1,3 +1,11 @@
+import {
+  createLiveHttpClient as createSharedLiveHttpClient,
+  createMockHttpClient,
+  fetchFollowingRedirects,
+  SafeFetchError,
+  type FetchResult,
+  type SafeHttpClient,
+} from "@/lib/http/fetch";
 import { extractPageSignals, resolveHref } from "./html";
 import {
   SCOUT_FETCH_TIMEOUT_MS,
@@ -7,43 +15,14 @@ import {
   SCOUT_MAX_RESPONSE_BYTES,
   SCOUT_USER_AGENT,
 } from "./limits";
-import { assertSafeHttpUrl, type DnsLookup } from "./ssrf";
+import type { DnsLookup } from "./ssrf";
 import type { InspectionResult, LinkCheck, PageSignals } from "./types";
 
-export type FetchResult = {
-  url: string;
-  status: number;
-  location: string | null;
-  body: string;
-  elapsedMs: number;
-  truncated: boolean;
-};
-
-export type ScoutHttpClient = {
-  fetch(
-    url: string,
-    options: { timeoutMs: number; maxBytes: number },
-  ): Promise<FetchResult>;
-};
-
-export class ScoutFetchError extends Error {
-  constructor(
-    message: string,
-    readonly code: "timeout" | "size" | "network" | "blocked",
-  ) {
-    super(message);
-  }
-}
-
-function classifyLink(href: string, kindHint?: LinkCheck["kind"]): LinkCheck["kind"] {
-  if (kindHint) return kindHint;
-  const text = href.toLowerCase();
-  if (/menu|\.pdf/.test(text)) return "menu";
-  if (/reserv|opentable|resy/.test(text)) return "reservation";
-  if (/order|toasttab|doordash|ubereats/.test(text)) return "order";
-  if (/contact/.test(text)) return "contact";
-  return "other";
-}
+export type { FetchResult };
+export type ScoutHttpClient = SafeHttpClient;
+export { createMockHttpClient };
+export const ScoutFetchError = SafeFetchError;
+export type ScoutFetchError = SafeFetchError;
 
 export async function inspectWebsite(
   websiteUrl: string | null | undefined,
@@ -92,7 +71,7 @@ export async function inspectWebsite(
           status: null,
           ok: false,
         });
-        if (error instanceof ScoutFetchError && error.code === "blocked") {
+        if (error instanceof SafeFetchError && error.code === "blocked") {
           // Already recorded as failed; do not follow further.
         }
       }
@@ -109,8 +88,10 @@ export async function inspectWebsite(
     };
   } catch (error) {
     const code =
-      error instanceof ScoutFetchError
-        ? error.code
+      error instanceof SafeFetchError
+        ? error.code === "blocked"
+          ? error.message
+          : error.code
         : error instanceof Error
           ? error.message
           : "network";
@@ -160,122 +141,33 @@ function collectImportantHrefs(
   return resolved;
 }
 
+function classifyLink(href: string, kindHint?: LinkCheck["kind"]): LinkCheck["kind"] {
+  if (kindHint) return kindHint;
+  const text = href.toLowerCase();
+  if (/menu|\.pdf/.test(text)) return "menu";
+  if (/reserv|opentable|resy/.test(text)) return "reservation";
+  if (/order|toasttab|doordash|ubereats/.test(text)) return "order";
+  if (/contact/.test(text)) return "contact";
+  return "other";
+}
+
 async function fetchSafePage(
   rawUrl: string,
   http: ScoutHttpClient,
   lookup?: DnsLookup,
 ): Promise<FetchResult> {
-  let current = rawUrl;
-  for (let hop = 0; hop <= SCOUT_MAX_REDIRECTS; hop += 1) {
-    await assertSafeHttpUrl(current, lookup);
-    let result: FetchResult;
-    try {
-      result = await http.fetch(current, {
-        timeoutMs: SCOUT_FETCH_TIMEOUT_MS,
-        maxBytes: SCOUT_MAX_RESPONSE_BYTES,
-      });
-    } catch (error) {
-      if (error instanceof ScoutFetchError) throw error;
-      const message = error instanceof Error ? error.message : "network";
-      if (message === "timeout") throw new ScoutFetchError("timeout", "timeout");
-      if (message === "size") throw new ScoutFetchError("size", "size");
-      throw new ScoutFetchError(message, "network");
-    }
-    if (result.status >= 300 && result.status < 400 && result.location) {
-      const next = resolveHref(result.url || current, result.location);
-      if (!next) throw new ScoutFetchError("invalid_redirect", "network");
-      current = next;
-      continue;
-    }
-    return result;
-  }
-  throw new ScoutFetchError("too_many_redirects", "network");
-}
-
-export function createMockHttpClient(
-  pages: Record<
-    string,
-    Partial<FetchResult> & { throwCode?: ScoutFetchError["code"] }
-  >,
-): ScoutHttpClient {
-  return {
-    async fetch(url) {
-      const page = pages[url] ?? pages["*"];
-      if (!page) {
-        throw new ScoutFetchError("not_found", "network");
-      }
-      if (page.throwCode) {
-        throw new ScoutFetchError(page.throwCode, page.throwCode);
-      }
-      return {
-        url: page.url ?? url,
-        status: page.status ?? 200,
-        location: page.location ?? null,
-        body: page.body ?? "",
-        elapsedMs: page.elapsedMs ?? 40,
-        truncated: page.truncated ?? false,
-      };
+  return fetchFollowingRedirects(
+    rawUrl,
+    http,
+    {
+      timeoutMs: SCOUT_FETCH_TIMEOUT_MS,
+      maxBytes: SCOUT_MAX_RESPONSE_BYTES,
+      maxRedirects: SCOUT_MAX_REDIRECTS,
     },
-  };
+    lookup,
+  );
 }
 
 export function createLiveHttpClient(): ScoutHttpClient {
-  return {
-    async fetch(url, options) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), options.timeoutMs);
-      try {
-        const response = await fetch(url, {
-          method: "GET",
-          redirect: "manual",
-          headers: { "User-Agent": SCOUT_USER_AGENT, Accept: "text/html,application/xhtml+xml" },
-          signal: controller.signal,
-        });
-        const location = response.headers.get("location");
-        const reader = response.body?.getReader();
-        const chunks: Uint8Array[] = [];
-        let received = 0;
-        if (reader) {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-            received += value.byteLength;
-            if (received > options.maxBytes) {
-              await reader.cancel();
-              throw new ScoutFetchError("size", "size");
-            }
-            chunks.push(value);
-          }
-        }
-        const body = new TextDecoder("utf-8", { fatal: false }).decode(concat(chunks));
-        return {
-          url: response.url || url,
-          status: response.status,
-          location,
-          body,
-          elapsedMs: 0,
-          truncated: false,
-        };
-      } catch (error) {
-        if (error instanceof ScoutFetchError) throw error;
-        if (error instanceof Error && error.name === "AbortError") {
-          throw new ScoutFetchError("timeout", "timeout");
-        }
-        throw new ScoutFetchError("network", "network");
-      } finally {
-        clearTimeout(timer);
-      }
-    },
-  };
-}
-
-function concat(chunks: Uint8Array[]): Uint8Array {
-  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return out;
+  return createSharedLiveHttpClient(SCOUT_USER_AGENT);
 }

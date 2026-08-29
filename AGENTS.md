@@ -54,7 +54,7 @@ Examples of privileged / approval-gated actions:
 
 ## Milestone boundary
 
-Milestone 4 adds manual Scout lead discovery. Milestone 3 paid-AI gates remain mandatory. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`.
+Milestone 5 adds manual Auditor website audits. Milestone 4 Scout and Milestone 3 paid-AI gates remain mandatory. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`.
 
 - Database migrations must be version-controlled under `supabase/migrations`.
 - Never expose privileged credentials client-side. Never put `SUPABASE_SECRET_KEY` or `XAI_API_KEY` in `NEXT_PUBLIC_*` or Client Components.
@@ -75,11 +75,16 @@ Milestone 4 adds manual Scout lead discovery. Milestone 3 paid-AI gates remain m
 - Scout qualification is deterministic. Do not let an LLM author the official score.
 - Scout must not call `executeApprovedAiRun` or `createLiveXaiProvider` directly.
 - Basic Scout runs do not require paid AI.
-- Do not implement Auditor, Builder, Sales, or Manager execution.
+- Auditor inspects existing leads only. It does not discover businesses, generate websites, or contact them.
+- Auditor website fetches must reuse the shared SSRF-safe HTTP client (http/https only; no localhost/private/metadata).
+- Auditor scoring is deterministic. Do not let an LLM author official quality or redesign-opportunity scores.
+- Auditor must not call `executeApprovedAiRun` or `createLiveXaiProvider` directly.
+- Basic Auditor runs do not require paid AI and must remain $0.
+- Do not implement Builder, Sales, or Manager execution.
 - Do not send email, process payments, or deploy generated websites.
 - Do not connect Stripe, Resend, or Vercel APIs.
 - Do not add background workers or scheduled jobs unless a later milestone explicitly asks for them.
-- Do not start Milestone 5 unless asked.
+- Do not start Milestone 6 unless asked.
 
 ## Architecture notes
 
@@ -87,7 +92,9 @@ Milestone 4 adds manual Scout lead discovery. Milestone 3 paid-AI gates remain m
 - Database types live in `src/types/database.ts`.
 - Data access lives in `src/data` repositories. Pages must not run raw Supabase queries.
 - Paid-AI execution lives in `src/lib/ai`. Entry point: `executeApprovedAiRun(runId, request)`.
+- Shared SSRF-safe HTTP lives in `src/lib/http`. Scout and Auditor must not grow a second fetch stack.
 - Scout lives in `src/lib/scout` and `src/data/scout.ts`. Manual UI: `/agents/scout`.
+- Auditor lives in `src/lib/auditor` and `src/data/auditor.ts`. Manual UI: `/agents/auditor`. Audit detail: `/audits/[id]`.
 - Server Supabase utilities live in `src/lib/supabase` and are `server-only`.
 - Shared UI lives in `src/components/shared`.
 - Agent placeholders live in `src/agents`.

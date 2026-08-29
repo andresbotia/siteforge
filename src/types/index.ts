@@ -62,6 +62,28 @@ export interface Lead {
   inspectionSummary: Record<string, unknown> | null;
 }
 
+export type AuditCategory = "technical" | "seo" | "ux" | "content";
+
+export type AuditSeverity = "info" | "low" | "medium" | "high" | "critical";
+
+export interface AuditFinding {
+  category: AuditCategory;
+  code: string;
+  title: string;
+  severity: AuditSeverity;
+  evidence: string;
+  affectedUrl: string | null;
+  recommendation: string;
+  confidence: number;
+}
+
+export interface InspectedUrlSummary {
+  url: string;
+  kind: string;
+  status: number | null;
+  ok: boolean;
+}
+
 export interface WebsiteAudit {
   id: string;
   leadId: string;
@@ -71,9 +93,20 @@ export interface WebsiteAudit {
   seoScore: number;
   performanceScore: number;
   conversionScore: number | null;
+  technicalScore: number | null;
+  uxScore: number | null;
+  contentScore: number | null;
+  redesignOpportunityScore: number | null;
   issues: string[];
   recommendations: string[];
   summary: string | null;
+  findings: AuditFinding[];
+  inspectedUrls: InspectedUrlSummary[];
+  auditVersion: string | null;
+  sourceRunId: string | null;
+  pagesInspected: number;
+  websiteUrl: string | null;
+  createdAt: string;
 }
 
 export type GeneratedWebsiteStatus =

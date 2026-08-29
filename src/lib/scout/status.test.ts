@@ -65,6 +65,17 @@ describe("Scout status is monotonic", () => {
     assert.equal(resolveScoutLeadStatus("approved", "discovered"), "approved");
   });
 
+  it("lets Auditor advance qualified to audited without regressing later statuses", () => {
+    assert.equal(resolveScoutLeadStatus("discovered", "audited"), "audited");
+    assert.equal(resolveScoutLeadStatus("qualified", "audited"), "audited");
+    assert.equal(resolveScoutLeadStatus("audited", "audited"), "audited");
+    assert.equal(resolveScoutLeadStatus("website_built", "audited"), "website_built");
+    assert.equal(resolveScoutLeadStatus("approved", "audited"), "approved");
+    assert.equal(resolveScoutLeadStatus("contacted", "audited"), "contacted");
+    assert.equal(resolveScoutLeadStatus("interested", "audited"), "interested");
+    assert.equal(resolveScoutLeadStatus("customer", "audited"), "customer");
+  });
+
   it("allows an early discovered lead to advance when Scout qualifies it", () => {
     assert.equal(resolveScoutLeadStatus("discovered", "qualified"), "qualified");
   });

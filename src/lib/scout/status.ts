@@ -30,10 +30,17 @@ export function leadPipelineRank(status: string): number | null {
 }
 
 /**
- * Existing lead status is monotonic.
- * Scout may advance discovered → qualified, but never move backward.
+ * Existing lead status is monotonic across Scout and Auditor.
+ * Early-stage leads may advance; later pipeline statuses never move backward.
  * rejected stays rejected. Unknown statuses are preserved.
  */
+export function resolveMonotonicLeadStatus(
+  current: string | null | undefined,
+  proposed: string,
+): string {
+  return resolveScoutLeadStatus(current, proposed);
+}
+
 export function resolveScoutLeadStatus(
   current: string | null | undefined,
   proposed: string,

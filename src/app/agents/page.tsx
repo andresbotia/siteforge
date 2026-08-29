@@ -26,7 +26,7 @@ export default async function AgentsPage() {
     <>
       <PageHeader
         title="Agents"
-        description="Scout can run manually from a $0 catalog. Auditor, Builder, Sales, and Manager stay disabled. Paid xAI still requires an approved dollar ceiling."
+        description="Scout and Auditor run manually at $0. Builder, Sales, and Manager stay disabled. Paid xAI still requires an approved dollar ceiling."
       />
 
       <div className="mb-6">
@@ -54,7 +54,11 @@ export default async function AgentsPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h2 className="text-sm font-medium">{agent.name}</h2>
-                      <Badge>{agent.id === "scout" ? "Manual" : "Disabled"}</Badge>
+                      <Badge>
+                        {agent.id === "scout" || agent.id === "auditor"
+                          ? "Manual"
+                          : "Disabled"}
+                      </Badge>
                     </div>
                     <p className="mt-1 max-w-2xl text-sm text-muted">
                       {agent.purpose}
@@ -63,6 +67,14 @@ export default async function AgentsPage() {
                           {" "}
                           <Link href="/agents/scout" className="text-accent hover:underline">
                             Open Scout
+                          </Link>
+                        </>
+                      ) : null}
+                      {agent.id === "auditor" ? (
+                        <>
+                          {" "}
+                          <Link href="/agents/auditor" className="text-accent hover:underline">
+                            Open Auditor
                           </Link>
                         </>
                       ) : null}

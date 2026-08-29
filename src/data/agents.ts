@@ -32,7 +32,9 @@ export async function listAgents(): Promise<Agent[]> {
     const todayRuns = agentRuns.filter(
       (run) => run.started_at && new Date(run.started_at) >= startOfToday,
     );
-    const completed = agentRuns.filter((run) => run.status === "completed");
+    const completed = agentRuns.filter(
+      (run) => run.status === "completed" || run.status === "succeeded",
+    );
     const last = [...agentRuns].sort((a, b) =>
       (b.started_at ?? "").localeCompare(a.started_at ?? ""),
     )[0];

@@ -36,7 +36,7 @@ Discover → Audit → Build → Approve → Outreach → Sell → Deploy → Ma
 | **Sales** | Creates personalized outreach. |
 | **Manager** | Handles requests for paying customers. |
 
-None of these agents execute yet. Placeholder directories live in `src/agents`.
+Scout and Auditor can run **manually**. Builder, Sales, and Manager stay disabled. Placeholder directories live in `src/agents`.
 
 ## Human approval philosophy
 
@@ -48,22 +48,30 @@ Agents never hold privileged infrastructure credentials, including `XAI_API_KEY`
 
 ## Current milestone
 
-Milestone 4 adds **Scout**: a manual, auditable lead-discovery workflow.
+Milestone 5 adds **Auditor**: a manual, auditable website-audit workflow on existing Scout leads.
 
-- Discovery uses a `BusinessDiscoveryProvider` abstraction
-- The connected implementation is a **$0 local public catalog** (demo). No paid business-data API.
-- Website inspection is bounded HTTP with mandatory SSRF protections
-- Qualification is deterministic (`business_strength_score`, `website_opportunity_score`, overall + tier)
-- Restaurants are a first-class category; food quality is never scored
-- Duplicates match on domain, then phone, then name+city
-- Scout writes `agent_runs` / `agent_tool_calls` and never stores full HTML
-- Basic Scout runs do **not** use xAI. Paid AI still requires Milestone 3 approval
-- Auditor, Builder, Sales, and Manager stay disabled
+- Auditor answers “what is wrong with this website?” Scout still answers “is this business worth investigating?”
+- Manual only (`/agents/auditor` and **Run Website Audit** on lead detail). Not autonomous. Not on page load.
+- Deterministic inspection and scoring. **$0**. Paid AI is not required.
+- Bounded crawl: homepage + up to 5 useful internal pages, redirect/timeout/size caps
+- Shared SSRF-safe HTTP with Scout (`src/lib/http`): http/https only; no localhost, loopback, RFC1918, link-local, or metadata
+- Finding categories: technical, SEO, UX/conversion, content
+- Quality scores: **100 = healthy / strong**, **0 = severely deficient** (`technical_score`, `seo_score`, `ux_score`, `content_score`, `overall_audit_score`)
+- `redesign_opportunity_score`: **100 = strong redesign candidate**, derived from finding severities
+- Restaurant checks: menu discoverability, PDF menu opportunity, hours/location/phone, reservation/order paths **only if the site offers them**
+- Home-service checks: phone/CTA, services, service area, emergency CTA only if claimed
+- Audits are **immutable history**: a later run inserts a new `website_audits` row
+- Eligible early-stage leads may advance to `audited`. Later statuses never regress
+- Writes `agent_runs` / `agent_tool_calls` / `activity_events`. No raw HTML in logs
+- Optional future AI enrichment must use `executeApprovedAiRun`. Auditor does not import the provider
+- Builder, Sales, and Manager stay disabled
 - No outreach, deploy, payments, or recurring jobs
+
+Scout from Milestone 4 remains: manual `$0` `mock_catalog` discovery, deterministic qualification, monotonic lead status.
 
 Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek, Boca Raton, Pompano Beach.
 
-**No live xAI API calls and no paid discovery API calls were made during Milestone 4 implementation.**
+**No live xAI API calls and no paid discovery API calls were made during Milestone 5 implementation.**
 
 ## What is mock vs real
 
@@ -74,6 +82,7 @@ Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek,
 | Paid-AI Approve/Reject | Persisted server-side after `requireAdminSession()` |
 | Other approval types Approve/Reject | Persisted status only; side effects still not executed |
 | Scout | Manual $0 catalog discovery + bounded inspection |
+| Auditor | Manual $0 deterministic website audit |
 | Other agents | Disabled |
 | xAI provider layer | Implemented, mock-tested, live calls gated off |
 | Supabase database | Server-side reads/writes with a secret key after admin session check |
@@ -172,7 +181,9 @@ src/
   data/             Supabase repositories (no raw queries in pages)
   types/            Domain types and Database types
   lib/ai/           Money, pricing, estimator, provider, execution
+  lib/http/         Shared SSRF-safe fetch used by Scout and Auditor
   lib/scout/        Discovery, SSRF-safe inspection, scoring, dedupe
+  lib/auditor/      Deterministic website audit pipeline and scoring
   lib/supabase/     Server-only Supabase client
   lib/auth/         Temporary admin session
   agents/           Future agent packages (empty)
@@ -278,6 +289,8 @@ Schema and development seed live in:
 - `supabase/migrations/20260829120000_seed_development_data.sql`
 - `supabase/migrations/20260829180000_remove_public_read_access.sql`
 - `supabase/migrations/20260829200000_paid_ai_cost_controls.sql`
+- `supabase/migrations/20260829210000_scout_lead_qualification.sql`
+- `supabase/migrations/20260829220000_auditor_website_audits.sql`
 
 Apply them to the hosted project with the Supabase CLI (after `supabase login` and `supabase link --project-ref afpjclfcajrcbpcrgzvd`):
 
@@ -304,8 +317,8 @@ Do not reset, reseed, or delete production rows.
 1. **Milestone 1** — Application foundation
 2. **Milestone 2** — Supabase database + persistent application state
 3. **Milestone 3** — xAI integration + strict cost controls
-4. **Milestone 4** — Scout Agent (this repo)
-5. **Milestone 5** — Auditor Agent
+4. **Milestone 4** — Scout Agent
+5. **Milestone 5** — Auditor Agent (this repo)
 6. **Milestone 6** — Builder Agent
 7. **Milestone 7** — Preview deployments
 8. **Milestone 8** — Sales Agent + email approval

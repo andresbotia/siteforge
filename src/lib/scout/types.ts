@@ -45,9 +45,14 @@ export type PageSignals = {
   metaDescription: string | null;
   hasViewport: boolean;
   hasCanonical: boolean;
+  canonicalHref: string | null;
   headingCount: number;
+  h1Count: number;
+  h1Texts: string[];
+  h2Count: number;
   hasNav: boolean;
   hasPhoneLink: boolean;
+  hasMailto: boolean;
   hasForm: boolean;
   hasContactCta: boolean;
   copyrightYear: number | null;
@@ -55,10 +60,22 @@ export type PageSignals = {
   menuLooksLikePdf: boolean;
   reservationLink: string | null;
   orderLink: string | null;
+  contactLink: string | null;
+  servicesLink: string | null;
+  aboutLink: string | null;
   mentionsMenu: boolean;
   mentionsReservations: boolean;
   mentionsOrdering: boolean;
+  visibleTextLength: number;
+  hasHours: boolean;
+  hasAddressOrLocation: boolean;
+  hasServiceArea: boolean;
+  mentionsEmergency: boolean;
+  hasPlaceholderText: boolean;
+  hasPlainPhoneText: boolean;
+  looksMalformed: boolean;
   sameSiteHrefs: string[];
+  sameOriginHrefs: string[];
 };
 
 export type LinkCheck = {

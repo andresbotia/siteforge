@@ -39,17 +39,19 @@ export const agentCatalog: Record<
     purpose:
       "Analyze websites, SEO, mobile usability, and conversion quality.",
     description:
-      "Auditor will eventually inspect public website content, generate audits, and recommend improvements. It is not implemented in this milestone.",
+      "Auditor inspects a Scout lead's public website with SSRF-safe bounded HTTP and scores findings deterministically. It does not generate a replacement site, send email, deploy, or call xAI.",
     capabilities: [
       "Inspect website content",
-      "Generate audits",
-      "Calculate quality scores",
-      "Recommend improvements",
+      "Generate structured audits",
+      "Calculate quality and redesign-opportunity scores",
+      "Recommend evidence-based improvements",
     ],
     restrictions: [
       "Cannot send email",
       "Cannot deploy websites",
       "Cannot charge customers",
+      "Cannot generate replacement websites",
+      "Cannot call xAI directly",
     ],
     permissions: {
       canReadPublicData: true,

@@ -2,8 +2,10 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AuditRunButton } from "@/components/auditor/audit-run-button";
 import { listActivityForLead } from "@/data/activity";
-import { getLatestAuditForLead, getLeadById } from "@/data/leads";
+import { getLatestAuditForLead, getLeadById, listAuditsForLead } from "@/data/leads";
+import { isLeadEligibleForAudit } from "@/lib/auditor/eligibility";
 import { Button } from "@/components/shared/button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
@@ -34,10 +36,12 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
   const lead = await getLeadById(id);
   if (!lead) notFound();
 
-  const [audit, activity] = await Promise.all([
+  const [audit, audits, activity] = await Promise.all([
     getLatestAuditForLead(lead.id),
+    listAuditsForLead(lead.id),
     listActivityForLead(lead.id),
   ]);
+  const canAudit = isLeadEligibleForAudit(lead);
 
   return (
     <>
@@ -45,13 +49,16 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         title={lead.businessName}
         description={`${lead.industry} · ${lead.location}`}
         actions={
-          <div className="flex flex-col items-end gap-1">
-            <Button variant="primary" disabled>
-              Build Website
-            </Button>
-            <p className="text-[11px] text-muted-foreground">
-              Builder Agent not implemented yet.
-            </p>
+          <div className="flex flex-col items-end gap-3">
+            {canAudit ? <AuditRunButton leadId={lead.id} /> : null}
+            <div className="flex flex-col items-end gap-1">
+              <Button variant="secondary" disabled>
+                Build Website
+              </Button>
+              <p className="text-[11px] text-muted-foreground">
+                Builder Agent not implemented yet.
+              </p>
+            </div>
           </div>
         }
       />
@@ -155,49 +162,70 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         <Card className="mt-4">
           <CardHeader
             title="Website audit"
-            description="Latest persisted audit. Auditor is not implemented."
+            description={
+              audit.auditVersion
+                ? `Latest deterministic audit (${audit.auditVersion}). Historical rows are kept when you re-run Auditor.`
+                : "Latest persisted audit."
+            }
+            action={
+              <Link href={`/audits/${audit.id}`} className="text-xs text-accent hover:underline">
+                Open full audit
+              </Link>
+            }
           />
           <CardBody>
-            <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
+            <p className="mb-4 text-sm text-muted">
+              Audited{audit.createdAt ? ` · ${formatDateTime(audit.createdAt)}` : ""}
+              {audit.redesignOpportunityScore !== null
+                ? ` · redesign opportunity ${audit.redesignOpportunityScore}`
+                : ""}
+            </p>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
               <ScoreBar label="Overall" value={audit.overallScore} />
-              <ScoreBar label="Design" value={audit.designScore} />
-              <ScoreBar label="Mobile" value={audit.mobileScore} />
+              <ScoreBar label="Technical" value={audit.technicalScore ?? audit.performanceScore} />
               <ScoreBar label="SEO" value={audit.seoScore} />
-              <ScoreBar label="Performance" value={audit.performanceScore} />
               <ScoreBar
-                label="Conversion"
-                value={audit.conversionScore ?? 0}
+                label="UX / Conversion"
+                value={audit.uxScore ?? audit.conversionScore ?? 0}
               />
+              <ScoreBar label="Content" value={audit.contentScore ?? audit.designScore} />
             </div>
-            <div className="mt-6 grid gap-6 md:grid-cols-2">
-              <div>
-                <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Issues
-                </h3>
+            <div className="mt-6">
+              <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                Major findings
+              </h3>
+              {audit.findings.filter((item) => item.severity === "critical" || item.severity === "high").length === 0 ? (
                 <ul className="mt-2 list-disc space-y-1.5 pl-4 text-sm text-muted">
-                  {audit.issues.map((issue) => (
+                  {(audit.issues.slice(0, 4).length > 0
+                    ? audit.issues.slice(0, 4)
+                    : ["No high or critical findings stored."]
+                  ).map((issue) => (
                     <li key={issue}>{issue}</li>
                   ))}
                 </ul>
-              </div>
-              <div>
-                <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                  Recommendations
-                </h3>
+              ) : (
                 <ul className="mt-2 list-disc space-y-1.5 pl-4 text-sm text-muted">
-                  {audit.recommendations.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
+                  {audit.findings
+                    .filter((item) => item.severity === "critical" || item.severity === "high")
+                    .slice(0, 6)
+                    .map((item) => (
+                      <li key={`${item.code}-${item.title}`}>{item.title}</li>
+                    ))}
                 </ul>
-              </div>
+              )}
             </div>
+            {audits.length > 1 ? (
+              <p className="mt-4 text-xs text-muted">
+                {audits.length} audit records on this lead. Latest is shown.
+              </p>
+            ) : null}
           </CardBody>
         </Card>
       ) : (
         <Card className="mt-4">
           <CardBody>
             <p className="text-sm text-muted">
-              No audit yet. This lead is still in discovery.
+              Not audited. {canAudit ? "Run a website audit from this page." : "This lead is not eligible for Auditor."}
             </p>
           </CardBody>
         </Card>
