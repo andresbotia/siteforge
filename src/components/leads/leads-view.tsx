@@ -1,25 +1,37 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/shared/button";
 import { DataTable, Td, Th, THead } from "@/components/shared/data-table";
-import { Dialog } from "@/components/shared/dialog";
 import { Field, SelectInput, TextInput } from "@/components/shared/field";
 import { PageHeader } from "@/components/shared/page-header";
-import { LeadStatusBadge } from "@/components/shared/status-badge";
+import {
+  LeadStatusBadge,
+  QualificationBadge,
+} from "@/components/shared/status-badge";
 import { cities, industries, leadStatuses } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
-import { leadStatusLabel } from "@/lib/labels";
-import type { Lead } from "@/types";
+import { leadStatusLabel, qualificationTierLabel } from "@/lib/labels";
+import type { Lead, QualificationTier } from "@/types";
+
+const qualificationTiers: QualificationTier[] = [
+  "high_priority",
+  "qualified",
+  "review",
+  "reject",
+];
 
 export function LeadsView({ leads }: { leads: Lead[] }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [industry, setIndustry] = useState("all");
   const [location, setLocation] = useState("all");
   const [status, setStatus] = useState("all");
+  const [tier, setTier] = useState("all");
+  const [source, setSource] = useState("all");
   const [minScore, setMinScore] = useState("");
-  const [scoutOpen, setScoutOpen] = useState(false);
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -34,30 +46,35 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
       const matchesIndustry = industry === "all" || lead.industry === industry;
       const matchesLocation = location === "all" || lead.city === location;
       const matchesStatus = status === "all" || lead.status === status;
+      const matchesTier = tier === "all" || lead.qualificationTier === tier;
+      const matchesSource =
+        source === "all" || (lead.discoverySource ?? "seed") === source;
       const matchesScore = lead.leadScore >= scoreFloor;
       return (
         matchesQuery &&
         matchesIndustry &&
         matchesLocation &&
         matchesStatus &&
+        matchesTier &&
+        matchesSource &&
         matchesScore
       );
     });
-  }, [industry, leads, location, minScore, query, status]);
+  }, [industry, leads, location, minScore, query, source, status, tier]);
 
   return (
     <>
       <PageHeader
         title="Leads"
-        description="Fictional South Florida businesses used to exercise the pipeline. These are not real companies."
+        description="Scout can add reviewable leads from public catalog discovery. Seed rows remain fictional."
         actions={
-          <Button variant="primary" onClick={() => setScoutOpen(true)}>
+          <Button variant="primary" onClick={() => router.push("/agents/scout")}>
             Find Businesses
           </Button>
         }
       />
 
-      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
         <Field label="Search" htmlFor="lead-search">
           <TextInput
             id="lead-search"
@@ -108,6 +125,31 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
             ))}
           </SelectInput>
         </Field>
+        <Field label="Qualification" htmlFor="lead-tier">
+          <SelectInput
+            id="lead-tier"
+            value={tier}
+            onChange={(event) => setTier(event.target.value)}
+          >
+            <option value="all">All tiers</option>
+            {qualificationTiers.map((item) => (
+              <option key={item} value={item}>
+                {qualificationTierLabel[item]}
+              </option>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field label="Source" htmlFor="lead-source">
+          <SelectInput
+            id="lead-source"
+            value={source}
+            onChange={(event) => setSource(event.target.value)}
+          >
+            <option value="all">All sources</option>
+            <option value="scout">Scout</option>
+            <option value="seed">Seed</option>
+          </SelectInput>
+        </Field>
         <Field label="Minimum score" htmlFor="lead-min-score">
           <TextInput
             id="lead-min-score"
@@ -135,6 +177,8 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
             <Th>Reviews</Th>
             <Th>Website Score</Th>
             <Th>Lead Score</Th>
+            <Th>Opportunity</Th>
+            <Th>Qualification</Th>
             <Th>Status</Th>
             <Th>Discovered</Th>
           </tr>
@@ -143,7 +187,7 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
           {filtered.length === 0 ? (
             <tr>
               <td
-                colSpan={9}
+                colSpan={11}
                 className="border-t border-border-subtle px-3 py-6 text-sm text-muted"
               >
                 No leads yet.
@@ -166,6 +210,16 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
               <Td className="tabular-nums">{lead.reviewCount}</Td>
               <Td className="tabular-nums">{lead.websiteScore}</Td>
               <Td className="tabular-nums font-medium">{lead.leadScore}</Td>
+              <Td className="tabular-nums">
+                {lead.websiteOpportunityScore ?? "—"}
+              </Td>
+              <Td>
+                {lead.qualificationTier ? (
+                  <QualificationBadge tier={lead.qualificationTier} />
+                ) : (
+                  "—"
+                )}
+              </Td>
               <Td>
                 <LeadStatusBadge status={lead.status} />
               </Td>
@@ -177,52 +231,6 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
         </tbody>
       </DataTable>
 
-      <Dialog
-        open={scoutOpen}
-        onClose={() => setScoutOpen(false)}
-        title="Find businesses"
-        description="Scout integration will be added in a future milestone."
-      >
-        <form
-          className="grid gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-          }}
-        >
-          <Field label="Location" htmlFor="scout-location">
-            <TextInput
-              id="scout-location"
-              defaultValue="Fort Lauderdale, FL"
-            />
-          </Field>
-          <Field label="Industry" htmlFor="scout-industry">
-            <SelectInput id="scout-industry" defaultValue="Plumbing">
-              {industries.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </SelectInput>
-          </Field>
-          <Field label="Number of businesses" htmlFor="scout-count">
-            <TextInput
-              id="scout-count"
-              type="number"
-              min={1}
-              max={100}
-              defaultValue={25}
-            />
-          </Field>
-          <div className="mt-2 flex items-center justify-end gap-2">
-            <Button variant="ghost" onClick={() => setScoutOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="primary" disabled>
-              Run Scout
-            </Button>
-          </div>
-        </form>
-      </Dialog>
     </>
   );
 }

@@ -6,6 +6,7 @@ import {
   customerStatusLabel,
   leadStatusLabel,
   outreachStatusLabel,
+  qualificationTierLabel,
   riskLabel,
   websiteStatusLabel,
 } from "@/lib/labels";
@@ -17,6 +18,7 @@ import type {
   GeneratedWebsiteStatus,
   LeadStatus,
   OutreachStatus,
+  QualificationTier,
   RiskLevel,
 } from "@/types";
 
@@ -83,8 +85,21 @@ const connectionTone = {
   error: "danger",
 } as const;
 
+const qualificationTone = {
+  reject: "danger",
+  review: "warning",
+  qualified: "accent",
+  high_priority: "success",
+} as const;
+
 export function LeadStatusBadge({ status }: { status: LeadStatus }) {
   return <Badge tone={leadTone[status]}>{leadStatusLabel[status]}</Badge>;
+}
+
+export function QualificationBadge({ tier }: { tier: QualificationTier }) {
+  return (
+    <Badge tone={qualificationTone[tier]}>{qualificationTierLabel[tier]}</Badge>
+  );
 }
 
 export function WebsiteStatusBadge({

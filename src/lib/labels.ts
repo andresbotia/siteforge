@@ -7,8 +7,16 @@ import type {
   GeneratedWebsiteStatus,
   LeadStatus,
   OutreachStatus,
+  QualificationTier,
   RiskLevel,
 } from "@/types";
+
+export const qualificationTierLabel: Record<QualificationTier, string> = {
+  reject: "Reject",
+  review: "Review",
+  qualified: "Qualified",
+  high_priority: "High priority",
+};
 
 export const leadStatusLabel: Record<LeadStatus, string> = {
   discovered: "Discovered",

@@ -48,21 +48,22 @@ Agents never hold privileged infrastructure credentials, including `XAI_API_KEY`
 
 ## Current milestone
 
-Milestone 3 adds the **backend architecture for xAI** with a mandatory human approval gate:
+Milestone 4 adds **Scout**: a manual, auditable lead-discovery workflow.
 
-**No paid AI call can occur without an approved dollar budget.**
+- Discovery uses a `BusinessDiscoveryProvider` abstraction
+- The connected implementation is a **$0 local public catalog** (demo). No paid business-data API.
+- Website inspection is bounded HTTP with mandatory SSRF protections
+- Qualification is deterministic (`business_strength_score`, `website_opportunity_score`, overall + tier)
+- Restaurants are a first-class category; food quality is never scored
+- Duplicates match on domain, then phone, then name+city
+- Scout writes `agent_runs` / `agent_tool_calls` and never stores full HTML
+- Basic Scout runs do **not** use xAI. Paid AI still requires Milestone 3 approval
+- Auditor, Builder, Sales, and Manager stay disabled
+- No outreach, deploy, payments, or recurring jobs
 
-- Paid AI usage creates an `agent_run` in `awaiting_approval` and a `paid_ai_usage` approval
-- An administrator must approve an explicit maximum USD amount
-- Approving a ceiling does **not** call xAI
-- Live inference is a separate, default-off gate (`XAI_ALLOW_LIVE_INFERENCE=true`)
-- Actual billed cost comes from `usage.cost_in_usd_ticks` (1 USD = 10,000,000,000 ticks)
-- Daily and monthly hard caps are enforced with a database reservation and transaction lock
-- Scout, Auditor, Builder, Sales, and Manager remain disabled
+Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek, Boca Raton, Pompano Beach.
 
-Sample records are fictional South Florida businesses. They are not real companies.
-
-**No live xAI API calls were made during Milestone 3 implementation.** Tests use a mock provider.
+**No live xAI API calls and no paid discovery API calls were made during Milestone 4 implementation.**
 
 ## What is mock vs real
 
@@ -72,7 +73,8 @@ Sample records are fictional South Florida businesses. They are not real compani
 | Leads, audits, websites, outreach, customers, approvals, agents | Persisted in Supabase |
 | Paid-AI Approve/Reject | Persisted server-side after `requireAdminSession()` |
 | Other approval types Approve/Reject | Persisted status only; side effects still not executed |
-| Agent execution | Not implemented |
+| Scout | Manual $0 catalog discovery + bounded inspection |
+| Other agents | Disabled |
 | xAI provider layer | Implemented, mock-tested, live calls gated off |
 | Supabase database | Server-side reads/writes with a secret key after admin session check |
 | Vercel / Resend / Stripe APIs | Not connected |
@@ -170,6 +172,7 @@ src/
   data/             Supabase repositories (no raw queries in pages)
   types/            Domain types and Database types
   lib/ai/           Money, pricing, estimator, provider, execution
+  lib/scout/        Discovery, SSRF-safe inspection, scoring, dedupe
   lib/supabase/     Server-only Supabase client
   lib/auth/         Temporary admin session
   agents/           Future agent packages (empty)
@@ -300,8 +303,8 @@ Do not reset, reseed, or delete production rows.
 
 1. **Milestone 1** — Application foundation
 2. **Milestone 2** — Supabase database + persistent application state
-3. **Milestone 3** — xAI integration + strict cost controls (this repo)
-4. **Milestone 4** — Scout Agent
+3. **Milestone 3** — xAI integration + strict cost controls
+4. **Milestone 4** — Scout Agent (this repo)
 5. **Milestone 5** — Auditor Agent
 6. **Milestone 6** — Builder Agent
 7. **Milestone 7** — Preview deployments

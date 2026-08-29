@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { CostControlsPanel } from "@/components/ai/cost-controls-panel";
 import { Badge } from "@/components/shared/badge";
 import { CardBody } from "@/components/shared/card";
@@ -25,7 +26,7 @@ export default async function AgentsPage() {
     <>
       <PageHeader
         title="Agents"
-        description="Five specialized agents are planned. Records are persisted and disabled. None are executing. Paid xAI usage requires an approved dollar ceiling."
+        description="Scout can run manually from a $0 catalog. Auditor, Builder, Sales, and Manager stay disabled. Paid xAI still requires an approved dollar ceiling."
       />
 
       <div className="mb-6">
@@ -53,10 +54,18 @@ export default async function AgentsPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h2 className="text-sm font-medium">{agent.name}</h2>
-                      <Badge>Disabled</Badge>
+                      <Badge>{agent.id === "scout" ? "Manual" : "Disabled"}</Badge>
                     </div>
                     <p className="mt-1 max-w-2xl text-sm text-muted">
                       {agent.purpose}
+                      {agent.id === "scout" ? (
+                        <>
+                          {" "}
+                          <Link href="/agents/scout" className="text-accent hover:underline">
+                            Open Scout
+                          </Link>
+                        </>
+                      ) : null}
                     </p>
                   </div>
                   <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs sm:grid-cols-5">

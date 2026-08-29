@@ -13,7 +13,7 @@ export const agentCatalog: Record<
   scout: {
     purpose: "Discover strong local businesses that have poor websites.",
     description:
-      "Scout will eventually research public business listings, inspect public websites, and create enriched leads. It is not implemented in this milestone.",
+      "Scout researches a local public catalog, inspects public websites with SSRF-safe bounded HTTP, and scores leads deterministically. It does not send email, deploy, or call xAI.",
     capabilities: [
       "Public business research",
       "Public website inspection",

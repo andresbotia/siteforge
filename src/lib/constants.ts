@@ -9,6 +9,18 @@ export const industries = [
   "Auto Repair",
   "Pressure Washing",
   "Dentistry",
+  "Pest Control",
+  "Pool Services",
+  "General Contractor",
+  "Detailing",
+  "Salon",
+  "Spa",
+  "Cleaning",
+  "Professional Services",
+  "Restaurant",
+  "Cafe",
+  "Bakery",
+  "Casual Dining",
 ] as const;
 
 export const cities = [

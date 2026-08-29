@@ -54,7 +54,7 @@ Examples of privileged / approval-gated actions:
 
 ## Milestone boundary
 
-Milestone 3 adds a server-only xAI provider and strict paid-AI cost controls. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`. Dashboard data still comes from `src/data` repositories.
+Milestone 4 adds manual Scout lead discovery. Milestone 3 paid-AI gates remain mandatory. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`.
 
 - Database migrations must be version-controlled under `supabase/migrations`.
 - Never expose privileged credentials client-side. Never put `SUPABASE_SECRET_KEY` or `XAI_API_KEY` in `NEXT_PUBLIC_*` or Client Components.
@@ -70,11 +70,16 @@ Milestone 3 adds a server-only xAI provider and strict paid-AI cost controls. Te
 - Do not make live xAI calls unless the user explicitly approves that exact spend and `XAI_ALLOW_LIVE_INFERENCE=true`.
 - Tests must use the mock provider.
 
-Do not implement Scout, Auditor, Builder, Sales, or Manager execution.
-Do not scrape businesses, send email, process payments, or deploy generated websites.
-Do not connect Stripe, Resend, or Vercel APIs.
-Do not add background workers or scheduled jobs unless a later milestone explicitly asks for them.
-Do not start Milestone 4 unless asked.
+- Scout may research public data only. No CAPTCHA bypass, no private content, no mass scraping.
+- Scout website fetches must pass SSRF checks (http/https only; no localhost/private/metadata).
+- Scout qualification is deterministic. Do not let an LLM author the official score.
+- Scout must not call `executeApprovedAiRun` or `createLiveXaiProvider` directly.
+- Basic Scout runs do not require paid AI.
+- Do not implement Auditor, Builder, Sales, or Manager execution.
+- Do not send email, process payments, or deploy generated websites.
+- Do not connect Stripe, Resend, or Vercel APIs.
+- Do not add background workers or scheduled jobs unless a later milestone explicitly asks for them.
+- Do not start Milestone 5 unless asked.
 
 ## Architecture notes
 
@@ -82,6 +87,7 @@ Do not start Milestone 4 unless asked.
 - Database types live in `src/types/database.ts`.
 - Data access lives in `src/data` repositories. Pages must not run raw Supabase queries.
 - Paid-AI execution lives in `src/lib/ai`. Entry point: `executeApprovedAiRun(runId, request)`.
+- Scout lives in `src/lib/scout` and `src/data/scout.ts`. Manual UI: `/agents/scout`.
 - Server Supabase utilities live in `src/lib/supabase` and are `server-only`.
 - Shared UI lives in `src/components/shared`.
 - Agent placeholders live in `src/agents`.

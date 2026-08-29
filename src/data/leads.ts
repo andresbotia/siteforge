@@ -1,8 +1,8 @@
 import "server-only";
 
 import { readTable } from "@/lib/supabase/server";
-import { asStringArray } from "@/lib/json";
-import type { Industry, Lead, LeadStatus, WebsiteAudit } from "@/types";
+import { asRecord, asStringArray } from "@/lib/json";
+import type { Industry, Lead, LeadStatus, QualificationTier, WebsiteAudit } from "@/types";
 import type { AuditRow, LeadRow } from "@/types/database";
 
 const leadStatuses = new Set<LeadStatus>([
@@ -21,9 +21,22 @@ function isLeadStatus(value: string): value is LeadStatus {
   return leadStatuses.has(value as LeadStatus);
 }
 
+const qualificationTiers = new Set<QualificationTier>([
+  "reject",
+  "review",
+  "qualified",
+  "high_priority",
+]);
+
 function mapLead(row: LeadRow, websiteScore = 0): Lead {
   const city = row.city ?? "";
   const state = row.state ?? "";
+  const opportunity = row.website_opportunity_score;
+  const derivedWebsiteScore =
+    opportunity === null || opportunity === undefined
+      ? websiteScore
+      : Math.max(0, 100 - opportunity);
+  const tier = row.qualification_tier;
   return {
     id: row.id,
     businessName: row.business_name,
@@ -35,10 +48,23 @@ function mapLead(row: LeadRow, websiteScore = 0): Lead {
     website: row.website_url ?? "",
     rating: Number(row.google_rating ?? 0),
     reviewCount: row.review_count,
-    websiteScore,
-    leadScore: row.lead_score ?? 0,
+    websiteScore: derivedWebsiteScore,
+    leadScore: row.overall_qualification_score ?? row.lead_score ?? 0,
     status: isLeadStatus(row.status) ? row.status : "discovered",
     createdAt: row.created_at,
+    qualificationTier:
+      tier && qualificationTiers.has(tier as QualificationTier)
+        ? (tier as QualificationTier)
+        : null,
+    businessStrengthScore: row.business_strength_score,
+    websiteOpportunityScore: row.website_opportunity_score,
+    overallQualificationScore: row.overall_qualification_score,
+    qualificationReasons: asStringArray(row.qualification_reasons),
+    discoverySource: row.source,
+    lastScoutRunId: row.last_scout_run_id,
+    inspectionSummary: Object.keys(asRecord(row.inspection_summary)).length
+      ? asRecord(row.inspection_summary)
+      : null,
   };
 }
 

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { listActivityForLead } from "@/data/activity";
@@ -7,8 +8,12 @@ import { Button } from "@/components/shared/button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { ScoreBar, ScoreRing } from "@/components/shared/score-bar";
-import { LeadStatusBadge } from "@/components/shared/status-badge";
+import {
+  LeadStatusBadge,
+  QualificationBadge,
+} from "@/components/shared/status-badge";
 import { formatDateTime, formatNumber } from "@/lib/format";
+import { asRecord } from "@/lib/json";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +58,9 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <LeadStatusBadge status={lead.status} />
+        {lead.qualificationTier ? (
+          <QualificationBadge tier={lead.qualificationTier} />
+        ) : null}
         <Link href="/leads" className="text-xs text-muted hover:text-foreground">
           Back to leads
         </Link>
@@ -77,6 +85,71 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           <ScoreRing value={lead.leadScore} label="Lead score" />
         </Card>
       </div>
+
+      <Card className="mt-4">
+        <CardHeader
+          title="Scout qualification"
+          description="Deterministic public-business and website-opportunity scores. Not LLM-authored."
+        />
+        <CardBody className="grid gap-3 sm:grid-cols-2">
+          <Detail label="Discovery source" value={lead.discoverySource ?? "—"} />
+          <Detail
+            label="Last Scout run"
+            value={
+              lead.lastScoutRunId ? (
+                <Link
+                  href={`/agents/scout/${lead.lastScoutRunId}`}
+                  className="text-accent hover:underline"
+                >
+                  Open run
+                </Link>
+              ) : (
+                "—"
+              )
+            }
+          />
+          <Detail
+            label="Business strength"
+            value={lead.businessStrengthScore === null ? "—" : String(lead.businessStrengthScore)}
+          />
+          <Detail
+            label="Website opportunity"
+            value={
+              lead.websiteOpportunityScore === null
+                ? "—"
+                : String(lead.websiteOpportunityScore)
+            }
+          />
+          <div className="sm:col-span-2">
+            <p className="text-[11px] text-muted-foreground uppercase">Reasons</p>
+            {lead.qualificationReasons.length === 0 ? (
+              <p className="mt-1 text-sm text-muted">No Scout reasons stored.</p>
+            ) : (
+              <ul className="mt-1 list-disc space-y-1 pl-4 text-sm text-muted">
+                {lead.qualificationReasons.map((reason) => (
+                  <li key={reason}>{reason}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {lead.inspectionSummary ? (
+            <div className="sm:col-span-2">
+              <p className="text-[11px] text-muted-foreground uppercase">
+                Inspection
+              </p>
+              <p className="mt-1 text-sm text-muted">
+                Reachable: {String(asRecord(lead.inspectionSummary).reachable ?? "—")}
+                {asRecord(lead.inspectionSummary).final_url
+                  ? ` · ${String(asRecord(lead.inspectionSummary).final_url)}`
+                  : ""}
+                {asRecord(lead.inspectionSummary).has_viewport === false
+                  ? " · missing viewport"
+                  : ""}
+              </p>
+            </div>
+          ) : null}
+        </CardBody>
+      </Card>
 
       {audit ? (
         <Card className="mt-4">
@@ -161,7 +234,13 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
   );
 }
 
-function Detail({ label, value }: { label: string; value: string }) {
+function Detail({
+  label,
+  value,
+}: {
+  label: string;
+  value: ReactNode;
+}) {
   return (
     <div>
       <p className="text-[11px] text-muted-foreground uppercase">{label}</p>

@@ -17,7 +17,25 @@ export type Industry =
   | "Electrical"
   | "Auto Repair"
   | "Pressure Washing"
-  | "Dentistry";
+  | "Dentistry"
+  | "Pest Control"
+  | "Pool Services"
+  | "General Contractor"
+  | "Detailing"
+  | "Salon"
+  | "Spa"
+  | "Cleaning"
+  | "Professional Services"
+  | "Restaurant"
+  | "Cafe"
+  | "Bakery"
+  | "Casual Dining";
+
+export type QualificationTier =
+  | "reject"
+  | "review"
+  | "qualified"
+  | "high_priority";
 
 export interface Lead {
   id: string;
@@ -34,6 +52,14 @@ export interface Lead {
   leadScore: number;
   status: LeadStatus;
   createdAt: string;
+  qualificationTier: QualificationTier | null;
+  businessStrengthScore: number | null;
+  websiteOpportunityScore: number | null;
+  overallQualificationScore: number | null;
+  qualificationReasons: string[];
+  discoverySource: string | null;
+  lastScoutRunId: string | null;
+  inspectionSummary: Record<string, unknown> | null;
 }
 
 export interface WebsiteAudit {
