@@ -1,20 +1,21 @@
-export type SupabasePublicConfig = {
+import "server-only";
+
+export type SupabaseServerConfig = {
   url: string;
-  publishableKey: string;
+  secretKey: string;
 };
 
-export function getSupabasePublicConfig(): SupabasePublicConfig | null {
+export function getSupabaseServerConfig(): SupabaseServerConfig | null {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() ?? "";
-  const publishableKey =
-    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim() ?? "";
+  const secretKey = process.env.SUPABASE_SECRET_KEY?.trim() ?? "";
 
-  if (!url || !publishableKey) {
+  if (!url || !secretKey) {
     return null;
   }
 
-  return { url, publishableKey };
-}
+  if (secretKey.startsWith("sb_publishable_")) {
+    return null;
+  }
 
-export function isSupabaseConfigured(): boolean {
-  return getSupabasePublicConfig() !== null;
+  return { url, secretKey };
 }

@@ -1,3 +1,5 @@
+import "server-only";
+
 import { getAgentSpend } from "@/data/activity";
 import { listPendingApprovals } from "@/data/approvals";
 import { listCustomers } from "@/data/customers";

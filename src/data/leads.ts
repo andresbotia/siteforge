@@ -1,3 +1,5 @@
+import "server-only";
+
 import { readTable } from "@/lib/supabase/server";
 import { asStringArray } from "@/lib/json";
 import type { Industry, Lead, LeadStatus, WebsiteAudit } from "@/types";

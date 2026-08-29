@@ -1,3 +1,5 @@
+import "server-only";
+
 import { isAgentId } from "@/lib/agents/catalog";
 import { asRecord } from "@/lib/json";
 import { readTable } from "@/lib/supabase/server";

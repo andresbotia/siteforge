@@ -1,3 +1,5 @@
+import "server-only";
+
 import { readTable } from "@/lib/supabase/server";
 import type { ConnectionStatus, IntegrationStatus, SystemServiceStatus } from "@/types";
 import type { IntegrationRow } from "@/types/database";

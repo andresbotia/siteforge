@@ -1,3 +1,5 @@
+import "server-only";
+
 import { agentCatalog, isAgentId } from "@/lib/agents/catalog";
 import { readTable } from "@/lib/supabase/server";
 import type { Agent, AgentPermission } from "@/types";

@@ -1,3 +1,5 @@
+import "server-only";
+
 import { asNumber, asRecord } from "@/lib/json";
 import { readTable } from "@/lib/supabase/server";
 import type { GeneratedWebsite, GeneratedWebsiteStatus } from "@/types";

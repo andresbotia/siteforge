@@ -1,3 +1,5 @@
+import "server-only";
+
 import { readTable } from "@/lib/supabase/server";
 import type { Outreach, OutreachStatus } from "@/types";
 import type { LeadRow, OutreachEventRow, OutreachRow } from "@/types/database";

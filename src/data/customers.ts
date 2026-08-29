@@ -1,3 +1,5 @@
+import "server-only";
+
 import { readTable } from "@/lib/supabase/server";
 import type { Customer, CustomerPlan, CustomerStatus } from "@/types";
 import type { CustomerRow, SubscriptionRow } from "@/types/database";

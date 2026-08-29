@@ -68,7 +68,7 @@ Sample records are fictional South Florida businesses. They are not real compani
 | Leads, audits, websites, outreach, customers, approvals, agents | Persisted in Supabase |
 | Approval Approve/Reject buttons | Local UI state only; no database writes |
 | Agent execution | Not implemented |
-| Supabase database | Connected via publishable key (read-only) |
+| Supabase database | Server-side reads with a secret key after admin session check |
 | xAI / Vercel / Resend / Stripe APIs | Not connected |
 | Authentication | Temporary single-admin env credentials. Not Supabase Auth. |
 | Email sending | Not implemented |
@@ -82,7 +82,7 @@ Sample records are fictional South Florida businesses. They are not real compani
 - Tailwind CSS
 - ESLint
 - npm
-- Supabase (`@supabase/supabase-js`, `@supabase/ssr`)
+- Supabase (`@supabase/supabase-js`)
 
 ## Architecture
 
@@ -92,7 +92,7 @@ src/
   components/       Layout, shared UI, and feature views
   data/             Supabase repositories (no raw queries in pages)
   types/            Domain types and Database types
-  lib/supabase/     Browser and server clients
+  lib/supabase/     Server-only Supabase client
   lib/auth/         Temporary admin session
   lib/cost/         Paid-AI spend control types
   agents/           Future agent packages (empty)
@@ -101,7 +101,7 @@ supabase/
   migrations/       Version-controlled schema and seed SQL
 ```
 
-Pages load data on the server through repositories. Client Components are used only for filters, dialogs, tabs, mobile navigation, and local-only approval actions.
+Pages load data on the server through repositories after the SiteForge admin session is verified. The browser does not query application tables. Client Components are used only for filters, dialogs, tabs, mobile navigation, and local-only approval actions.
 
 ## Development
 
@@ -121,6 +121,7 @@ SITEFORGE_AUTH_SECRET=replace-with-a-long-random-value
 
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
 ```
 
 Generate `SITEFORGE_AUTH_SECRET` with a cryptographically random value, for example:
@@ -154,16 +155,19 @@ If they are missing, the app fails closed: dashboard routes redirect to `/login`
 
 This login is still temporary. Milestone 2 does **not** add Supabase Auth.
 
-### Supabase public credentials
-
-These are browser-safe project credentials. Do not add a secret or service-role key.
+### Supabase credentials
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable (anon) key used for read-only Data API access |
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL. Public. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key. Not used for application-table access. Kept for future Supabase Auth. |
+| `SUPABASE_SECRET_KEY` | Server-only `sb_secret_...` key. Required for dashboard reads. Never prefix with `NEXT_PUBLIC_`. |
 
-If they are missing, dashboard pages render empty states instead of crashing.
+The publishable key authenticates as the Postgres `anon` role. After public SELECT was removed, it cannot read application tables. Trusted server reads use the secret key, which maps to `service_role` and bypasses RLS. SiteForge still checks the admin session before every repository read, so the secret key is never a public backdoor.
+
+Copy the secret from **Project Settings → API Keys → Secret keys**. Do not commit it.
+
+If `SUPABASE_SECRET_KEY` is missing, authenticated dashboard pages render empty rather than falling back to the publishable key.
 
 ### Vercel
 
@@ -174,8 +178,9 @@ Set these variables in Vercel Project → Settings → Environment Variables for
 - `SITEFORGE_AUTH_SECRET`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
+- `SUPABASE_SECRET_KEY`
 
-Then redeploy.
+Then redeploy. Apply `supabase/migrations/20260829180000_remove_public_read_access.sql` only after `SUPABASE_SECRET_KEY` is set in Vercel, or the live dashboard will lose its data reads.
 
 ## Supabase setup
 
@@ -185,6 +190,7 @@ Schema and development seed live in:
 
 - `supabase/migrations/20260829100000_initial_schema.sql`
 - `supabase/migrations/20260829120000_seed_development_data.sql`
+- `supabase/migrations/20260829180000_remove_public_read_access.sql`
 
 Apply them to the hosted project with the Supabase CLI (after `supabase login` and `supabase link --project-ref afpjclfcajrcbpcrgzvd`):
 
@@ -205,13 +211,14 @@ npx supabase db reset
 
 ### RLS / security
 
-- RLS is enabled on every application table.
-- `anon` and `authenticated` may **SELECT** only.
-- There are no insert/update/delete policies.
-- The app does not use a service-role key.
-- Approve/Reject and other mutations stay UI-only.
-
-Because SiteForge still uses custom admin cookies instead of Supabase Auth, SELECT is granted to the publishable key so the dashboard can read. That means anyone who has the publishable key can also query these tables through the Data API until Supabase Auth is added. Writes remain blocked.
+- Dashboard access is protected by temporary SiteForge admin auth (signed HttpOnly cookie).
+- Application database reads happen only on the Next.js server, after `requireAdminSession()`.
+- Public publishable credentials cannot SELECT application tables.
+- RLS remains enabled on every application table.
+- `anon` and `authenticated` have no table grants or policies for application data.
+- There are no public writes. Approve/Reject stays UI-only.
+- Supabase Auth is still deferred.
+- Future agents must go through this same server access layer and must not hold `SUPABASE_SECRET_KEY`.
 
 ### Cost control foundation
 

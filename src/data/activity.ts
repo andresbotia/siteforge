@@ -1,3 +1,5 @@
+import "server-only";
+
 import { readTable } from "@/lib/supabase/server";
 import type { AgentId, AgentRun, LeadActivity } from "@/types";
 import type { ActivityRow, AgentRow, AgentRunRow } from "@/types/database";

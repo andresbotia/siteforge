@@ -56,16 +56,16 @@ Examples of privileged / approval-gated actions:
 Milestone 2 adds a version-controlled Supabase data layer. Dashboard reads come from repositories in `src/data`. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts` until Supabase Auth is explicitly requested.
 
 - Database migrations must be version-controlled under `supabase/migrations`.
-- Never expose privileged Supabase credentials client-side. Only the publishable key may be public.
+- Never expose privileged Supabase credentials client-side. Never put `SUPABASE_SECRET_KEY` in `NEXT_PUBLIC_*` or Client Components.
+- Application table reads must go through `src/data` repositories and `requireAdminSession()`. Do not grant `anon` or `authenticated` SELECT on application tables.
 - Never disable RLS merely to make development easier.
 - External side effects require approvals.
 - Paid AI spend must eventually require budget authorization. No agent may incur unapproved paid cost.
-- Agents cannot directly hold infrastructure credentials.
+- Agents cannot directly hold infrastructure credentials, including `SUPABASE_SECRET_KEY`.
 
 Do not implement Scout, Auditor, Builder, Sales, or Manager execution.
 Do not connect xAI, Vercel, Resend, or Stripe APIs.
 Do not scrape businesses, send email, process payments, or deploy generated websites.
-Do not add a service-role key to bypass RLS unless a later milestone explicitly requires it and explains why.
 Do not add background workers or scheduled jobs unless a later milestone explicitly asks for them.
 
 ## Architecture notes
@@ -73,6 +73,7 @@ Do not add background workers or scheduled jobs unless a later milestone explici
 - Domain types live in `src/types`.
 - Database types live in `src/types/database.ts`.
 - Data access lives in `src/data` repositories. Pages must not run raw Supabase queries.
+- Server Supabase utilities live in `src/lib/supabase` and are `server-only`.
 - Shared UI lives in `src/components/shared`.
 - Agent placeholders live in `src/agents`.
 - Prefer Server Components. Use Client Components only for interaction.
