@@ -12,4 +12,5 @@ export const privilegedActions = [
   "charges",
   "refunds",
   "destructive infrastructure changes",
+  "paid AI usage",
 ] as const;

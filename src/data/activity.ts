@@ -1,9 +1,31 @@
 import "server-only";
 
-import { readTable } from "@/lib/supabase/server";
+import { mutateTable, readTable } from "@/lib/supabase/server";
 import type { AgentId, AgentRun, LeadActivity } from "@/types";
-import type { ActivityRow, AgentRow, AgentRunRow } from "@/types/database";
+import type { ActivityRow, AgentRow, AgentRunRow, Json } from "@/types/database";
 import { isAgentId } from "@/lib/agents/catalog";
+
+export async function recordActivityEvent(input: {
+  eventType: string;
+  title: string;
+  description?: string;
+  actorType?: string;
+  metadata?: Json;
+}): Promise<void> {
+  await mutateTable((client) =>
+    client
+      .from("activity_events")
+      .insert({
+        event_type: input.eventType,
+        actor_type: input.actorType ?? "admin",
+        title: input.title,
+        description: input.description ?? null,
+        metadata: input.metadata ?? {},
+      })
+      .select("id")
+      .maybeSingle(),
+  );
+}
 
 export async function listActivityForLead(
   leadId: string,

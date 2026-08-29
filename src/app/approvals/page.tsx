@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { ApprovalsView } from "@/components/approvals/approvals-view";
 import { listApprovals } from "@/data/approvals";
+import { getBudgetSnapshot, toApprovalsBudgetView } from "@/data/budget";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,14 @@ export const metadata: Metadata = {
 };
 
 export default async function ApprovalsPage() {
-  const approvals = await listApprovals();
-  return <ApprovalsView approvals={approvals} />;
+  const [approvals, budget] = await Promise.all([
+    listApprovals(),
+    getBudgetSnapshot(),
+  ]);
+  return (
+    <ApprovalsView
+      approvals={approvals}
+      budget={toApprovalsBudgetView(budget)}
+    />
+  );
 }

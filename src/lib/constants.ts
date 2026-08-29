@@ -41,8 +41,8 @@ export const settingsDefaults = {
   },
   agents: {
     globalStatus: "disabled" as const,
-    dailyBudget: 25,
-    monthlyBudget: 400,
+    dailyBudget: 1,
+    monthlyBudget: 10,
     requireApprovalForExternalActions: true,
   },
   email: {

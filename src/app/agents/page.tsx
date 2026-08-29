@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
-import { listAgentPermissions, listAgents } from "@/data/agents";
+import { CostControlsPanel } from "@/components/ai/cost-controls-panel";
 import { Badge } from "@/components/shared/badge";
 import { CardBody } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
+import { listAgentPermissions, listAgents } from "@/data/agents";
+import { getBudgetSnapshot, toCostControlsView } from "@/data/budget";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
@@ -12,23 +14,33 @@ export const metadata: Metadata = {
 };
 
 export default async function AgentsPage() {
-  const [agents, permissions] = await Promise.all([
+  const [agents, permissions, budget] = await Promise.all([
     listAgents(),
     Promise.resolve(listAgentPermissions()),
+    getBudgetSnapshot(),
   ]);
+  const costControls = toCostControlsView(budget);
 
   return (
     <>
       <PageHeader
         title="Agents"
-        description="Five specialized agents are planned. Records are persisted and disabled. None are executing."
+        description="Five specialized agents are planned. Records are persisted and disabled. None are executing. Paid xAI usage requires an approved dollar ceiling."
       />
+
+      <div className="mb-6">
+        <CostControlsPanel snapshot={costControls} compact />
+      </div>
+
       {agents.length === 0 ? (
         <p className="text-sm text-muted">No agents seeded yet.</p>
       ) : null}
       <div className="grid gap-3">
         {agents.map((agent) => {
           const agentPermissions = permissions.find(
+            (item) => item.agentId === agent.id,
+          );
+          const ceiling = costControls.perRunCeilings.find(
             (item) => item.agentId === agent.id,
           );
           return (
@@ -41,13 +53,13 @@ export default async function AgentsPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <h2 className="text-sm font-medium">{agent.name}</h2>
-                      <Badge>Not Configured</Badge>
+                      <Badge>Disabled</Badge>
                     </div>
                     <p className="mt-1 max-w-2xl text-sm text-muted">
                       {agent.purpose}
                     </p>
                   </div>
-                  <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs sm:grid-cols-4">
+                  <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-xs sm:grid-cols-5">
                     <Metric label="Runs today" value={String(agent.runsToday)} />
                     <Metric
                       label="Success rate"
@@ -60,6 +72,10 @@ export default async function AgentsPage() {
                     <Metric
                       label="Cost today"
                       value={formatCurrency(agent.costToday)}
+                    />
+                    <Metric
+                      label="Run ceiling"
+                      value={ceiling?.amountUsd ?? "—"}
                     />
                     <Metric
                       label="Last run"

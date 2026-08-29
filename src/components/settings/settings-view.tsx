@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CostControlsPanel } from "@/components/ai/cost-controls-panel";
 import { Button } from "@/components/shared/button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { Field, SelectInput, TextInput } from "@/components/shared/field";
@@ -8,11 +9,12 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ConnectionBadge } from "@/components/shared/status-badge";
 import { settingsDefaults } from "@/lib/constants";
 import { cn } from "@/lib/cn";
-import type { IntegrationStatus } from "@/types";
+import type { AiCostControlsView, IntegrationStatus } from "@/types";
 
 const tabs = [
   "General",
   "Agents",
+  "AI Cost Controls",
   "Integrations",
   "Email",
   "Billing",
@@ -23,8 +25,10 @@ type Tab = (typeof tabs)[number];
 
 export function SettingsView({
   integrations,
+  costControls,
 }: {
   integrations: IntegrationStatus[];
+  costControls: AiCostControlsView;
 }) {
   const [tab, setTab] = useState<Tab>("General");
   const [settings, setSettings] = useState(settingsDefaults);
@@ -180,43 +184,18 @@ export function SettingsView({
                 }
               >
                 <option value="required">Required</option>
-                <option value="optional">Optional</option>
               </SelectInput>
             </Field>
-            <Field label="Daily budget (USD)" htmlFor="daily-budget">
-              <TextInput
-                id="daily-budget"
-                type="number"
-                value={settings.agents.dailyBudget}
-                onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    agents: {
-                      ...settings.agents,
-                      dailyBudget: Number(event.target.value),
-                    },
-                  })
-                }
-              />
-            </Field>
-            <Field label="Monthly budget (USD)" htmlFor="monthly-budget">
-              <TextInput
-                id="monthly-budget"
-                type="number"
-                value={settings.agents.monthlyBudget}
-                onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    agents: {
-                      ...settings.agents,
-                      monthlyBudget: Number(event.target.value),
-                    },
-                  })
-                }
-              />
-            </Field>
+            <p className="sm:col-span-2 text-sm text-muted">
+              Daily and monthly hard caps are enforced in AI Cost Controls. This
+              form does not change spend limits. Agents cannot execute yet.
+            </p>
           </CardBody>
         </Card>
+      ) : null}
+
+      {tab === "AI Cost Controls" ? (
+        <CostControlsPanel snapshot={costControls} />
       ) : null}
 
       {tab === "Integrations" ? (

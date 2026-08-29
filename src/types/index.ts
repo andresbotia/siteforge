@@ -90,10 +90,15 @@ export interface Agent {
 
 export type AgentRunStatus =
   | "queued"
-  | "running"
+  | "draft"
   | "awaiting_approval"
+  | "approved"
+  | "running"
+  | "succeeded"
   | "completed"
   | "failed"
+  | "rejected"
+  | "budget_blocked"
   | "cancelled";
 
 export interface AgentRun {
@@ -130,6 +135,7 @@ export interface Approval {
   id: string;
   leadId?: string;
   customerId?: string;
+  agentRunId?: string;
   businessName: string;
   agentId: AgentId;
   type: ApprovalType;
@@ -137,7 +143,10 @@ export interface Approval {
   reason: string;
   status: ApprovalStatus;
   riskLevel: RiskLevel;
+  model?: string | null;
+  purpose?: string | null;
   estimatedCostUsd: number | null;
+  requestedMaxUsd: number | null;
   approvedCostLimitUsd: number | null;
   actualCostUsd: number | null;
   createdAt: string;
@@ -272,4 +281,21 @@ export interface SystemServiceStatus {
   id: string;
   name: string;
   status: ConnectionStatus;
+}
+
+export interface AiCostControlsView {
+  provider: "xAI";
+  defaultModel: string;
+  apiKeyConfigured: boolean;
+  liveInferenceEnabled: boolean;
+  paidApprovalsRequired: true;
+  automaticPaidSpending: false;
+  dailyLimitUsd: string;
+  monthlyLimitUsd: string;
+  dailyActualUsd: string;
+  monthlyActualUsd: string;
+  reservedUsd: string;
+  dailyUsedUsd: string;
+  monthlyUsedUsd: string;
+  perRunCeilings: { agentId: AgentId; label: string; amountUsd: string }[];
 }

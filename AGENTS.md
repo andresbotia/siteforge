@@ -31,6 +31,7 @@ Examples of privileged / approval-gated actions:
 - charges
 - refunds
 - destructive infrastructure changes
+- paid AI usage (requires an explicit dollar ceiling)
 
 11. Read-only research actions may eventually be autonomous.
 12. Internal database writes may eventually be autonomous depending on scope.
@@ -53,26 +54,34 @@ Examples of privileged / approval-gated actions:
 
 ## Milestone boundary
 
-Milestone 2 adds a version-controlled Supabase data layer. Dashboard reads come from repositories in `src/data`. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts` until Supabase Auth is explicitly requested.
+Milestone 3 adds a server-only xAI provider and strict paid-AI cost controls. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`. Dashboard data still comes from `src/data` repositories.
 
 - Database migrations must be version-controlled under `supabase/migrations`.
-- Never expose privileged Supabase credentials client-side. Never put `SUPABASE_SECRET_KEY` in `NEXT_PUBLIC_*` or Client Components.
-- Application table reads must go through `src/data` repositories and `requireAdminSession()`. Do not grant `anon` or `authenticated` SELECT on application tables.
+- Never expose privileged credentials client-side. Never put `SUPABASE_SECRET_KEY` or `XAI_API_KEY` in `NEXT_PUBLIC_*` or Client Components.
+- Application table reads and writes must go through `src/data` repositories or narrow server actions after `requireAdminSession()`.
+- Do not grant `anon` or `authenticated` access on application tables.
 - Never disable RLS merely to make development easier.
 - External side effects require approvals.
-- Paid AI spend must eventually require budget authorization. No agent may incur unapproved paid cost.
-- Agents cannot directly hold infrastructure credentials, including `SUPABASE_SECRET_KEY`.
+- **No paid AI call can occur without an approved dollar budget.** Enforcement is in Postgres reservations + `executeApprovedAiRun`, not UI copy.
+- Agents never receive `XAI_API_KEY`. Only `src/lib/ai/provider.ts` may read it.
+- Estimated cost is advisory. Approved maximum is the hard ceiling. Provider `cost_in_usd_ticks` is the actual billed cost.
+- Daily and monthly hard caps plus per-run ceilings live in `src/lib/ai/limits.ts` and `ai_budget_limits`. Do not scatter magic numbers.
+- Money is integer ticks (1 USD = 10_000_000_000). Do not use floats as the authoritative representation.
+- Do not make live xAI calls unless the user explicitly approves that exact spend and `XAI_ALLOW_LIVE_INFERENCE=true`.
+- Tests must use the mock provider.
 
 Do not implement Scout, Auditor, Builder, Sales, or Manager execution.
-Do not connect xAI, Vercel, Resend, or Stripe APIs.
 Do not scrape businesses, send email, process payments, or deploy generated websites.
+Do not connect Stripe, Resend, or Vercel APIs.
 Do not add background workers or scheduled jobs unless a later milestone explicitly asks for them.
+Do not start Milestone 4 unless asked.
 
 ## Architecture notes
 
 - Domain types live in `src/types`.
 - Database types live in `src/types/database.ts`.
 - Data access lives in `src/data` repositories. Pages must not run raw Supabase queries.
+- Paid-AI execution lives in `src/lib/ai`. Entry point: `executeApprovedAiRun(runId, request)`.
 - Server Supabase utilities live in `src/lib/supabase` and are `server-only`.
 - Shared UI lives in `src/components/shared`.
 - Agent placeholders live in `src/agents`.

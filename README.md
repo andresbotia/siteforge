@@ -4,8 +4,6 @@ SiteForge is an AI-assisted website operations platform for a local-business web
 
 The product finds strong local businesses with weak websites, generates a better site, requires a human to approve anything that leaves the system, then sells, deploys, and optionally manages the site.
 
-This repository currently contains **Milestone 1**: a production-quality application shell with mock data. No external integrations are connected.
-
 ## Problem
 
 Local service businesses often have strong demand and weak websites. Rebuilding those sites by hand does not scale. Fully autonomous outreach, billing, and deployment is unsafe.
@@ -38,27 +36,33 @@ Discover → Audit → Build → Approve → Outreach → Sell → Deploy → Ma
 | **Sales** | Creates personalized outreach. |
 | **Manager** | Handles requests for paying customers. |
 
-None of these agents are implemented yet. Placeholder directories live in `src/agents`.
+None of these agents execute yet. Placeholder directories live in `src/agents`.
 
 ## Human approval philosophy
 
 - **Read actions** can generally operate autonomously in the future (public research, inspecting a public site, reading internal records).
 - **Internal writes** may operate autonomously depending on scope (create a lead, save an audit, store a draft).
-- **External side effects require human approval initially**: sending email, production deploys, customer site changes, charges, refunds, DNS changes, and deleting production resources.
+- **External side effects require human approval initially**: sending email, production deploys, customer site changes, charges, refunds, DNS changes, deleting production resources, and **paid AI usage**.
 
-Agents will never hold privileged infrastructure credentials. They will request actions through backend-controlled tools that validate input, check approval, execute with server credentials, and log the result.
+Agents never hold privileged infrastructure credentials, including `XAI_API_KEY` and `SUPABASE_SECRET_KEY`. They request actions through backend-controlled tools that validate input, check approval, execute with server credentials, and log the result.
 
 ## Current milestone
 
-Milestone 2 is the persistent application data layer:
+Milestone 3 adds the **backend architecture for xAI** with a mandatory human approval gate:
 
-- Existing dashboard shell and temporary admin login are unchanged
-- Supabase holds leads, audits, websites, approvals, agents, outreach, customers, and activity
-- Dashboard pages read through `src/data` repositories
-- Agents remain disabled and are not executing
-- xAI, Resend, Stripe, and Vercel APIs are not connected
+**No paid AI call can occur without an approved dollar budget.**
+
+- Paid AI usage creates an `agent_run` in `awaiting_approval` and a `paid_ai_usage` approval
+- An administrator must approve an explicit maximum USD amount
+- Approving a ceiling does **not** call xAI
+- Live inference is a separate, default-off gate (`XAI_ALLOW_LIVE_INFERENCE=true`)
+- Actual billed cost comes from `usage.cost_in_usd_ticks` (1 USD = 10,000,000,000 ticks)
+- Daily and monthly hard caps are enforced with a database reservation and transaction lock
+- Scout, Auditor, Builder, Sales, and Manager remain disabled
 
 Sample records are fictional South Florida businesses. They are not real companies.
+
+**No live xAI API calls were made during Milestone 3 implementation.** Tests use a mock provider.
 
 ## What is mock vs real
 
@@ -66,14 +70,86 @@ Sample records are fictional South Florida businesses. They are not real compani
 | --- | --- |
 | UI, routing, layout | Real |
 | Leads, audits, websites, outreach, customers, approvals, agents | Persisted in Supabase |
-| Approval Approve/Reject buttons | Local UI state only; no database writes |
+| Paid-AI Approve/Reject | Persisted server-side after `requireAdminSession()` |
+| Other approval types Approve/Reject | Persisted status only; side effects still not executed |
 | Agent execution | Not implemented |
-| Supabase database | Server-side reads with a secret key after admin session check |
-| xAI / Vercel / Resend / Stripe APIs | Not connected |
+| xAI provider layer | Implemented, mock-tested, live calls gated off |
+| Supabase database | Server-side reads/writes with a secret key after admin session check |
+| Vercel / Resend / Stripe APIs | Not connected |
 | Authentication | Temporary single-admin env credentials. Not Supabase Auth. |
 | Email sending | Not implemented |
 | Payments | Not implemented |
 | Website generation and deploy | Not implemented |
+
+## Paid AI cost controls
+
+### Estimated vs approved vs actual
+
+| Amount | Meaning |
+| --- | --- |
+| **Estimated** | Conservative pre-run estimate from token/tool assumptions |
+| **Approved maximum** | Human-authorized hard ceiling for that run |
+| **Actual** | Provider-reported `cost_in_usd_ticks` after the request |
+
+Estimator inaccuracies cannot override the approved ceiling. After execution, provider-reported cost is authoritative. Do not infer billed cost from tokens when `cost_in_usd_ticks` is present.
+
+### Hard caps (development defaults)
+
+Centralized in `src/lib/ai/limits.ts` and `ai_budget_limits`:
+
+| Cap | Default |
+| --- | --- |
+| Global daily | $1.00 |
+| Global monthly | $10.00 |
+| Scout per-run | $0.25 |
+| Auditor per-run | $0.10 |
+| Builder per-run | $0.50 |
+| Sales per-run | $0.10 |
+| Manager per-run | $0.10 |
+
+Available budget = limit − finalized actual spend − active reservations.
+
+### Reservation model
+
+1. Run must be `approved` with a matching approved `paid_ai_usage` approval
+2. `siteforge_reserve_ai_run` takes a Postgres advisory lock, re-checks budgets, inserts a reservation, and sets the run to `running`
+3. The provider is invoked (only if live inference is explicitly enabled)
+4. `siteforge_finalize_ai_run` records actual ticks, releases or consumes the reservation, and marks success/failure
+
+Two concurrent runs cannot both observe remaining budget and overspend. The lock serializes reservations.
+
+If a process dies between reserve and finalize, the reserved row stays until an operator calls `siteforge_finalize_ai_run` or updates `ai_budget_reservations`. There is no background cleanup job in this milestone.
+
+### Run state machine
+
+`queued` → `draft` → `awaiting_approval` → `approved` → `running` → `succeeded` / `failed`
+
+Also: `rejected`, `budget_blocked`, `cancelled`, plus legacy `completed`.
+
+- `awaiting_approval`, `rejected`, and `budget_blocked` cannot execute
+- `approved` may execute only after a fresh budget reservation
+- `running` cannot be started again
+- Terminal runs are immutable except finalize metadata
+
+### Provider
+
+- Server-only. `import "server-only"`
+- Reads `XAI_API_KEY` only on the Next.js server
+- Official endpoint: `https://api.x.ai/v1/chat/completions`
+- Entry point: `executeApprovedAiRun(runId, request)` — not a generic `callXai(prompt)`
+- Missing key fails closed
+- SuperGrok subscription does **not** make API calls free
+
+### Environment
+
+`XAI_API_KEY` is **not required** until you want a live paid call. The app must not crash when it is absent.
+
+When you are ready:
+
+1. Create an API key in the [xAI console](https://console.x.ai)
+2. Add `XAI_API_KEY` to local `.env.local` and to Vercel
+3. Leave `XAI_ALLOW_LIVE_INFERENCE` unset until you explicitly approve a specific spend
+4. Never paste the key into chat
 
 ## Tech stack
 
@@ -89,19 +165,20 @@ Sample records are fictional South Florida businesses. They are not real compani
 ```
 src/
   app/              Route pages (Server Components by default)
+  app/actions/      Server actions (approval writes)
   components/       Layout, shared UI, and feature views
   data/             Supabase repositories (no raw queries in pages)
   types/            Domain types and Database types
+  lib/ai/           Money, pricing, estimator, provider, execution
   lib/supabase/     Server-only Supabase client
   lib/auth/         Temporary admin session
-  lib/cost/         Paid-AI spend control types
   agents/           Future agent packages (empty)
   proxy.ts          Request gate for the temporary admin session
 supabase/
   migrations/       Version-controlled schema and seed SQL
 ```
 
-Pages load data on the server through repositories after the SiteForge admin session is verified. The browser does not query application tables. Client Components are used only for filters, dialogs, tabs, mobile navigation, and local-only approval actions.
+Pages load data on the server through repositories after the SiteForge admin session is verified. The browser does not query application tables. Client Components are used only for filters, dialogs, tabs, mobile navigation, and approval forms. Approval writes go through Next.js server actions.
 
 ## Development
 
@@ -122,6 +199,8 @@ SITEFORGE_AUTH_SECRET=replace-with-a-long-random-value
 NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...
+XAI_API_KEY=
+XAI_ALLOW_LIVE_INFERENCE=
 ```
 
 Generate `SITEFORGE_AUTH_SECRET` with a cryptographically random value, for example:
@@ -134,6 +213,7 @@ Restart `npm run dev` after changing environment variables.
 
 ```bash
 npm run lint
+npm test
 npm run build
 ```
 
@@ -151,9 +231,7 @@ These three variables are required to sign in. They are server-only and must not
 | `SITEFORGE_ADMIN_PASSWORD` | The single allowed admin password |
 | `SITEFORGE_AUTH_SECRET` | HMAC secret used to sign the session cookie (at least 16 characters) |
 
-If they are missing, the app fails closed: dashboard routes redirect to `/login`, and sign-in is rejected. Production must not be left publicly reachable because these values were omitted.
-
-This login is still temporary. Milestone 2 does **not** add Supabase Auth.
+If they are missing, the app fails closed: dashboard routes redirect to `/login`, and sign-in is rejected.
 
 ### Supabase credentials
 
@@ -161,13 +239,16 @@ This login is still temporary. Milestone 2 does **not** add Supabase Auth.
 | --- | --- |
 | `NEXT_PUBLIC_SUPABASE_URL` | Project URL. Public. |
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key. Not used for application-table access. Kept for future Supabase Auth. |
-| `SUPABASE_SECRET_KEY` | Server-only `sb_secret_...` key. Required for dashboard reads. Never prefix with `NEXT_PUBLIC_`. |
+| `SUPABASE_SECRET_KEY` | Server-only `sb_secret_...` key. Required for dashboard reads and approval writes. Never prefix with `NEXT_PUBLIC_`. |
 
-The publishable key authenticates as the Postgres `anon` role. After public SELECT was removed, it cannot read application tables. Trusted server reads use the secret key, which maps to `service_role` and bypasses RLS. SiteForge still checks the admin session before every repository read, so the secret key is never a public backdoor.
+### xAI credentials
 
-Copy the secret from **Project Settings → API Keys → Secret keys**. Do not commit it.
+| Variable | Purpose |
+| --- | --- |
+| `XAI_API_KEY` | Server-only. Empty until you create a key in the xAI console. |
+| `XAI_ALLOW_LIVE_INFERENCE` | Must be exactly `true` to allow a live paid call. Default off. |
 
-If `SUPABASE_SECRET_KEY` is missing, authenticated dashboard pages render empty rather than falling back to the publishable key.
+The publishable key authenticates as the Postgres `anon` role. It cannot read application tables. Trusted server access uses the secret key (`service_role`), after `requireAdminSession()`.
 
 ### Vercel
 
@@ -179,8 +260,10 @@ Set these variables in Vercel Project → Settings → Environment Variables for
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `SUPABASE_SECRET_KEY`
+- `XAI_API_KEY` (only after you create a key; still not required for the dashboard)
+- `XAI_ALLOW_LIVE_INFERENCE` (leave unset)
 
-Then redeploy. Apply `supabase/migrations/20260829180000_remove_public_read_access.sql` only after `SUPABASE_SECRET_KEY` is set in Vercel, or the live dashboard will lose its data reads.
+Then redeploy.
 
 ## Supabase setup
 
@@ -191,44 +274,33 @@ Schema and development seed live in:
 - `supabase/migrations/20260829100000_initial_schema.sql`
 - `supabase/migrations/20260829120000_seed_development_data.sql`
 - `supabase/migrations/20260829180000_remove_public_read_access.sql`
+- `supabase/migrations/20260829200000_paid_ai_cost_controls.sql`
 
 Apply them to the hosted project with the Supabase CLI (after `supabase login` and `supabase link --project-ref afpjclfcajrcbpcrgzvd`):
 
 ```bash
-npx supabase db push
+npx supabase migration list
+npx supabase db push --dry-run
+npx supabase db push --yes
 ```
 
-Or paste both SQL files, in order, into the Supabase Dashboard SQL editor.
-
-Local workflow:
-
-```bash
-npx supabase start
-npx supabase db reset
-```
-
-`db reset` applies versioned migrations. `supabase/seed.sql` is empty so seed rows are not inserted twice.
+Do not reset, reseed, or delete production rows.
 
 ### RLS / security
 
 - Dashboard access is protected by temporary SiteForge admin auth (signed HttpOnly cookie).
-- Application database reads happen only on the Next.js server, after `requireAdminSession()`.
-- Public publishable credentials cannot SELECT application tables.
+- Application database reads and writes happen only on the Next.js server, after `requireAdminSession()`.
+- Public publishable credentials cannot SELECT or write application tables.
 - RLS remains enabled on every application table.
 - `anon` and `authenticated` have no table grants or policies for application data.
-- There are no public writes. Approve/Reject stays UI-only.
-- Supabase Auth is still deferred.
-- Future agents must go through this same server access layer and must not hold `SUPABASE_SECRET_KEY`.
-
-### Cost control foundation
-
-`src/lib/cost/types.ts` defines estimated, approved-limit, and actual cost fields plus `paid_ai_usage`. No agent may incur unapproved paid cost later. xAI is not called yet.
+- Budget RPCs are invoker-rights, execute revoked from `anon`/`authenticated`/`public`, granted to `service_role` only.
+- Future agents must go through this same server access layer and must not hold `SUPABASE_SECRET_KEY` or `XAI_API_KEY`.
 
 ## Roadmap
 
 1. **Milestone 1** — Application foundation
-2. **Milestone 2** — Supabase database + persistent application state (this repo; auth is still the temporary admin login)
-3. **Milestone 3** — xAI integration
+2. **Milestone 2** — Supabase database + persistent application state
+3. **Milestone 3** — xAI integration + strict cost controls (this repo)
 4. **Milestone 4** — Scout Agent
 5. **Milestone 5** — Auditor Agent
 6. **Milestone 6** — Builder Agent

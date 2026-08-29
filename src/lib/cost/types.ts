@@ -1,8 +1,6 @@
 /**
- * Foundation types for future paid-AI spend controls.
- * No xAI calls or billing are implemented in this milestone.
- *
- * Future rule: no agent may incur unapproved paid cost.
+ * Legacy USD display types. Authoritative paid-AI money is integer ticks
+ * in src/lib/ai. No agent may incur unapproved paid cost.
  */
 export type CostUsd = number;
 

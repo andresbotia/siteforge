@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { listIntegrations } from "@/data/integrations";
 import { SettingsView } from "@/components/settings/settings-view";
+import { getBudgetSnapshot, toCostControlsView } from "@/data/budget";
+import { listIntegrations } from "@/data/integrations";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,14 @@ export const metadata: Metadata = {
 };
 
 export default async function SettingsPage() {
-  const integrations = await listIntegrations();
-  return <SettingsView integrations={integrations} />;
+  const [integrations, budget] = await Promise.all([
+    listIntegrations(),
+    getBudgetSnapshot(),
+  ]);
+  return (
+    <SettingsView
+      integrations={integrations}
+      costControls={toCostControlsView(budget)}
+    />
+  );
 }

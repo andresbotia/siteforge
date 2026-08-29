@@ -38,3 +38,22 @@ export async function readTable<T>(
 
   return data;
 }
+
+export async function mutateTable<T>(
+  query: (
+    client: SupabaseClient<Database>,
+  ) => PromiseLike<{ data: T | null; error: { code?: string; message?: string } | null }>,
+): Promise<T | null> {
+  await requireAdminSession();
+
+  const client = createServerSupabaseClient();
+  if (!client) return null;
+
+  const { data, error } = await query(client);
+  if (error) {
+    console.error("Supabase write failed", error.code ?? "unknown");
+    return null;
+  }
+
+  return data;
+}

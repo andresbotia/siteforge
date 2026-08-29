@@ -93,16 +93,46 @@ export type Database = {
           input: Json;
           output: Json;
           model: string | null;
+          provider: string | null;
+          purpose: string | null;
+          failure_reason: string | null;
           input_tokens: number | null;
           output_tokens: number | null;
           estimated_cost_usd: number | null;
           actual_cost_usd: number | null;
+          estimated_cost_ticks: number | string;
+          approved_cost_limit_ticks: number | string;
+          actual_cost_ticks: number | string;
+          usage_metadata: Json;
+          execution_nonce: number | string;
           started_at: string | null;
           completed_at: string | null;
           created_at: string;
         };
-        Insert: Record<string, never>;
-        Update: Record<string, never>;
+        Insert: {
+          id?: string;
+          agent_id: string;
+          lead_id?: string | null;
+          status: string;
+          trigger_type?: string | null;
+          input?: Json;
+          output?: Json;
+          model?: string | null;
+          provider?: string | null;
+          purpose?: string | null;
+          estimated_cost_usd?: number | null;
+          estimated_cost_ticks?: number | string;
+          approved_cost_limit_ticks?: number | string;
+        };
+        Update: {
+          status?: string;
+          failure_reason?: string | null;
+          approved_cost_limit_ticks?: number | string;
+          approved_cost_limit_usd?: number | null;
+          actual_cost_ticks?: number | string;
+          started_at?: string | null;
+          completed_at?: string | null;
+        };
         Relationships: [];
       };
       agent_tool_calls: {
@@ -114,10 +144,14 @@ export type Database = {
           request: Json;
           response: Json;
           status: string;
+          provider: string | null;
           estimated_cost_usd: number | null;
           actual_cost_usd: number | null;
+          estimated_cost_ticks: number | string;
+          actual_cost_ticks: number | string;
           requires_approval: boolean;
           created_at: string;
+          started_at: string | null;
           completed_at: string | null;
         };
         Insert: Record<string, never>;
@@ -137,9 +171,59 @@ export type Database = {
           estimated_cost_usd: number | null;
           approved_cost_limit_usd: number | null;
           actual_cost_usd: number | null;
+          requested_cost_ticks: number | string;
+          approved_cost_limit_ticks: number | string;
+          actual_cost_ticks: number | string;
+          resolved_by: string | null;
           requested_at: string;
           resolved_at: string | null;
           created_at: string;
+        };
+        Insert: {
+          id?: string;
+          agent_run_id?: string | null;
+          lead_id?: string | null;
+          approval_type: string;
+          status: string;
+          title: string;
+          description?: string | null;
+          payload?: Json;
+          estimated_cost_usd?: number | null;
+          requested_cost_ticks?: number | string;
+          approved_cost_limit_ticks?: number | string;
+        };
+        Update: {
+          status?: string;
+          approved_cost_limit_usd?: number | null;
+          approved_cost_limit_ticks?: number | string;
+          actual_cost_ticks?: number | string;
+          resolved_at?: string | null;
+          resolved_by?: string | null;
+        };
+        Relationships: [];
+      };
+      ai_budget_limits: {
+        Row: {
+          id: number;
+          daily_limit_ticks: number | string;
+          monthly_limit_ticks: number | string;
+          per_run_ceiling_ticks: Json;
+          updated_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      ai_budget_reservations: {
+        Row: {
+          id: string;
+          agent_run_id: string;
+          approval_id: string | null;
+          reserved_ticks: number | string;
+          status: string;
+          created_at: string;
+          finalized_at: string | null;
+          actual_cost_ticks: number | string;
         };
         Insert: Record<string, never>;
         Update: Record<string, never>;
@@ -232,13 +316,37 @@ export type Database = {
           metadata: Json;
           created_at: string;
         };
-        Insert: Record<string, never>;
+        Insert: {
+          event_type: string;
+          actor_type?: string | null;
+          actor_id?: string | null;
+          lead_id?: string | null;
+          customer_id?: string | null;
+          title: string;
+          description?: string | null;
+          metadata?: Json;
+        };
         Update: Record<string, never>;
         Relationships: [];
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      siteforge_reserve_ai_run: {
+        Args: { p_run_id: string };
+        Returns: Json;
+      };
+      siteforge_finalize_ai_run: {
+        Args: {
+          p_run_id: string;
+          p_success: boolean;
+          p_actual_ticks: number | string;
+          p_failure_reason: string | null;
+          p_usage: Json;
+        };
+        Returns: Json;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };
