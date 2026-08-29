@@ -20,7 +20,7 @@ export default async function WebsitesPage() {
     <>
       <PageHeader
         title="Websites"
-        description="Generated website records from Supabase. Preview hosts are fictional and are not deployed."
+        description="Generated website drafts. Internal previews are authenticated and not customer-facing."
       />
       <DataTable>
         <THead>
@@ -66,9 +66,11 @@ export default async function WebsitesPage() {
                   <span className="truncate text-xs text-muted">
                     {site.previewUrl.replace("https://", "")}
                   </span>
-                  <Button size="sm" variant="ghost" disabled>
-                    Open
-                  </Button>
+                  <Link href={`/websites/${site.id}`}>
+                    <Button size="sm" variant="ghost">
+                      Open
+                    </Button>
+                  </Link>
                 </div>
               </Td>
               <Td className="text-muted whitespace-nowrap">

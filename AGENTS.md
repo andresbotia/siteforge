@@ -54,7 +54,7 @@ Examples of privileged / approval-gated actions:
 
 ## Milestone boundary
 
-Milestone 5 adds manual Auditor website audits. Milestone 4 Scout and Milestone 3 paid-AI gates remain mandatory. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`.
+Milestone 6 adds manual Builder website drafts. Milestone 5 Auditor, Milestone 4 Scout, and Milestone 3 paid-AI gates remain mandatory. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`.
 
 - Database migrations must be version-controlled under `supabase/migrations`.
 - Never expose privileged credentials client-side. Never put `SUPABASE_SECRET_KEY` or `XAI_API_KEY` in `NEXT_PUBLIC_*` or Client Components.
@@ -80,11 +80,16 @@ Milestone 5 adds manual Auditor website audits. Milestone 4 Scout and Milestone 
 - Auditor scoring is deterministic. Do not let an LLM author official quality or redesign-opportunity scores.
 - Auditor must not call `executeApprovedAiRun` or `createLiveXaiProvider` directly.
 - Basic Auditor runs do not require paid AI and must remain $0.
-- Do not implement Builder, Sales, or Manager execution.
+- Builder consumes audited leads and produces internal drafts only. It does not deploy, email, buy domains, or contact businesses.
+- Builder drafts are structured WebsiteSpec data rendered by a trusted allowlisted template system. Do not eval or store executable code in the database.
+- Builder scoring/spec composition is deterministic. Do not let an LLM author official specs in this milestone.
+- Builder must not call `executeApprovedAiRun` or `createLiveXaiProvider` directly.
+- Basic Builder runs do not require paid AI and must remain $0.
+- Do not implement Sales or Manager execution.
 - Do not send email, process payments, or deploy generated websites.
 - Do not connect Stripe, Resend, or Vercel APIs.
 - Do not add background workers or scheduled jobs unless a later milestone explicitly asks for them.
-- Do not start Milestone 6 unless asked.
+- Do not start Milestone 7 unless asked.
 
 ## Architecture notes
 
@@ -95,6 +100,7 @@ Milestone 5 adds manual Auditor website audits. Milestone 4 Scout and Milestone 
 - Shared SSRF-safe HTTP lives in `src/lib/http`. Scout and Auditor must not grow a second fetch stack.
 - Scout lives in `src/lib/scout` and `src/data/scout.ts`. Manual UI: `/agents/scout`.
 - Auditor lives in `src/lib/auditor` and `src/data/auditor.ts`. Manual UI: `/agents/auditor`. Audit detail: `/audits/[id]`.
+- Builder lives in `src/lib/builder` and `src/data/builder.ts`. Manual UI: `/agents/builder`. Internal draft: `/websites/[id]`. Preview: `/websites/[id]/preview`.
 - Server Supabase utilities live in `src/lib/supabase` and are `server-only`.
 - Shared UI lives in `src/components/shared`.
 - Agent placeholders live in `src/agents`.

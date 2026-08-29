@@ -3,10 +3,12 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AuditRunButton } from "@/components/auditor/audit-run-button";
+import { BuildRunButton } from "@/components/builder/build-run-button";
 import { listActivityForLead } from "@/data/activity";
 import { getLatestAuditForLead, getLeadById, listAuditsForLead } from "@/data/leads";
+import { getLatestWebsiteForLead } from "@/data/websites";
 import { isLeadEligibleForAudit } from "@/lib/auditor/eligibility";
-import { Button } from "@/components/shared/button";
+import { isLeadEligibleForBuild } from "@/lib/builder/eligibility";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { ScoreBar, ScoreRing } from "@/components/shared/score-bar";
@@ -36,12 +38,14 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
   const lead = await getLeadById(id);
   if (!lead) notFound();
 
-  const [audit, audits, activity] = await Promise.all([
+  const [audit, audits, activity, website] = await Promise.all([
     getLatestAuditForLead(lead.id),
     listAuditsForLead(lead.id),
     listActivityForLead(lead.id),
+    getLatestWebsiteForLead(lead.id),
   ]);
   const canAudit = isLeadEligibleForAudit(lead);
+  const canBuild = isLeadEligibleForBuild(lead);
 
   return (
     <>
@@ -51,14 +55,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         actions={
           <div className="flex flex-col items-end gap-3">
             {canAudit ? <AuditRunButton leadId={lead.id} /> : null}
-            <div className="flex flex-col items-end gap-1">
-              <Button variant="secondary" disabled>
-                Build Website
-              </Button>
-              <p className="text-[11px] text-muted-foreground">
-                Builder Agent not implemented yet.
-              </p>
-            </div>
+            {canBuild ? <BuildRunButton leadId={lead.id} /> : null}
           </div>
         }
       />
@@ -226,6 +223,47 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           <CardBody>
             <p className="text-sm text-muted">
               Not audited. {canAudit ? "Run a website audit from this page." : "This lead is not eligible for Auditor."}
+            </p>
+          </CardBody>
+        </Card>
+      )}
+
+      {website ? (
+        <Card className="mt-4">
+          <CardHeader
+            title="Website draft"
+            description="Latest Builder draft. Rebuilds create history instead of overwriting."
+            action={
+              <Link href={`/websites/${website.id}`} className="text-xs text-accent hover:underline">
+                Open draft
+              </Link>
+            }
+          />
+          <CardBody className="grid gap-3 sm:grid-cols-2">
+            <Detail label="Template" value={website.template || website.templateKey || "—"} />
+            <Detail label="Status" value={website.status} />
+            <Detail label="Built" value={formatDateTime(website.createdAt)} />
+            <Detail
+              label="Preview"
+              value={
+                website.spec ? (
+                  <Link href={`/websites/${website.id}/preview`} className="text-accent hover:underline">
+                    Open internal preview
+                  </Link>
+                ) : (
+                  "No structured spec on this record"
+                )
+              }
+            />
+          </CardBody>
+        </Card>
+      ) : (
+        <Card className="mt-4">
+          <CardBody>
+            <p className="text-sm text-muted">
+              {canBuild
+                ? "No website draft yet. Build a $0 template draft from this page."
+                : "Builder becomes available after the lead is audited."}
             </p>
           </CardBody>
         </Card>

@@ -122,11 +122,18 @@ export interface GeneratedWebsite {
   businessName: string;
   status: GeneratedWebsiteStatus;
   template: string;
+  templateKey: string | null;
   beforeScore: number;
   afterScore: number | null;
   previewUrl: string;
   productionUrl: string | null;
   createdAt: string;
+  spec: Record<string, unknown> | null;
+  buildVersion: string | null;
+  sourceAuditId: string | null;
+  sourceRunId: string | null;
+  auditFixes: Array<{ findingCode: string; addressed: boolean; builderAction: string }>;
+  contentProvenance: Array<{ field: string; provenance: string; source: string | null }>;
 }
 
 export type AgentId = "scout" | "auditor" | "builder" | "sales" | "manager";

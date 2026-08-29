@@ -65,17 +65,19 @@ export const agentCatalog: Record<
   builder: {
     purpose: "Generate improved websites from approved qualified leads.",
     description:
-      "Builder will eventually generate website code, modify templates, run builds, and create preview deployments. Production publish will require approval. It is not implemented in this milestone.",
+      "Builder turns an audited lead into a $0 deterministic website draft from a reusable template. It does not deploy, send email, buy domains, or call xAI.",
     capabilities: [
-      "Generate website code",
-      "Modify templates",
-      "Run builds",
-      "Generate preview deployments in future",
+      "Select a trusted template",
+      "Compose a structured WebsiteSpec",
+      "Map Auditor findings to draft fixes",
+      "Render an internal authenticated preview",
     ],
     restrictions: [
-      "Production deployment requires approval",
+      "Cannot deploy production websites",
       "Cannot send sales email",
       "Cannot process payments",
+      "Cannot buy domains or change DNS",
+      "Cannot call xAI directly",
     ],
     permissions: {
       canReadPublicData: true,

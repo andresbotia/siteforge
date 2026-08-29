@@ -8,7 +8,7 @@ Specialized agent packages. Execution lives under `src/lib/*` and `src/data/*`, 
 | --- | --- | --- |
 | Scout | Manual | Discover strong local businesses with poor websites |
 | Auditor | Manual | Analyze existing websites and produce structured findings |
-| Builder | Disabled | Generate improved websites from qualified leads |
+| Builder | Manual | Generate improved website drafts from audited leads |
 | Sales | Disabled | Draft personalized outreach |
 | Manager | Disabled | Handle requested updates for paying managed customers |
 
