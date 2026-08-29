@@ -8,19 +8,10 @@ import { Dialog } from "@/components/shared/dialog";
 import { Field, SelectInput, TextInput } from "@/components/shared/field";
 import { PageHeader } from "@/components/shared/page-header";
 import { LeadStatusBadge } from "@/components/shared/status-badge";
-import { cities, industries } from "@/data";
+import { cities, industries, leadStatuses } from "@/lib/constants";
 import { formatDate } from "@/lib/format";
 import { leadStatusLabel } from "@/lib/labels";
-import type { Lead, LeadStatus } from "@/types";
-
-const statuses: LeadStatus[] = [
-  "discovered",
-  "auditing",
-  "qualified",
-  "rejected",
-  "building",
-  "ready",
-];
+import type { Lead } from "@/types";
 
 export function LeadsView({ leads }: { leads: Lead[] }) {
   const [query, setQuery] = useState("");
@@ -110,7 +101,7 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
             onChange={(event) => setStatus(event.target.value)}
           >
             <option value="all">All statuses</option>
-            {statuses.map((item) => (
+            {leadStatuses.map((item) => (
               <option key={item} value={item}>
                 {leadStatusLabel[item]}
               </option>
@@ -149,6 +140,16 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
           </tr>
         </THead>
         <tbody>
+          {filtered.length === 0 ? (
+            <tr>
+              <td
+                colSpan={9}
+                className="border-t border-border-subtle px-3 py-6 text-sm text-muted"
+              >
+                No leads yet.
+              </td>
+            </tr>
+          ) : null}
           {filtered.map((lead) => (
             <tr key={lead.id} className="hover:bg-surface-hover/70">
               <Td>

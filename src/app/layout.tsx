@@ -19,7 +19,7 @@ export const metadata: Metadata = {
     template: "%s · SiteForge",
   },
   description:
-    "AI-assisted website operations platform. Milestone 1 is a mock-data application foundation.",
+    "AI-assisted website operations platform. Milestone 2 persists application data in Supabase.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

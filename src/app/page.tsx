@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { getAgentSpend, listRecentAgentRuns } from "@/data/activity";
+import { listPendingApprovals } from "@/data/approvals";
+import { getDashboardMetrics, getPipeline } from "@/data/dashboard";
+import { listSystemStatus } from "@/data/integrations";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { MetricCard } from "@/components/shared/metric-card";
 import { PageHeader } from "@/components/shared/page-header";
@@ -7,33 +11,27 @@ import {
   ApprovalTypeBadge,
   ConnectionBadge,
 } from "@/components/shared/status-badge";
-import {
-  getDashboardMetrics,
-  mockAgentRuns,
-  mockAgentSpend,
-  mockApprovals,
-  mockPipeline,
-  mockSystemStatus,
-} from "@/data";
-import { getLeadById } from "@/data/mock-leads";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 import { agentName } from "@/lib/labels";
 
-export default function OverviewPage() {
-  const metrics = getDashboardMetrics();
-  const pendingApprovals = mockApprovals.filter(
-    (approval) => approval.status === "pending",
-  );
-  const recentRuns = [...mockAgentRuns].sort(
-    (a, b) =>
-      new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime(),
-  );
+export const dynamic = "force-dynamic";
+
+export default async function OverviewPage() {
+  const [metrics, pipeline, pendingApprovals, recentRuns, spend, systemStatus] =
+    await Promise.all([
+      getDashboardMetrics(),
+      getPipeline(),
+      listPendingApprovals(),
+      listRecentAgentRuns(),
+      getAgentSpend(),
+      listSystemStatus(),
+    ]);
 
   return (
     <>
       <PageHeader
         title="Overview"
-        description="Operating picture for the SiteForge pipeline. All figures are mock data. Integrations are not connected."
+        description="Operating picture for the SiteForge pipeline. Figures come from Supabase when connected. Agents are not running."
       />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
@@ -53,42 +51,46 @@ export default function OverviewPage() {
 
       <div className="mt-6">
         <h2 className="mb-3 text-sm font-medium">Pipeline</h2>
-        <PipelineStrip stages={mockPipeline} />
+        <PipelineStrip stages={pipeline} />
       </div>
 
       <div className="mt-6 grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader
             title="Recent agent activity"
-            description="Sample history for layout review. Agents are not configured and are not running."
+            description="Persisted run history. Agents are disabled and are not executing."
           />
-          <ul>
-            {recentRuns.map((run) => (
-              <li
-                key={run.id}
-                className="flex items-start justify-between gap-4 border-t border-border-subtle px-4 py-3 first:border-t-0"
-              >
-                <div>
-                  <p className="text-sm text-foreground">{run.summary}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {agentName[run.agentId]} · {run.status}
-                  </p>
-                </div>
-                <time className="shrink-0 text-xs text-muted-foreground tabular-nums">
-                  {formatDateTime(run.startedAt)}
-                </time>
-              </li>
-            ))}
-          </ul>
+          {recentRuns.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-muted">No agent activity yet.</p>
+          ) : (
+            <ul>
+              {recentRuns.map((run) => (
+                <li
+                  key={run.id}
+                  className="flex items-start justify-between gap-4 border-t border-border-subtle px-4 py-3 first:border-t-0"
+                >
+                  <div>
+                    <p className="text-sm text-foreground">{run.summary}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {agentName[run.agentId]} · {run.status}
+                    </p>
+                  </div>
+                  <time className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                    {formatDateTime(run.startedAt)}
+                  </time>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
 
         <Card>
           <CardHeader
             title="System status"
-            description="Milestone 1 foundation. Nothing is connected."
+            description="Supabase is the only integration in this milestone."
           />
           <ul>
-            {mockSystemStatus.map((service) => (
+            {systemStatus.map((service) => (
               <li
                 key={service.id}
                 className="flex items-center justify-between border-t border-border-subtle px-4 py-3 first:border-t-0"
@@ -112,19 +114,18 @@ export default function OverviewPage() {
               </Link>
             }
           />
-          <ul>
-            {pendingApprovals.slice(0, 4).map((approval) => {
-              const lead = approval.leadId
-                ? getLeadById(approval.leadId)
-                : undefined;
-              return (
+          {pendingApprovals.length === 0 ? (
+            <p className="px-4 py-6 text-sm text-muted">No pending approvals.</p>
+          ) : (
+            <ul>
+              {pendingApprovals.slice(0, 4).map((approval) => (
                 <li
                   key={approval.id}
                   className="flex flex-wrap items-center justify-between gap-3 border-t border-border-subtle px-4 py-3 first:border-t-0"
                 >
                   <div>
                     <p className="text-sm text-foreground">
-                      {lead?.businessName ?? "Unknown business"}
+                      {approval.businessName}
                     </p>
                     <p className="mt-0.5 text-xs text-muted">
                       {approval.requestedAction}
@@ -132,15 +133,15 @@ export default function OverviewPage() {
                   </div>
                   <ApprovalTypeBadge type={approval.type} />
                 </li>
-              );
-            })}
-          </ul>
+              ))}
+            </ul>
+          )}
         </Card>
 
         <Card>
           <CardHeader
             title="Agent spend"
-            description="No live usage. Agents are disabled."
+            description="From persisted agent_runs. Agents are disabled."
           />
           <CardBody>
             <div className="grid grid-cols-2 gap-3">
@@ -149,7 +150,7 @@ export default function OverviewPage() {
                   Today
                 </p>
                 <p className="mt-1 text-lg font-semibold tabular-nums">
-                  {formatCurrency(mockAgentSpend.today)}
+                  {formatCurrency(spend.today)}
                 </p>
               </div>
               <div>
@@ -157,12 +158,12 @@ export default function OverviewPage() {
                   This month
                 </p>
                 <p className="mt-1 text-lg font-semibold tabular-nums">
-                  {formatCurrency(mockAgentSpend.thisMonth)}
+                  {formatCurrency(spend.thisMonth)}
                 </p>
               </div>
             </div>
             <ul className="mt-4 space-y-2">
-              {mockAgentSpend.breakdown.map((row) => (
+              {spend.breakdown.map((row) => (
                 <li
                   key={row.agentId}
                   className="flex items-center justify-between text-sm"

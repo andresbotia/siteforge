@@ -1,20 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { listCustomers } from "@/data/customers";
 import { DataTable, Td, Th, THead } from "@/components/shared/data-table";
 import { PageHeader } from "@/components/shared/page-header";
 import {
   CustomerStatusBadge,
   PlanBadge,
 } from "@/components/shared/status-badge";
-import { mockCustomers } from "@/data";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { customerPlanPrice } from "@/lib/labels";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Customers",
 };
 
-export default function CustomersPage() {
+export default async function CustomersPage() {
+  const customers = await listCustomers();
+
   return (
     <>
       <PageHeader
@@ -33,15 +37,29 @@ export default function CustomersPage() {
           </tr>
         </THead>
         <tbody>
-          {mockCustomers.map((customer) => (
+          {customers.length === 0 ? (
+            <tr>
+              <td
+                colSpan={6}
+                className="border-t border-border-subtle px-3 py-6 text-sm text-muted"
+              >
+                No customers yet.
+              </td>
+            </tr>
+          ) : null}
+          {customers.map((customer) => (
             <tr key={customer.id} className="hover:bg-surface-hover/70">
               <Td>
-                <Link
-                  href={`/leads/${customer.leadId}`}
-                  className="font-medium hover:text-accent"
-                >
-                  {customer.businessName}
-                </Link>
+                {customer.leadId ? (
+                  <Link
+                    href={`/leads/${customer.leadId}`}
+                    className="font-medium hover:text-accent"
+                  >
+                    {customer.businessName}
+                  </Link>
+                ) : (
+                  customer.businessName
+                )}
               </Td>
               <Td className="max-w-[240px] truncate text-xs text-muted">
                 {customer.website.replace("https://", "")}

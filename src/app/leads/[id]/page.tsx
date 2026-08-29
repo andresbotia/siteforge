@@ -1,13 +1,16 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { listActivityForLead } from "@/data/activity";
+import { getLatestAuditForLead, getLeadById } from "@/data/leads";
 import { Button } from "@/components/shared/button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { ScoreBar, ScoreRing } from "@/components/shared/score-bar";
 import { LeadStatusBadge } from "@/components/shared/status-badge";
-import { getActivityForLead, getAuditByLeadId, getLeadById } from "@/data";
 import { formatDateTime, formatNumber } from "@/lib/format";
+
+export const dynamic = "force-dynamic";
 
 type LeadPageProps = {
   params: Promise<{ id: string }>;
@@ -17,17 +20,19 @@ export async function generateMetadata({
   params,
 }: LeadPageProps): Promise<Metadata> {
   const { id } = await params;
-  const lead = getLeadById(id);
+  const lead = await getLeadById(id);
   return { title: lead?.businessName ?? "Lead" };
 }
 
 export default async function LeadDetailPage({ params }: LeadPageProps) {
   const { id } = await params;
-  const lead = getLeadById(id);
+  const lead = await getLeadById(id);
   if (!lead) notFound();
 
-  const audit = getAuditByLeadId(lead.id);
-  const activity = getActivityForLead(lead.id);
+  const [audit, activity] = await Promise.all([
+    getLatestAuditForLead(lead.id),
+    listActivityForLead(lead.id),
+  ]);
 
   return (
     <>
@@ -77,15 +82,19 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         <Card className="mt-4">
           <CardHeader
             title="Website audit"
-            description="Sample audit output. Auditor is not implemented."
+            description="Latest persisted audit. Auditor is not implemented."
           />
           <CardBody>
-            <div className="grid gap-4 md:grid-cols-5">
+            <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-6">
               <ScoreBar label="Overall" value={audit.overallScore} />
               <ScoreBar label="Design" value={audit.designScore} />
               <ScoreBar label="Mobile" value={audit.mobileScore} />
               <ScoreBar label="SEO" value={audit.seoScore} />
               <ScoreBar label="Performance" value={audit.performanceScore} />
+              <ScoreBar
+                label="Conversion"
+                value={audit.conversionScore ?? 0}
+              />
             </div>
             <div className="mt-6 grid gap-6 md:grid-cols-2">
               <div>
@@ -123,26 +132,30 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
 
       <Card className="mt-4">
         <CardHeader title="Activity timeline" />
-        <ol>
-          {activity.map((item, index) => (
-            <li
-              key={item.id}
-              className="grid grid-cols-[12px_minmax(0,1fr)] gap-3 border-t border-border-subtle px-4 py-3 first:border-t-0"
-            >
-              <span
-                className={`mt-1.5 size-2 rounded-full ${index === 0 ? "bg-accent" : "bg-border"}`}
-                aria-hidden="true"
-              />
-              <div>
-                <p className="text-sm text-foreground">{item.title}</p>
-                <p className="mt-0.5 text-sm text-muted">{item.detail}</p>
-                <time className="mt-1 block text-xs text-muted-foreground">
-                  {formatDateTime(item.timestamp)}
-                </time>
-              </div>
-            </li>
-          ))}
-        </ol>
+        {activity.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted">No activity yet.</p>
+        ) : (
+          <ol>
+            {activity.map((item, index) => (
+              <li
+                key={item.id}
+                className="grid grid-cols-[12px_minmax(0,1fr)] gap-3 border-t border-border-subtle px-4 py-3 first:border-t-0"
+              >
+                <span
+                  className={`mt-1.5 size-2 rounded-full ${index === 0 ? "bg-accent" : "bg-border"}`}
+                  aria-hidden="true"
+                />
+                <div>
+                  <p className="text-sm text-foreground">{item.title}</p>
+                  <p className="mt-0.5 text-sm text-muted">{item.detail}</p>
+                  <time className="mt-1 block text-xs text-muted-foreground">
+                    {formatDateTime(item.timestamp)}
+                  </time>
+                </div>
+              </li>
+            ))}
+          </ol>
+        )}
       </Card>
     </>
   );

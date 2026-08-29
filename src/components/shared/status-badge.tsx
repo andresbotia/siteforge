@@ -22,11 +22,14 @@ import type {
 
 const leadTone = {
   discovered: "neutral",
-  auditing: "info",
   qualified: "accent",
+  audited: "info",
+  website_built: "warning",
+  approved: "success",
+  contacted: "info",
+  interested: "success",
+  customer: "success",
   rejected: "danger",
-  building: "warning",
-  ready: "success",
 } as const;
 
 const websiteTone = {
@@ -63,6 +66,9 @@ const approvalTone = {
   external_email: "info",
   website_modification: "warning",
   payment_action: "danger",
+  paid_ai_usage: "warning",
+  dns_change: "danger",
+  destructive_infrastructure_action: "danger",
 } as const;
 
 const riskTone = {

@@ -12,11 +12,14 @@ import type {
 
 export const leadStatusLabel: Record<LeadStatus, string> = {
   discovered: "Discovered",
-  auditing: "Auditing",
   qualified: "Qualified",
+  audited: "Audited",
+  website_built: "Website Built",
+  approved: "Approved",
+  contacted: "Contacted",
+  interested: "Interested",
+  customer: "Customer",
   rejected: "Rejected",
-  building: "Building",
-  ready: "Ready",
 };
 
 export const websiteStatusLabel: Record<GeneratedWebsiteStatus, string> = {
@@ -53,6 +56,9 @@ export const approvalTypeLabel: Record<ApprovalType, string> = {
   external_email: "External Email",
   website_modification: "Website Modification",
   payment_action: "Payment Action",
+  paid_ai_usage: "Paid AI Usage",
+  dns_change: "DNS Change",
+  destructive_infrastructure_action: "Destructive Infrastructure",
 };
 
 export const riskLabel: Record<RiskLevel, string> = {

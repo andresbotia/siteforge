@@ -1,0 +1,3 @@
+-- Local `supabase db reset` already applies versioned migrations,
+-- including supabase/migrations/20260829120000_seed_development_data.sql.
+-- Keep this file empty so seed rows are not inserted twice.

@@ -53,20 +53,26 @@ Examples of privileged / approval-gated actions:
 
 ## Milestone boundary
 
-Milestone 1 is the application foundation with mock data only.
+Milestone 2 adds a version-controlled Supabase data layer. Dashboard reads come from repositories in `src/data`. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts` until Supabase Auth is explicitly requested.
 
-A temporary single-admin session (env credentials + signed HTTP-only cookie) protects the dashboard until Milestone 2. Do not replace it with Supabase unless that milestone is explicitly requested. Keep auth logic in `src/lib/auth` and `src/proxy.ts`.
+- Database migrations must be version-controlled under `supabase/migrations`.
+- Never expose privileged Supabase credentials client-side. Only the publishable key may be public.
+- Never disable RLS merely to make development easier.
+- External side effects require approvals.
+- Paid AI spend must eventually require budget authorization. No agent may incur unapproved paid cost.
+- Agents cannot directly hold infrastructure credentials.
 
-Do not implement Scout, Auditor, Builder, Sales, or Manager.
-Do not connect xAI, Supabase, Vercel, Resend, or Stripe.
+Do not implement Scout, Auditor, Builder, Sales, or Manager execution.
+Do not connect xAI, Vercel, Resend, or Stripe APIs.
 Do not scrape businesses, send email, process payments, or deploy generated websites.
+Do not add a service-role key to bypass RLS unless a later milestone explicitly requires it and explains why.
 Do not add background workers or scheduled jobs unless a later milestone explicitly asks for them.
 
 ## Architecture notes
 
 - Domain types live in `src/types`.
-- Mock datasets live in `src/data` and must stay internally consistent.
+- Database types live in `src/types/database.ts`.
+- Data access lives in `src/data` repositories. Pages must not run raw Supabase queries.
 - Shared UI lives in `src/components/shared`.
 - Agent placeholders live in `src/agents`.
 - Prefer Server Components. Use Client Components only for interaction.
-- Future data access should be introduced behind server-side modules so Supabase can replace mock lookups without rewriting pages.

@@ -9,7 +9,6 @@ import {
   ApprovalTypeBadge,
   RiskBadge,
 } from "@/components/shared/status-badge";
-import { getLeadById } from "@/data/mock-leads";
 import { formatDateTime } from "@/lib/format";
 import { agentName } from "@/lib/labels";
 import { approvalPhilosophy } from "@/lib/policy";
@@ -82,10 +81,10 @@ export function ApprovalsView({ approvals }: { approvals: Approval[] }) {
       ) : null}
 
       <div className="grid gap-3">
+        {pending.length === 0 ? (
+          <p className="text-sm text-muted">No pending approvals.</p>
+        ) : null}
         {pending.map((approval) => {
-          const lead = approval.leadId
-            ? getLeadById(approval.leadId)
-            : undefined;
           return (
             <article
               key={approval.id}
@@ -94,7 +93,7 @@ export function ApprovalsView({ approvals }: { approvals: Approval[] }) {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-medium text-foreground">
-                    {lead?.businessName ?? "Unknown business"}
+                    {approval.businessName}
                   </h2>
                   <p className="mt-1 text-sm text-muted">
                     {approval.requestedAction}

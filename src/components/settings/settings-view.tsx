@@ -6,8 +6,9 @@ import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { Field, SelectInput, TextInput } from "@/components/shared/field";
 import { PageHeader } from "@/components/shared/page-header";
 import { ConnectionBadge } from "@/components/shared/status-badge";
-import { mockIntegrations, mockSettings } from "@/data";
+import { settingsDefaults } from "@/lib/constants";
 import { cn } from "@/lib/cn";
+import type { IntegrationStatus } from "@/types";
 
 const tabs = [
   "General",
@@ -20,15 +21,19 @@ const tabs = [
 
 type Tab = (typeof tabs)[number];
 
-export function SettingsView() {
+export function SettingsView({
+  integrations,
+}: {
+  integrations: IntegrationStatus[];
+}) {
   const [tab, setTab] = useState<Tab>("General");
-  const [settings, setSettings] = useState(mockSettings);
+  const [settings, setSettings] = useState(settingsDefaults);
 
   return (
     <>
       <PageHeader
         title="Settings"
-        description="Controls are local mock state. No integration is connected and nothing is persisted."
+        description="Integration cards are read from Supabase. Form controls remain local UI state and are not persisted."
       />
 
       <div
@@ -216,7 +221,7 @@ export function SettingsView() {
 
       {tab === "Integrations" ? (
         <div className="grid gap-3 md:grid-cols-2">
-          {mockIntegrations.map((integration) => (
+          {integrations.map((integration) => (
             <Card key={integration.id}>
               <CardBody>
                 <div className="flex items-start justify-between gap-3">

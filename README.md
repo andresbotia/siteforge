@@ -50,27 +50,27 @@ Agents will never hold privileged infrastructure credentials. They will request 
 
 ## Current milestone
 
-Milestone 1 is the dashboard foundation:
+Milestone 2 is the persistent application data layer:
 
-- Next.js App Router application shell
-- Dark-first operations UI
-- Navigation for the full future workflow
-- Centralized domain types and mock data
-- Temporary single-admin login so the deployed dashboard is not public
-- No scraping, email, payments, deployments, or live agents
+- Existing dashboard shell and temporary admin login are unchanged
+- Supabase holds leads, audits, websites, approvals, agents, outreach, customers, and activity
+- Dashboard pages read through `src/data` repositories
+- Agents remain disabled and are not executing
+- xAI, Resend, Stripe, and Vercel APIs are not connected
 
-Everything you see in the UI is fictional sample data, including South Florida businesses. Those businesses are not real.
+Sample records are fictional South Florida businesses. They are not real companies.
 
 ## What is mock vs real
 
 | Area | Status |
 | --- | --- |
 | UI, routing, layout | Real |
-| Leads, audits, websites, outreach, customers | Mock |
-| Approvals queue | Mock, local UI state only |
-| Agent cards and permissions | Documented, not implemented |
-| Supabase / xAI / Vercel / Resend / Stripe | Not connected |
-| Authentication | Temporary single-admin env credentials. Not Supabase. |
+| Leads, audits, websites, outreach, customers, approvals, agents | Persisted in Supabase |
+| Approval Approve/Reject buttons | Local UI state only; no database writes |
+| Agent execution | Not implemented |
+| Supabase database | Connected via publishable key (read-only) |
+| xAI / Vercel / Resend / Stripe APIs | Not connected |
+| Authentication | Temporary single-admin env credentials. Not Supabase Auth. |
 | Email sending | Not implemented |
 | Payments | Not implemented |
 | Website generation and deploy | Not implemented |
@@ -82,25 +82,26 @@ Everything you see in the UI is fictional sample data, including South Florida b
 - Tailwind CSS
 - ESLint
 - npm
-
-The only extra runtime dependency beyond the Next.js starter is `lucide-react` for navigation icons.
+- Supabase (`@supabase/supabase-js`, `@supabase/ssr`)
 
 ## Architecture
 
 ```
 src/
-  app/           Route pages (Server Components by default)
-  components/    Layout, shared UI, and feature views
-  data/          Centralized mock datasets and lookups
-  types/         Domain types
-  lib/           Formatting, labels, class helpers, policy copy, temporary auth
-  agents/        Future agent packages (empty in Milestone 1)
-  proxy.ts       Request gate for the temporary admin session
+  app/              Route pages (Server Components by default)
+  components/       Layout, shared UI, and feature views
+  data/             Supabase repositories (no raw queries in pages)
+  types/            Domain types and Database types
+  lib/supabase/     Browser and server clients
+  lib/auth/         Temporary admin session
+  lib/cost/         Paid-AI spend control types
+  agents/           Future agent packages (empty)
+  proxy.ts          Request gate for the temporary admin session
+supabase/
+  migrations/       Version-controlled schema and seed SQL
 ```
 
-Pages load mock data on the server where possible. Client Components are used only for filters, dialogs, tabs, mobile navigation, and local-only approval actions.
-
-This layout is intended to swap mock lookups for Supabase queries in Milestone 2 without rewriting the UI.
+Pages load data on the server through repositories. Client Components are used only for filters, dialogs, tabs, mobile navigation, and local-only approval actions.
 
 ## Development
 
@@ -117,6 +118,9 @@ Create `.env.local` in the repository root (never commit this file):
 SITEFORGE_ADMIN_EMAIL=your-admin-email
 SITEFORGE_ADMIN_PASSWORD=your-strong-password
 SITEFORGE_AUTH_SECRET=replace-with-a-long-random-value
+
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
 Generate `SITEFORGE_AUTH_SECRET` with a cryptographically random value, for example:
@@ -148,22 +152,75 @@ These three variables are required to sign in. They are server-only and must not
 
 If they are missing, the app fails closed: dashboard routes redirect to `/login`, and sign-in is rejected. Production must not be left publicly reachable because these values were omitted.
 
-This login is temporary and will be replaced by Supabase authentication in Milestone 2.
+This login is still temporary. Milestone 2 does **not** add Supabase Auth.
+
+### Supabase public credentials
+
+These are browser-safe project credentials. Do not add a secret or service-role key.
+
+| Variable | Purpose |
+| --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable (anon) key used for read-only Data API access |
+
+If they are missing, dashboard pages render empty states instead of crashing.
 
 ### Vercel
 
-Set the same three variables in:
+Set these variables in Vercel Project → Settings → Environment Variables for **Production** and **Preview**:
 
-Vercel Project → Settings → Environment Variables
+- `SITEFORGE_ADMIN_EMAIL`
+- `SITEFORGE_ADMIN_PASSWORD`
+- `SITEFORGE_AUTH_SECRET`
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 
-Enable them for **Production** and **Preview** as appropriate, then redeploy so the deployment picks them up.
+Then redeploy.
 
-Later-milestone placeholders (`NEXT_PUBLIC_SUPABASE_URL`, `XAI_API_KEY`, and similar) are unused in this milestone.
+## Supabase setup
+
+### Apply migrations
+
+Schema and development seed live in:
+
+- `supabase/migrations/20260829100000_initial_schema.sql`
+- `supabase/migrations/20260829120000_seed_development_data.sql`
+
+Apply them to the hosted project with the Supabase CLI (after `supabase login` and `supabase link --project-ref afpjclfcajrcbpcrgzvd`):
+
+```bash
+npx supabase db push
+```
+
+Or paste both SQL files, in order, into the Supabase Dashboard SQL editor.
+
+Local workflow:
+
+```bash
+npx supabase start
+npx supabase db reset
+```
+
+`db reset` applies versioned migrations. `supabase/seed.sql` is empty so seed rows are not inserted twice.
+
+### RLS / security
+
+- RLS is enabled on every application table.
+- `anon` and `authenticated` may **SELECT** only.
+- There are no insert/update/delete policies.
+- The app does not use a service-role key.
+- Approve/Reject and other mutations stay UI-only.
+
+Because SiteForge still uses custom admin cookies instead of Supabase Auth, SELECT is granted to the publishable key so the dashboard can read. That means anyone who has the publishable key can also query these tables through the Data API until Supabase Auth is added. Writes remain blocked.
+
+### Cost control foundation
+
+`src/lib/cost/types.ts` defines estimated, approved-limit, and actual cost fields plus `paid_ai_usage`. No agent may incur unapproved paid cost later. xAI is not called yet.
 
 ## Roadmap
 
-1. **Milestone 1** — Application foundation (this repo)
-2. **Milestone 2** — Supabase database + authentication + persistent application state
+1. **Milestone 1** — Application foundation
+2. **Milestone 2** — Supabase database + persistent application state (this repo; auth is still the temporary admin login)
 3. **Milestone 3** — xAI integration
 4. **Milestone 4** — Scout Agent
 5. **Milestone 5** — Auditor Agent

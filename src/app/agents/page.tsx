@@ -1,24 +1,34 @@
 import type { Metadata } from "next";
+import { listAgentPermissions, listAgents } from "@/data/agents";
 import { Badge } from "@/components/shared/badge";
 import { CardBody } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
-import { mockAgentPermissions, mockAgents } from "@/data";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDateTime } from "@/lib/format";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Agents",
 };
 
-export default function AgentsPage() {
+export default async function AgentsPage() {
+  const [agents, permissions] = await Promise.all([
+    listAgents(),
+    Promise.resolve(listAgentPermissions()),
+  ]);
+
   return (
     <>
       <PageHeader
         title="Agents"
-        description="Five specialized agents are planned. None are implemented or configured in this milestone."
+        description="Five specialized agents are planned. Records are persisted and disabled. None are executing."
       />
+      {agents.length === 0 ? (
+        <p className="text-sm text-muted">No agents seeded yet.</p>
+      ) : null}
       <div className="grid gap-3">
-        {mockAgents.map((agent) => {
-          const permissions = mockAgentPermissions.find(
+        {agents.map((agent) => {
+          const agentPermissions = permissions.find(
             (item) => item.agentId === agent.id,
           );
           return (
@@ -51,7 +61,12 @@ export default function AgentsPage() {
                       label="Cost today"
                       value={formatCurrency(agent.costToday)}
                     />
-                    <Metric label="Last run" value="Never" />
+                    <Metric
+                      label="Last run"
+                      value={
+                        agent.lastRun ? formatDateTime(agent.lastRun) : "Never"
+                      }
+                    />
                   </dl>
                 </div>
               </summary>
@@ -79,34 +94,34 @@ export default function AgentsPage() {
                     </ul>
                   </div>
                 </div>
-                {permissions ? (
+                {agentPermissions ? (
                   <div className="mt-4">
                     <h3 className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                       Planned permissions
                     </h3>
                     <ul className="mt-2 flex flex-wrap gap-2">
                       <Permission
-                        allowed={permissions.canReadPublicData}
+                        allowed={agentPermissions.canReadPublicData}
                         label="Read public data"
                       />
                       <Permission
-                        allowed={permissions.canWriteInternal}
+                        allowed={agentPermissions.canWriteInternal}
                         label="Internal writes"
                       />
                       <Permission
-                        allowed={permissions.canSendEmail}
+                        allowed={agentPermissions.canSendEmail}
                         label="Send email"
                       />
                       <Permission
-                        allowed={permissions.canDeployProduction}
+                        allowed={agentPermissions.canDeployProduction}
                         label="Production deploy"
                       />
                       <Permission
-                        allowed={permissions.canModifyCustomerSite}
+                        allowed={agentPermissions.canModifyCustomerSite}
                         label="Modify customer site"
                       />
                       <Permission
-                        allowed={permissions.canProcessPayments}
+                        allowed={agentPermissions.canProcessPayments}
                         label="Payments"
                       />
                     </ul>

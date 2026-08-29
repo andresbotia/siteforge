@@ -1,10 +1,13 @@
 export type LeadStatus =
   | "discovered"
-  | "auditing"
   | "qualified"
-  | "rejected"
-  | "building"
-  | "ready";
+  | "audited"
+  | "website_built"
+  | "approved"
+  | "contacted"
+  | "interested"
+  | "customer"
+  | "rejected";
 
 export type Industry =
   | "Plumbing"
@@ -41,8 +44,10 @@ export interface WebsiteAudit {
   mobileScore: number;
   seoScore: number;
   performanceScore: number;
+  conversionScore: number | null;
   issues: string[];
   recommendations: string[];
+  summary: string | null;
 }
 
 export type GeneratedWebsiteStatus =
@@ -55,6 +60,7 @@ export type GeneratedWebsiteStatus =
 export interface GeneratedWebsite {
   id: string;
   leadId: string;
+  businessName: string;
   status: GeneratedWebsiteStatus;
   template: string;
   beforeScore: number;
@@ -85,6 +91,7 @@ export interface Agent {
 export type AgentRunStatus =
   | "queued"
   | "running"
+  | "awaiting_approval"
   | "completed"
   | "failed"
   | "cancelled";
@@ -104,9 +111,18 @@ export type ApprovalType =
   | "website_deployment"
   | "external_email"
   | "website_modification"
-  | "payment_action";
+  | "payment_action"
+  | "paid_ai_usage"
+  | "dns_change"
+  | "destructive_infrastructure_action";
 
-export type ApprovalStatus = "pending" | "approved" | "rejected";
+export type ApprovalStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "executed"
+  | "failed";
 
 export type RiskLevel = "low" | "medium" | "high";
 
@@ -114,12 +130,16 @@ export interface Approval {
   id: string;
   leadId?: string;
   customerId?: string;
+  businessName: string;
   agentId: AgentId;
   type: ApprovalType;
   requestedAction: string;
   reason: string;
   status: ApprovalStatus;
   riskLevel: RiskLevel;
+  estimatedCostUsd: number | null;
+  approvedCostLimitUsd: number | null;
+  actualCostUsd: number | null;
   createdAt: string;
   approvedAt?: string;
 }
@@ -136,6 +156,7 @@ export type OutreachStatus =
 export interface Outreach {
   id: string;
   leadId: string;
+  businessName: string;
   recipient: string;
   subject: string;
   body: string;

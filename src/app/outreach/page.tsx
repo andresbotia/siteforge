@@ -1,31 +1,33 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { listOutreach } from "@/data/outreach";
 import { DataTable, Td, Th, THead } from "@/components/shared/data-table";
 import { MetricCard } from "@/components/shared/metric-card";
 import { PageHeader } from "@/components/shared/page-header";
 import { OutreachStatusBadge } from "@/components/shared/status-badge";
-import { mockOutreach } from "@/data";
-import { getLeadById } from "@/data/mock-leads";
 import { formatDate } from "@/lib/format";
+
+export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
   title: "Outreach",
 };
 
-export default function OutreachPage() {
-  const drafts = mockOutreach.filter((item) => item.status === "draft").length;
-  const awaiting = mockOutreach.filter(
+export default async function OutreachPage() {
+  const outreach = await listOutreach();
+  const drafts = outreach.filter((item) => item.status === "draft").length;
+  const awaiting = outreach.filter(
     (item) => item.status === "awaiting_approval",
   ).length;
-  const sent = mockOutreach.filter((item) =>
+  const sent = outreach.filter((item) =>
     ["sent", "replied", "interested", "declined", "unsubscribed"].includes(
       item.status,
     ),
   ).length;
-  const replies = mockOutreach.filter(
+  const replies = outreach.filter(
     (item) => item.status === "replied" || item.status === "interested",
   ).length;
-  const interested = mockOutreach.filter(
+  const interested = outreach.filter(
     (item) => item.status === "interested",
   ).length;
 
@@ -57,41 +59,44 @@ export default function OutreachPage() {
           </tr>
         </THead>
         <tbody>
-          {mockOutreach.map((item) => {
-            const lead = getLeadById(item.leadId);
-            return (
-              <tr key={item.id} className="hover:bg-surface-hover/70">
-                <Td>
-                  {lead ? (
-                    <Link
-                      href={`/leads/${lead.id}`}
-                      className="font-medium hover:text-accent"
-                    >
-                      {lead.businessName}
-                    </Link>
-                  ) : (
-                    item.leadId
-                  )}
-                </Td>
-                <Td className="text-muted">{item.recipient}</Td>
-                <Td>
-                  <OutreachStatusBadge status={item.status} />
-                </Td>
-                <Td className="text-muted whitespace-nowrap">
-                  {item.sentAt ? formatDate(item.sentAt) : "—"}
-                </Td>
-                <Td className="text-muted whitespace-nowrap">
-                  {item.openedAt ? formatDate(item.openedAt) : "—"}
-                </Td>
-                <Td className="text-muted whitespace-nowrap">
-                  {item.clickedAt ? formatDate(item.clickedAt) : "—"}
-                </Td>
-                <Td className="text-muted whitespace-nowrap">
-                  {item.repliedAt ? formatDate(item.repliedAt) : "—"}
-                </Td>
-              </tr>
-            );
-          })}
+          {outreach.length === 0 ? (
+            <tr>
+              <td
+                colSpan={7}
+                className="border-t border-border-subtle px-3 py-6 text-sm text-muted"
+              >
+                No outreach yet.
+              </td>
+            </tr>
+          ) : null}
+          {outreach.map((item) => (
+            <tr key={item.id} className="hover:bg-surface-hover/70">
+              <Td>
+                <Link
+                  href={`/leads/${item.leadId}`}
+                  className="font-medium hover:text-accent"
+                >
+                  {item.businessName}
+                </Link>
+              </Td>
+              <Td className="text-muted">{item.recipient}</Td>
+              <Td>
+                <OutreachStatusBadge status={item.status} />
+              </Td>
+              <Td className="text-muted whitespace-nowrap">
+                {item.sentAt ? formatDate(item.sentAt) : "—"}
+              </Td>
+              <Td className="text-muted whitespace-nowrap">
+                {item.openedAt ? formatDate(item.openedAt) : "—"}
+              </Td>
+              <Td className="text-muted whitespace-nowrap">
+                {item.clickedAt ? formatDate(item.clickedAt) : "—"}
+              </Td>
+              <Td className="text-muted whitespace-nowrap">
+                {item.repliedAt ? formatDate(item.repliedAt) : "—"}
+              </Td>
+            </tr>
+          ))}
         </tbody>
       </DataTable>
     </>
