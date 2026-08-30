@@ -17,7 +17,7 @@ export type DiscoverySource = {
 
 export type DiscoveredBusiness = {
   name: string;
-  categoryId: ScoutCategoryId;
+  categoryId: ScoutCategoryId | "manual_public";
   industry: string;
   city: string;
   state: string;

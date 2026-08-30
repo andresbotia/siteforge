@@ -6,8 +6,10 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/shared/button";
 import { DataTable, Td, Th, THead } from "@/components/shared/data-table";
 import { Field, SelectInput, TextInput } from "@/components/shared/field";
+import { ManualPublicProspectForm } from "@/components/leads/manual-public-prospect-form";
 import { PageHeader } from "@/components/shared/page-header";
 import {
+  LeadSourceBadge,
   LeadStatusBadge,
   QualificationBadge,
 } from "@/components/shared/status-badge";
@@ -147,6 +149,7 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
           >
             <option value="all">All sources</option>
             <option value="scout">Scout</option>
+            <option value="manual_public_prospect">Manual public</option>
             <option value="seed">Seed</option>
           </SelectInput>
         </Field>
@@ -167,6 +170,8 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
         Showing {filtered.length} of {leads.length} leads
       </p>
 
+      <ManualPublicProspectForm />
+
       <DataTable>
         <THead>
           <tr>
@@ -180,6 +185,7 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
             <Th>Opportunity</Th>
             <Th>Qualification</Th>
             <Th>Status</Th>
+            <Th>Source</Th>
             <Th>Discovered</Th>
           </tr>
         </THead>
@@ -187,7 +193,7 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
           {filtered.length === 0 ? (
             <tr>
               <td
-                colSpan={11}
+                colSpan={12}
                 className="border-t border-border-subtle px-3 py-6 text-sm text-muted"
               >
                 No leads yet.
@@ -222,6 +228,9 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
               </Td>
               <Td>
                 <LeadStatusBadge status={lead.status} />
+              </Td>
+              <Td>
+                <LeadSourceBadge source={lead.discoverySource} />
               </Td>
               <Td className="text-muted whitespace-nowrap">
                 {formatDate(lead.createdAt)}

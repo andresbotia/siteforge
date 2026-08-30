@@ -48,6 +48,14 @@ Agents never hold privileged infrastructure credentials, including `XAI_API_KEY`
 
 ## Current milestone
 
+M9.5B preparation adds a narrow **manual public-prospect import** path. An admin can enter a real business using public facts only, SiteForge validates and deduplicates it with existing Scout normalization logic, and the resulting lead is marked as `manual_public_prospect` so it cannot be confused with seed fixtures or automated Scout rows.
+
+- Admin-only mutation through a Server Action and repository write.
+- Website input must be public http/https and passes the existing SSRF-safe URL checks.
+- No bulk discovery, crawling/searching, private customer data, payment/card data, real email, live Stripe, live paid AI, or customer production deployment is included.
+- Auditor and Builder remain deterministic `$0` manual workflows for the imported lead.
+- Credential rotation is deferred by operator decision for this public-data-only preparation, but remains required before sensitive customer/payment data, live provider use, or broader production operation.
+
 Milestone 9 adds **Stripe Checkout + customer conversion**: manual commercial offers, approval-bound mock checkout creation, Stripe webhook ingestion, and idempotent lead-to-customer conversion. The migration has been applied to hosted Supabase and validated with mock Stripe checkout only.
 
 - Offers live at `/offers`, `/offers/[id]`, on lead detail, and from outreach detail.
@@ -114,6 +122,7 @@ Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek,
 | Paid-AI Approve/Reject | Persisted server-side after `requireAdminSession()` |
 | Other approval types Approve/Reject | Persisted status only; side effects still not executed |
 | Scout | Manual $0 catalog discovery + bounded inspection |
+| Manual public prospect import | Admin-only public-data import with normalization, dedupe, SSRF URL validation, and manual provenance |
 | Auditor | Manual $0 deterministic website audit |
 | Builder | Manual $0 deterministic template draft |
 | Sales | Manual $0 deterministic outreach drafting, approval binding, and mock send |
@@ -217,6 +226,7 @@ src/
   types/            Domain types and Database types
   lib/ai/           Money, pricing, estimator, provider, execution
   lib/http/         Shared SSRF-safe fetch used by Scout and Auditor
+  lib/prospects/    Manual public prospect validation and provenance helpers
   lib/scout/        Discovery, SSRF-safe inspection, scoring, dedupe
   lib/auditor/      Deterministic website audit pipeline and scoring
   lib/builder/      Deterministic template drafts and WebsiteSpec

@@ -1,7 +1,13 @@
 import "server-only";
 
-import { readTable } from "@/lib/supabase/server";
+import { recordActivityEvent } from "@/data/activity";
+import { mutateTable, readTable } from "@/lib/supabase/server";
 import { asNumber, asRecord, asStringArray } from "@/lib/json";
+import {
+  MANUAL_PUBLIC_PROSPECT_SOURCE,
+  validateManualPublicProspect,
+  type ManualPublicProspectInput,
+} from "@/lib/prospects/manual-public";
 import type {
   AuditFinding,
   AuditCategory,
@@ -14,6 +20,7 @@ import type {
   WebsiteAudit,
 } from "@/types";
 import type { AuditRow, LeadRow } from "@/types/database";
+import type { ExistingLeadRecord } from "@/lib/scout/types";
 
 const leadStatuses = new Set<LeadStatus>([
   "discovered",
@@ -75,6 +82,20 @@ function mapLead(row: LeadRow, websiteScore = 0): Lead {
     inspectionSummary: Object.keys(asRecord(row.inspection_summary)).length
       ? asRecord(row.inspection_summary)
       : null,
+  };
+}
+
+function asExistingLead(row: LeadRow): ExistingLeadRecord {
+  return {
+    id: row.id,
+    businessName: row.business_name,
+    websiteUrl: row.website_url,
+    phone: row.phone,
+    city: row.city,
+    status: row.status,
+    notes: row.notes,
+    normalizedDomain: row.normalized_domain,
+    normalizedPhone: row.normalized_phone,
   };
 }
 
@@ -173,6 +194,87 @@ export async function listLeads(): Promise<Lead[]> {
   return (leads ?? []).map((lead) =>
     mapLead(lead, scoreByLead.get(lead.id) ?? 0),
   );
+}
+
+export type ManualPublicProspectImportResult =
+  | { ok: true; leadId: string; duplicate: boolean }
+  | { ok: false; error: string };
+
+export async function createManualPublicProspect(
+  input: ManualPublicProspectInput,
+): Promise<ManualPublicProspectImportResult> {
+  const existingRows = await readTable<LeadRow[]>((client) =>
+    client.from("leads").select("*"),
+  );
+  const validation = await validateManualPublicProspect(
+    input,
+    (existingRows ?? []).map(asExistingLead),
+  );
+  if (!validation.ok) return validation;
+
+  const { business, duplicateId, sourceNote } = validation.draft;
+  if (duplicateId) {
+    return { ok: true, leadId: duplicateId, duplicate: true };
+  }
+
+  const row = await mutateTable<LeadRow | null>((client) =>
+    client
+      .from("leads")
+      .insert({
+        business_name: business.name,
+        industry: business.industry,
+        address: business.address ?? null,
+        city: business.city,
+        state: business.state,
+        phone: business.phone ?? null,
+        website_url: business.websiteUrl ?? null,
+        google_rating: null,
+        review_count: 0,
+        status: "discovered",
+        lead_score: null,
+        source: MANUAL_PUBLIC_PROSPECT_SOURCE,
+        notes: sourceNote,
+        normalized_domain: business.normalizedDomain,
+        normalized_phone: business.normalizedPhone,
+        qualification_tier: "review",
+        business_strength_score: null,
+        website_opportunity_score: null,
+        overall_qualification_score: null,
+        qualification_reasons: [
+          "Manual public prospect imported for M9.5B validation",
+          "No outreach, payment, paid AI, or production deployment executed",
+        ],
+        inspection_summary: {
+          source: MANUAL_PUBLIC_PROSPECT_SOURCE,
+          public_data_only: true,
+          website_inspection: "pending_auditor",
+        },
+        discovered_at: new Date().toISOString(),
+        last_scout_run_id: null,
+      })
+      .select("*")
+      .maybeSingle(),
+  );
+
+  if (!row) {
+    return { ok: false, error: "Could not import public prospect." };
+  }
+
+  await recordActivityEvent({
+    eventType: "manual_public_prospect_imported",
+    title: "Manual public prospect imported",
+    description:
+      "M9.5B public-data-only prospect created. No outreach, payment, paid AI, or production deployment ran.",
+    actorType: "admin",
+    leadId: row.id,
+    metadata: {
+      source: MANUAL_PUBLIC_PROSPECT_SOURCE,
+      normalized_domain: business.normalizedDomain ?? "",
+      public_data_only: true,
+    },
+  });
+
+  return { ok: true, leadId: row.id, duplicate: false };
 }
 
 export async function getLeadById(id: string): Promise<Lead | null> {

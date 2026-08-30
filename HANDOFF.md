@@ -1,6 +1,6 @@
 # SiteForge Handoff
 
-For the next session. Milestones 1 through 9 are locked at `0d582148807a496f46318b2183aa6ff481b9602b`. M9.5A Roadmap Persistence + Production/Security Readiness is COMPLETE / VALIDATED after the launch-readiness pass. M9.5B is NOT STARTED and is BLOCKED on human credential rotation and production login verification. It is NOT M10.
+For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5A Roadmap Persistence + Production/Security Readiness is COMPLETE / VALIDATED after the launch-readiness pass. M9.5B real-prospect preparation is implemented and validated as a public-data-only manual import path. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live email/payment use, or broader production operation. This is NOT M10.
 
 ## M9.5 Roadmap
 
@@ -43,13 +43,34 @@ M9.5A:
 - Tests/build clean
 - No real external side effects
 
-M9.5B - NOT STARTED / BLOCKED ON HUMAN CREDENTIAL ROTATION AND PRODUCTION LOGIN CHECK:
+M9.5B - PUBLIC-DATA-ONLY PREPARATION:
 
 - First real prospect can safely enter system
 - Real public website can be inspected
 - Auditor/Builder work on real prospect
 - Human reviews generated result
 - No outreach yet
+
+Allowed in M9.5B preparation:
+
+- Admin supplies one real public business manually.
+- SiteForge validates, normalizes, and deduplicates the public business using existing Scout normalization/dedupe logic.
+- Public website URLs are limited to http/https and pass the existing SSRF-safe HTTP boundary.
+- The lead is marked with manual public prospect provenance and remains distinguishable from Scout and seed/fixture rows.
+- Auditor and Builder may run deterministic `$0` workflows after manual human review.
+- No real prospect has been created yet.
+
+Still blocked during M9.5B preparation:
+
+- Bulk Scout discovery or acquisition automation
+- Private customer data
+- Payment/card data
+- Real email or Resend sends
+- Live Stripe checkout or charges
+- Live paid AI calls
+- Customer production deployments, domains, or DNS
+
+Manual public prospect import is the first real acquisition path for M9.5B. Broad Scout acquisition automation remains M12 backlog. M9.5C is not started. M10 is not started.
 
 M9.5C:
 
@@ -71,9 +92,9 @@ M9.5D:
 - Opt-outs respected
 - Campaign results measurable
 
-## Credential Rotation Before Real Data
+## Credential Rotation Before Sensitive Data
 
-Rotate these before entering real prospect/customer data. Do not store rotated values in git or share them with agents.
+Rotation is deferred by operator decision for the narrow M9.5B public-data-only path. Rotate these before entering sensitive customer data, handling payment/card data, enabling live email/payment providers, or expanding production use. Do not store rotated values in git or share them with agents.
 
 - Supabase secret/server key: prior local/screenshot exposure risk. Update local environment, Vercel environment, and Supabase dashboard-created key as applicable. Re-test dashboard reads, approvals, webhook processing, and RLS-denied anon access.
 - Temporary SiteForge admin password: prior local/screenshot exposure risk. Update local and Vercel environment. Re-test valid login, invalid login, logout, and protected-route redirect.
@@ -97,6 +118,8 @@ Temporary single-admin auth remains future hardening. Do not replace it with Sup
 ## Real-Data Readiness Note
 
 M9 smoke conversion used mock Stripe IDs and must not be treated as real payment or revenue. Customer views now classify payment provenance as mock/live/unknown and exclude mock or unknown subscription amounts from monthly revenue display.
+
+M9.5B manual prospect import is limited to public business facts supplied by the admin. It does not discover businesses in bulk, send outreach, process payments, call paid AI, or deploy customer production websites.
 
 ## Project
 
@@ -312,7 +335,8 @@ Validation:
 - No payments
 - No domain/DNS automation
 - Supabase public application-table access remains revoked
+- Credential rotation is deferred for public-data-only validation, but remains mandatory before sensitive customer/payment data or broader production use
 
 ## Next Milestone
 
-Milestone 9 is not started. Do not start it unless explicitly asked after M8 is reviewed, remotely migrated, smoke-tested, and locked.
+Continue M9.5B only inside the manual public-prospect boundary. Do not start M10.

@@ -16,11 +16,13 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ScoreBar, ScoreRing } from "@/components/shared/score-bar";
 import {
   CommercialOfferStatusBadge,
+  LeadSourceBadge,
   LeadStatusBadge,
   QualificationBadge,
 } from "@/components/shared/status-badge";
 import { formatDateTime, formatNumber } from "@/lib/format";
 import { asRecord } from "@/lib/json";
+import { isManualPublicProspectSource } from "@/lib/prospects/manual-public";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +52,9 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
   ]);
   const canAudit = isLeadEligibleForAudit(lead);
   const canBuild = isLeadEligibleForBuild(lead);
+  const isManualPublicProspect = isManualPublicProspectSource(
+    lead.discoverySource,
+  );
 
   return (
     <>
@@ -66,6 +71,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
 
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <LeadStatusBadge status={lead.status} />
+        <LeadSourceBadge source={lead.discoverySource} />
         {lead.qualificationTier ? (
           <QualificationBadge tier={lead.qualificationTier} />
         ) : null}
@@ -73,6 +79,18 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           Back to leads
         </Link>
       </div>
+
+      {isManualPublicProspect ? (
+        <Card className="mb-4">
+          <CardBody>
+            <p className="text-sm text-muted">
+              M9.5B public-data-only prospect. Auditor and Builder may use the
+              existing deterministic public website flow, but no outreach,
+              payment, paid AI, or customer production deployment has been run.
+            </p>
+          </CardBody>
+        </Card>
+      ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
         <Card>

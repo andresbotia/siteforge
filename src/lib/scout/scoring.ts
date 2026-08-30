@@ -148,7 +148,8 @@ export function scoreWebsiteOpportunity(
 ): { score: number; reasons: string[] } {
   const reasons: string[] = [];
   let score = 0;
-  const restaurant = isRestaurantCategory(business.categoryId);
+  const restaurant =
+    business.categoryId !== "manual_public" && isRestaurantCategory(business.categoryId);
   const page = inspection.homepage;
 
   if (!business.websiteUrl) {

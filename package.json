@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test src/lib/auth/*.test.ts src/lib/ai/cost-controls.test.ts src/lib/scout/*.test.ts src/lib/auditor/*.test.ts src/lib/builder/*.test.ts src/lib/previews/*.test.ts src/lib/sales/*.test.ts src/lib/payments/*.test.ts"
+    "test": "tsx --test src/lib/auth/*.test.ts src/lib/ai/cost-controls.test.ts src/lib/prospects/*.test.ts src/lib/scout/*.test.ts src/lib/auditor/*.test.ts src/lib/builder/*.test.ts src/lib/previews/*.test.ts src/lib/sales/*.test.ts src/lib/payments/*.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

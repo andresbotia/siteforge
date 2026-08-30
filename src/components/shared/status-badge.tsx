@@ -1,4 +1,5 @@
 import { Badge } from "@/components/shared/badge";
+import { MANUAL_PUBLIC_PROSPECT_SOURCE } from "@/lib/prospects/constants";
 import {
   approvalTypeLabel,
   commercialOfferStatusLabel,
@@ -115,6 +116,17 @@ const qualificationTone = {
 
 export function LeadStatusBadge({ status }: { status: LeadStatus }) {
   return <Badge tone={leadTone[status]}>{leadStatusLabel[status]}</Badge>;
+}
+
+export function LeadSourceBadge({ source }: { source: string | null }) {
+  const normalized = source ?? "seed";
+  if (normalized === MANUAL_PUBLIC_PROSPECT_SOURCE) {
+    return <Badge tone="info">Manual public</Badge>;
+  }
+  if (normalized === "scout") {
+    return <Badge tone="accent">Scout</Badge>;
+  }
+  return <Badge tone="neutral">Seed / fixture</Badge>;
 }
 
 export function QualificationBadge({ tier }: { tier: QualificationTier }) {
