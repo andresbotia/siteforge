@@ -1,6 +1,6 @@
 # SiteForge Handoff
 
-For the next session. Milestone 7 Preview Deployments + Tracking is LOCAL/CHECKPOINTED but NOT COMPLETE. The implementation exists in code, but hosted Supabase migration approval, migration application, hosted smoke testing, and production validation remain pending.
+For the next session. Milestone 7 Preview Deployments + Tracking is COMPLETE and HOSTED-VALIDATED. The schema migration is applied remotely, approval gates and tokenized public previews were validated end-to-end against the Atlantic Drain artifact, tracking and revocation were verified in hosted Supabase, and full test/lint/build regressions passed.
 
 ## Project
 
@@ -26,51 +26,44 @@ Branch: `main`
 | 4 Scout | `7eeef31386d07af0d88493b1eb7b7543c3cd7b8b` | Manual $0 lead discovery |
 | 5 Auditor | `68ad58761ca00863970c9cd650e4f66a431532df` | Manual $0 deterministic website audit |
 | 6 Builder | `cf7f1c59f4924202cdfab0b55720299521e95557` | Manual $0 deterministic website drafts |
-| 7 Preview deployments | checkpoint commit | Local code only; pending hosted migration and smoke test |
+| 7 Preview deployments | `35957d501faf6f6d4272d93b4be75298c176ae30` | Hosted migration applied, smoke-tested, and validated |
 
 ## Milestone 7 Summary
 
-- Adds migration `20260830000000_preview_deployments_tracking.sql`
-- New tables: `preview_deployments`, `preview_events`
-- RLS enabled and `anon` / `authenticated` / `public` grants revoked
+- Adds migration `20260830000000_preview_deployments_tracking.sql` (applied remotely)
+- Tables: `preview_deployments`, `preview_events` with RLS enabled and `anon`/`authenticated`/`public` access revoked
 - Public preview publishing requires explicit `website_deployment` approval
 - Approval execution mints a one-time visible `sfp_` token; only SHA-256 hash and token hint are stored
-- Public route `/p/[token]` renders trusted Builder specs without admin chrome
-- Invalid, expired, revoked, or missing-token previews return 404
+- Public route `/p/[token]` renders trusted Builder specs without admin chrome (`robots: noindex, nofollow`)
+- Invalid, expired, revoked, or missing-token previews return 404 (safe fail-closed)
 - `/api/preview-events` accepts bounded beacon events and returns 204 without leaking token validity
 - View and CTA events classify likely humans, bots, browser, and device
-- Visitor keys are preview-scoped and daily rotating; raw IP is not stored
+- Visitor keys are preview-scoped and daily rotating; raw IP is never persisted
 - Admin website detail shows preview status, token hint, analytics, request approval, and revoke controls
 - Internal preview `/websites/[id]/preview` remains authenticated
 - TypeScript passed: `npx tsc --noEmit`
 - Lint passed: `npm run lint`
-- Tests passed: 134
+- Tests passed: 134/134 (`npm test`)
 - Production build passed: `npm run build`
-- No production deployment, email, DNS/domain, payments, or paid AI/API calls were added
-- Hosted Supabase migration has not been applied yet
-- Hosted M7 smoke test has not been performed
-- M7 production behavior has not been validated
-- M7 must not be considered complete until the hosted migration is approved, applied, and tested
+- No production deployment, email, DNS/domain, payments, or paid AI/API calls were added ($0.00 cost)
 
-Next resume steps:
+### Milestone 7 Hosted Smoke Test Validation
 
-1. Inspect `git status` and `git log`
-2. Review the M7 checkpoint
-3. Run Supabase migration dry-run
-4. Obtain human approval before applying the migration
-5. Apply migration only after approval
-6. Validate hosted schema and RLS
-7. Perform one controlled M7 preview smoke test
-8. Validate tracking, revocation, and security
-9. Then lock/deploy M7
-10. Do not begin M8 until M7 is complete
-
-After approval, apply the migration with:
-
-```bash
-npx supabase db push --dry-run
-npx supabase db push --yes
-```
+- Lead: `ee0aa3e0-78f9-478a-bdba-f5db6e7db1d3` / Atlantic Drain Plumbing
+- Website: `29ca4d70-a474-44d0-8470-347adba511bc`
+- Source audit: `d1c6b82e-2d85-43b1-952c-ccd32affc4a9`
+- Builder run: `f831dfde-9312-422c-be3d-a2f4ad15f34c`
+- Approval request: `91cb4e0c-8257-487f-9ebd-6182b047faa7` (`website_deployment`, status `pending` -> `executed`)
+- Preview deployment: `d20631cc-3963-4625-b151-ca2fb673542f` (status `active` -> `revoked`)
+- Token Hint: `KY0rJhyc` (SHA-256 hash stored, raw token not persisted)
+- Public route resolution: Active token resolved HTTP 200 with structured `WebsiteSpec`
+- Tracking validation: 2 views (human-likely, desktop, chrome) + 1 CTA click (`phone_cta_clicked`). Coarse geo parsing was validated using synthetic request headers. No paid geo service or browser geolocation was used. Real deployed requests may provide platform-derived coarse geo or null values.
+- Daily pseudonym: `visitor_key` matched across repeat visits without storing raw IP
+- Aggregated analytics verified: 3 total events, 2 human views, 1 CTA click, 1 unique visitor
+- Revocation verified: Deployment status `revoked`, `revoked_at` set, public token immediately returns 404 (fails closed)
+- Historical events preserved: 3 `preview_events` remain intact post-revocation
+- Production isolation: `generated_websites.production_url` remained `null` throughout
+- Final smoke preview state: **REVOKED**
 
 M8 must connect outreach emails to unique tracked preview links so SiteForge can measure the funnel:
 
