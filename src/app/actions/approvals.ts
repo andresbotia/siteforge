@@ -59,6 +59,16 @@ export async function approveApprovalAction(
     return result;
   }
 
+  if (type === "external_email" && payloadAction === "send_outreach_email") {
+    const { approveOutreachSendApproval } = await import("@/data/outreach");
+    const result = await approveOutreachSendApproval(id);
+    if (result.ok) {
+      revalidatePath("/approvals");
+      revalidatePath("/outreach");
+    }
+    return result;
+  }
+
   const result = await approveGenericApproval(id);
   if (result.ok) revalidatePath("/approvals");
   return result;

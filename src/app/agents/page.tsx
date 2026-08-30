@@ -57,7 +57,8 @@ export default async function AgentsPage() {
                       <Badge>
                         {agent.id === "scout" ||
                         agent.id === "auditor" ||
-                        agent.id === "builder"
+                        agent.id === "builder" ||
+                        agent.id === "sales"
                           ? "Manual"
                           : "Disabled"}
                       </Badge>
@@ -85,6 +86,14 @@ export default async function AgentsPage() {
                           {" "}
                           <Link href="/agents/builder" className="text-accent hover:underline">
                             Open Builder
+                          </Link>
+                        </>
+                      ) : null}
+                      {agent.id === "sales" ? (
+                        <>
+                          {" "}
+                          <Link href="/agents/sales" className="text-accent hover:underline">
+                            Open Sales
                           </Link>
                         </>
                       ) : null}

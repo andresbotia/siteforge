@@ -45,7 +45,9 @@ const websiteTone = {
 const outreachTone = {
   draft: "neutral",
   awaiting_approval: "warning",
+  approved: "accent",
   sent: "info",
+  failed: "danger",
   replied: "accent",
   interested: "success",
   declined: "danger",

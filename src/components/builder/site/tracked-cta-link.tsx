@@ -6,18 +6,21 @@ export function TrackedCtaLink({
   href,
   label,
   className,
-  token,
+  previewToken,
+  outreachToken,
   eventType,
 }: {
   href: string;
   label: string;
   className: string;
-  token: string;
+  previewToken?: string;
+  outreachToken?: string;
   eventType: PreviewEventType;
 }) {
   function trackClick() {
     const payload = JSON.stringify({
-      token,
+      token: previewToken,
+      outreachToken,
       eventType,
       path: window.location.pathname + window.location.search,
     });

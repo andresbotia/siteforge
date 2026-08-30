@@ -54,7 +54,7 @@ Examples of privileged / approval-gated actions:
 
 ## Milestone boundary
 
-Milestone 6 adds manual Builder website drafts. Milestone 5 Auditor, Milestone 4 Scout, and Milestone 3 paid-AI gates remain mandatory. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`.
+Milestone 8 adds manual Sales outreach drafts, approval binding, mock email sending, and tracked outreach preview attribution. Milestone 7 Preview, Milestone 6 Builder, Milestone 5 Auditor, Milestone 4 Scout, and Milestone 3 paid-AI gates remain mandatory. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`.
 
 - Database migrations must be version-controlled under `supabase/migrations`.
 - Never expose privileged credentials client-side. Never put `SUPABASE_SECRET_KEY` or `XAI_API_KEY` in `NEXT_PUBLIC_*` or Client Components.
@@ -85,11 +85,18 @@ Milestone 6 adds manual Builder website drafts. Milestone 5 Auditor, Milestone 4
 - Builder scoring/spec composition is deterministic. Do not let an LLM author official specs in this milestone.
 - Builder must not call `executeApprovedAiRun` or `createLiveXaiProvider` directly.
 - Basic Builder runs do not require paid AI and must remain $0.
-- Do not implement Sales or Manager execution.
-- Do not send email, process payments, or deploy generated websites.
-- Do not connect Stripe, Resend, or Vercel APIs.
+- Sales creates deterministic outreach drafts only, with backend approval binding before send execution.
+- Sales must not call `executeApprovedAiRun` or `createLiveXaiProvider` directly.
+- Basic Sales runs do not require paid AI and must remain $0.
+- Sales must not invent recipient emails, contact names, testimonials, pricing, or unsupported claims.
+- Outreach attribution must use separate opaque tokens from M7 preview tokens. Store only hash plus hint; never reconstruct M7 preview URLs from token hints.
+- Send approval must bind exact recipient, subject, body, preview deployment, content version, and attribution token hash. Edits must invalidate approval.
+- Email execution is mock-only unless a later milestone explicitly adds a real provider. Do not call Resend or send real email.
+- Do not implement Manager execution.
+- Do not process payments or deploy generated websites.
+- Do not connect Stripe, Resend, or production Vercel APIs.
 - Do not add background workers or scheduled jobs unless a later milestone explicitly asks for them.
-- Do not start Milestone 7 unless asked.
+- Do not start Milestone 9 unless asked.
 
 ## Architecture notes
 
@@ -101,6 +108,8 @@ Milestone 6 adds manual Builder website drafts. Milestone 5 Auditor, Milestone 4
 - Scout lives in `src/lib/scout` and `src/data/scout.ts`. Manual UI: `/agents/scout`.
 - Auditor lives in `src/lib/auditor` and `src/data/auditor.ts`. Manual UI: `/agents/auditor`. Audit detail: `/audits/[id]`.
 - Builder lives in `src/lib/builder` and `src/data/builder.ts`. Manual UI: `/agents/builder`. Internal draft: `/websites/[id]`. Preview: `/websites/[id]/preview`.
+- Sales lives in `src/lib/sales` and `src/data/sales.ts`. Manual UI: `/agents/sales`. Outreach review UI: `/outreach`.
+- Mock email provider code lives in `src/lib/email`.
 - Server Supabase utilities live in `src/lib/supabase` and are `server-only`.
 - Shared UI lives in `src/components/shared`.
 - Agent placeholders live in `src/agents`.

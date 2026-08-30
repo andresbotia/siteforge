@@ -13,7 +13,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   if (
     pathname === "/login" ||
     /^\/websites\/[^/]+\/preview$/.test(pathname) ||
-    /^\/p\/[^/]+$/.test(pathname)
+    /^\/p\/[^/]+$/.test(pathname) ||
+    /^\/o\/[^/]+$/.test(pathname)
   ) {
     return <div className="min-h-full bg-background">{children}</div>;
   }

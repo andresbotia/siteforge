@@ -508,6 +508,7 @@ export async function recordPreviewEvent(input: {
     preview_deployment_id: deployment.id,
     generated_website_id: deployment.generated_website_id,
     lead_id: deployment.lead_id,
+    outreach_id: deployment.outreach_id ?? null,
     event_type: input.eventType,
     visitor_key: visitorKey,
     bot_classification: botClassification,

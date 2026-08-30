@@ -1,6 +1,6 @@
 # SiteForge Handoff
 
-For the next session. Milestone 7 Preview Deployments + Tracking is COMPLETE and HOSTED-VALIDATED. The schema migration is applied remotely, approval gates and tokenized public previews were validated end-to-end against the Atlantic Drain artifact, tracking and revocation were verified in hosted Supabase, and full test/lint/build regressions passed.
+For the next session. Milestone 8 Sales Agent + email approval is implemented, migrated to hosted Supabase, and hosted-smoke-validated. It is NOT committed, pushed, deployed, or advanced to Milestone 9.
 
 ## Project
 
@@ -26,7 +26,58 @@ Branch: `main`
 | 4 Scout | `7eeef31386d07af0d88493b1eb7b7543c3cd7b8b` | Manual $0 lead discovery |
 | 5 Auditor | `68ad58761ca00863970c9cd650e4f66a431532df` | Manual $0 deterministic website audit |
 | 6 Builder | `cf7f1c59f4924202cdfab0b55720299521e95557` | Manual $0 deterministic website drafts |
-| 7 Preview deployments | `35957d501faf6f6d4272d93b4be75298c176ae30` | Hosted migration applied, smoke-tested, and validated |
+| 7 Preview deployments | `7c0aaee36a72568db43348b7f0f734e0ce40c918` | Hosted migration applied, smoke-tested, and validated |
+| 8 Sales Agent + email approval | local only | Hosted migration applied and smoke-validated; pending commit |
+
+## Milestone 8 Summary
+
+- Adds migration `20260830100000_sales_outreach_approvals.sql` (applied remotely)
+- Adds manual Sales Agent UI at `/agents/sales`, outreach list/detail UI at `/outreach`, and public outreach preview route `/o/[token]`
+- Sales drafting is deterministic and $0. It does not call paid AI and does not invent contact names, emails, unsupported claims, testimonials, pricing, or outcomes.
+- Missing recipient email can produce a draft, but backend approval/send paths block until a valid recipient is present.
+- Outreach links use separate `sfo_` attribution tokens. The database stores only SHA-256 hash plus short hint; raw M7 preview tokens and M7 token hints are never reused to build outreach URLs.
+- `/o/[token]` resolves by hashing the token, verifies active preview state and trusted `WebsiteSpec`, hides admin chrome, sets `robots: noindex,nofollow`, and fails closed.
+- Preview events can be attributed to `outreach_id`; raw IP is not stored and daily visitor keys remain pseudonymous.
+- Send approvals bind the exact recipient, subject, body, preview deployment, content version, and attribution token hash. Editing recipient/subject/body invalidates pending or approved send approval.
+- Email provider abstraction is present, but only the deterministic mock provider is wired. Mock sends create fake `msg_mock_*` IDs and make no external network calls.
+- No Resend integration, real email delivery, production deployment, DNS/domain change, payments, or paid AI call is included in this local M8 implementation.
+- Hosted smoke exposed and fixed an attribution timestamp bug: token derivation now canonicalizes `attribution_token_created_at`, so Supabase `timestamptz` serialization cannot break mock send/token reconstruction.
+
+Hosted smoke validation:
+
+- Lead: `ee0aa3e0-78f9-478a-bdba-f5db6e7db1d3` / Atlantic Drain Plumbing
+- Generated website: `29ca4d70-a474-44d0-8470-347adba511bc`
+- Source audit: `d1c6b82e-2d85-43b1-952c-ccd32affc4a9`
+- Preview approval: `b982b2b3-f7b2-45a2-a1f3-2e9abb5a5df1` (`website_deployment`, executed)
+- Smoke preview deployment: `0eec95fb-c736-4930-bd75-90e88ad18989` (created active, validated, then revoked)
+- Sales run: `bbf4951b-384b-4915-b998-a9ce1c8642a2`
+- Outreach: `9f867b34-d43b-47ff-aa49-c35240ee5b6e`
+- Initial send approval invalidated after edit: `6d9d6fe6-b58f-44d7-94af-5e1d2c817adb`
+- Final send approval: `0b2ff684-6ffe-465a-afd7-f2cf2a5245c8`
+- Mock provider message ID: `msg_mock_8eb9e069a80e0efc`
+- Active M7 preview required before Sales drafting.
+- Separate opaque `sfo_` outreach attribution verified; only hash plus hint persisted.
+- Recipient email was absent from the public URL and public page.
+- `/o/[token]` returned 200 while active, had no admin chrome, used the trusted Builder renderer, and included `noindex,nofollow`.
+- Invalid token and revoked token returned 404.
+- Outreach-attributed preview tracking validated: human view, repeated human views sharing a visitor key, bot-likely view, and `phone_cta_clicked`.
+- Coarse geo was null in local smoke; no browser GPS or paid geo service was used.
+- Raw IP was not persisted.
+- Approval binding to exact recipient, subject, body, preview deployment, content version, and attribution token hash was validated.
+- Editing body invalidated the initial approval; fresh approval was required before mock send.
+- Mock send recorded `send_attempted` and `sent`, blocked duplicate send, and did not create delivered/opened/replied events.
+- Smoke preview was revoked afterward. Historical outreach and preview events remain. `generated_websites.production_url` remains `null`.
+- No real email was sent. No Resend call was made. No paid AI/API call was made.
+
+Validation passed:
+
+- `npx tsc --noEmit`
+- `npm test` (154/154)
+- `npm run lint`
+- `npm run build`
+- `git diff --check`
+
+Stop point: review the local M8 diff, then commit/push only after human approval. Do not start Milestone 9 until M8 is explicitly locked.
 
 ## Milestone 7 Summary
 
@@ -118,12 +169,13 @@ Validation:
 - Scout deterministic path remains $0
 - Auditor deterministic path remains $0
 - Builder deterministic path remains $0
+- Sales deterministic draft path remains $0
 - Public prospect previews exist only after human approval and only as tokenized previews
-- No email
+- Outreach send execution is mock-only; no real email is sent
 - No payments
 - No domain/DNS automation
 - Supabase public application-table access remains revoked
 
 ## Next Milestone
 
-Milestone 8: Sales Agent + email approval. Do not start it unless explicitly asked.
+Milestone 9 is not started. Do not start it unless explicitly asked after M8 is reviewed, remotely migrated, smoke-tested, and locked.

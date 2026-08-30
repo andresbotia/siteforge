@@ -273,7 +273,9 @@ export interface Approval {
 export type OutreachStatus =
   | "draft"
   | "awaiting_approval"
+  | "approved"
   | "sent"
+  | "failed"
   | "replied"
   | "interested"
   | "declined"
@@ -282,15 +284,34 @@ export type OutreachStatus =
 export interface Outreach {
   id: string;
   leadId: string;
+  generatedWebsiteId: string | null;
+  previewDeploymentId: string | null;
+  salesRunId: string | null;
+  approvalId: string | null;
+  agentRunId: string | null;
   businessName: string;
   recipient: string;
+  senderName: string | null;
+  senderEmail: string | null;
   subject: string;
   body: string;
+  contentHash: string | null;
+  contentVersion: string | null;
   status: OutreachStatus;
+  provider: string;
+  providerMessageId: string | null;
+  previewUrl: string | null;
+  tokenHint?: string | null;
+  attributionTokenHint?: string | null;
+  campaignId?: string | null;
+  approvedAt: string | null;
   sentAt: string | null;
   openedAt: string | null;
   clickedAt: string | null;
   repliedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  metadata?: Record<string, unknown>;
 }
 
 export type CustomerPlan = "website_only" | "managed";

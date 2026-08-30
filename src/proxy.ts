@@ -7,7 +7,11 @@ import {
   SESSION_COOKIE_NAME,
 } from "@/lib/auth/config";
 import { timingSafeEqual, verifySessionToken } from "@/lib/auth/session";
-import { isPreviewEventPath, isPublicPreviewPath } from "@/lib/previews/routes";
+import {
+  isPreviewEventPath,
+  isPublicOutreachPreviewPath,
+  isPublicPreviewPath,
+} from "@/lib/previews/routes";
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -26,7 +30,11 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next();
   }
 
-  if (isPublicPreviewPath(pathname) || isPreviewEventPath(pathname)) {
+  if (
+    isPublicPreviewPath(pathname) ||
+    isPublicOutreachPreviewPath(pathname) ||
+    isPreviewEventPath(pathname)
+  ) {
     return NextResponse.next();
   }
 

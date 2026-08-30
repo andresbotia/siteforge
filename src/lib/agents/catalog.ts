@@ -91,18 +91,21 @@ export const agentCatalog: Record<
   sales: {
     purpose: "Prepare personalized outreach for approved prospects.",
     description:
-      "Sales will eventually read lead, audit, and website records and draft personalized outreach. Sending external email will require approval. It is not implemented in this milestone.",
+      "Sales drafts $0 deterministic email outreach based on audit findings, Builder redesigns, and approved M7 previews. Sending external email requires explicit human approval.",
     capabilities: [
       "Read lead information",
       "Read audits",
       "Read generated website details",
+      "Read active approved previews",
       "Draft personalized outreach",
+      "Request send approval",
     ],
     restrictions: [
-      "External email requires approval",
+      "External email requires human approval",
       "Cannot change pricing",
       "Cannot deploy websites",
       "Cannot charge customers",
+      "Cannot call xAI directly",
     ],
     permissions: {
       canReadPublicData: true,

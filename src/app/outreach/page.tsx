@@ -19,6 +19,7 @@ export default async function OutreachPage() {
   const awaiting = outreach.filter(
     (item) => item.status === "awaiting_approval",
   ).length;
+  const approved = outreach.filter((item) => item.status === "approved").length;
   const sent = outreach.filter((item) =>
     ["sent", "replied", "interested", "declined", "unsubscribed"].includes(
       item.status,
@@ -27,23 +28,20 @@ export default async function OutreachPage() {
   const replies = outreach.filter(
     (item) => item.status === "replied" || item.status === "interested",
   ).length;
-  const interested = outreach.filter(
-    (item) => item.status === "interested",
-  ).length;
 
   return (
     <>
       <PageHeader
         title="Outreach"
-        description="Fictional recipients only. Sending is not implemented and no mailbox is connected."
+        description="Deterministic prospect email outreach with evidence-based drafting, approval gates, and tracked preview attribution."
       />
 
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <MetricCard label="Drafts" value={String(drafts)} />
         <MetricCard label="Awaiting Approval" value={String(awaiting)} />
+        <MetricCard label="Approved to Send" value={String(approved)} />
         <MetricCard label="Sent" value={String(sent)} />
         <MetricCard label="Replies" value={String(replies)} />
-        <MetricCard label="Interested" value={String(interested)} />
       </div>
 
       <DataTable>
@@ -52,20 +50,19 @@ export default async function OutreachPage() {
             <Th>Business</Th>
             <Th>Recipient</Th>
             <Th>Status</Th>
+            <Th>Subject</Th>
             <Th>Sent</Th>
-            <Th>Opened</Th>
-            <Th>Clicked</Th>
-            <Th>Replied</Th>
+            <Th>Action</Th>
           </tr>
         </THead>
         <tbody>
           {outreach.length === 0 ? (
             <tr>
               <td
-                colSpan={7}
+                colSpan={6}
                 className="border-t border-border-subtle px-3 py-6 text-sm text-muted"
               >
-                No outreach yet.
+                No outreach drafts yet. Run the Sales Agent to generate drafts.
               </td>
             </tr>
           ) : null}
@@ -73,27 +70,27 @@ export default async function OutreachPage() {
             <tr key={item.id} className="hover:bg-surface-hover/70">
               <Td>
                 <Link
-                  href={`/leads/${item.leadId}`}
+                  href={`/outreach/${item.id}`}
                   className="font-medium hover:text-accent"
                 >
                   {item.businessName}
                 </Link>
               </Td>
-              <Td className="text-muted">{item.recipient}</Td>
+              <Td className="text-muted">{item.recipient || "N/A"}</Td>
               <Td>
                 <OutreachStatusBadge status={item.status} />
               </Td>
+              <Td className="text-muted max-w-xs truncate">{item.subject || "N/A"}</Td>
               <Td className="text-muted whitespace-nowrap">
-                {item.sentAt ? formatDate(item.sentAt) : "—"}
+                {item.sentAt ? formatDate(item.sentAt) : "N/A"}
               </Td>
-              <Td className="text-muted whitespace-nowrap">
-                {item.openedAt ? formatDate(item.openedAt) : "—"}
-              </Td>
-              <Td className="text-muted whitespace-nowrap">
-                {item.clickedAt ? formatDate(item.clickedAt) : "—"}
-              </Td>
-              <Td className="text-muted whitespace-nowrap">
-                {item.repliedAt ? formatDate(item.repliedAt) : "—"}
+              <Td>
+                <Link
+                  href={`/outreach/${item.id}`}
+                  className="text-xs text-accent hover:underline"
+                >
+                  View Details
+                </Link>
               </Td>
             </tr>
           ))}

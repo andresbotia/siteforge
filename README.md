@@ -36,7 +36,7 @@ Discover → Audit → Build → Approve → Outreach → Sell → Deploy → Ma
 | **Sales** | Creates personalized outreach. |
 | **Manager** | Handles requests for paying customers. |
 
-Scout, Auditor, and Builder can run **manually**. Sales and Manager stay disabled. Placeholder directories live in `src/agents`.
+Scout, Auditor, Builder, and Sales can run **manually**. Manager stays disabled. Placeholder directories live in `src/agents`.
 
 ## Human approval philosophy
 
@@ -48,7 +48,19 @@ Agents never hold privileged infrastructure credentials, including `XAI_API_KEY`
 
 ## Current milestone
 
-Milestone 7 adds **Preview Deployments + Tracking**: a manual, approval-gated way to share generated Builder drafts with prospects.
+Milestone 8 adds **Sales Agent + email approval** locally: a manual, deterministic outreach workflow that drafts prospect email, requires human approval, uses a mock email provider, and attributes public preview activity back to the outreach record.
+
+- Sales is available at `/agents/sales`; outreach review lives at `/outreach` and `/outreach/[id]`.
+- Drafting is deterministic and `$0`; it does not call paid AI and does not invent emails, contact names, testimonials, pricing, or unsupported claims.
+- Missing recipient email can still create a draft, but send approval and send execution fail closed until a valid recipient is present.
+- Outreach links use `/o/[token]` with separate `sfo_` attribution tokens. The database stores only the token hash and short hint.
+- M7 preview raw tokens are still never persisted, and M7 token hints are never used to reconstruct public URLs.
+- Approval binds the exact recipient, subject, body, preview deployment, content version, and attribution token hash. Editing the draft resets send approval.
+- The only wired email provider is the deterministic mock provider. It returns fake `msg_mock_*` IDs and performs no external network call or real delivery.
+- The M8 migration is version-controlled locally but must be applied to Supabase separately before hosted smoke testing.
+- No Resend integration, production deployment, domain/DNS change, payment, or paid AI call is part of Milestone 8.
+
+Milestone 7 added **Preview Deployments + Tracking**: a manual, approval-gated way to share generated Builder drafts with prospects.
 
 - Public prospect previews use `/p/[token]` and remain separate from customer production deployments.
 - Publishing a public preview requires a pending `website_deployment` approval; approving that specific request mints the public token.
@@ -72,7 +84,7 @@ Milestone 6 added **Builder**: a manual, auditable website-draft workflow on aud
 - Rebuilds insert a new `generated_websites` row. Eligible `audited` leads may advance to `website_built`
 - Writes `agent_runs` / `agent_tool_calls` / `activity_events`. No page-source dumps
 - Optional future AI copy must use `executeApprovedAiRun`. Builder does not import the provider
-- Sales and Manager stay disabled
+- Manager stays disabled
 - No outreach, production deploy, payments, domain, or DNS
 
 Auditor and Scout remain: manual `$0` inspection/discovery with monotonic lead status.
@@ -92,13 +104,14 @@ Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek,
 | Scout | Manual $0 catalog discovery + bounded inspection |
 | Auditor | Manual $0 deterministic website audit |
 | Builder | Manual $0 deterministic template draft |
+| Sales | Manual $0 deterministic outreach drafting, approval binding, and mock send |
 | Preview deployments | Approval-gated tokenized public previews; not production hosting |
 | Other agents | Disabled |
 | xAI provider layer | Implemented, mock-tested, live calls gated off |
 | Supabase database | Server-side reads/writes with a secret key after admin session check |
 | Vercel / Resend / Stripe APIs | Not connected |
 | Authentication | Temporary single-admin env credentials. Not Supabase Auth. |
-| Email sending | Not implemented |
+| Email sending | Mock provider only; no real delivery or Resend call |
 | Payments | Not implemented |
 | Website generation and deploy | Internal drafts only; no customer production deploy |
 
@@ -196,6 +209,8 @@ src/
   lib/auditor/      Deterministic website audit pipeline and scoring
   lib/builder/      Deterministic template drafts and WebsiteSpec
   lib/previews/     Public preview tokens, policy, and tracking helpers
+  lib/sales/        Deterministic outreach drafting, approval binding, attribution tokens
+  lib/email/        Mock-only email provider abstraction
   lib/supabase/     Server-only Supabase client
   lib/auth/         Temporary admin session
   agents/           Future agent packages (empty)

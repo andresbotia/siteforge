@@ -41,7 +41,9 @@ export const websiteStatusLabel: Record<GeneratedWebsiteStatus, string> = {
 export const outreachStatusLabel: Record<OutreachStatus, string> = {
   draft: "Draft",
   awaiting_approval: "Awaiting Approval",
+  approved: "Approved",
   sent: "Sent",
+  failed: "Failed",
   replied: "Replied",
   interested: "Interested",
   declined: "Declined",
