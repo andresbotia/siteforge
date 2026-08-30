@@ -1,5 +1,7 @@
 import type { PageSignals } from "./types";
 
+type ModernizationSignal = PageSignals["modernizationSignals"][number];
+
 function decode(value: string): string {
   return value
     .replace(/&amp;/g, "&")
@@ -79,6 +81,7 @@ export function extractPageSignals(
     );
   const hasPlainPhoneText = /\(?\d{3}\)?[-.\s]\d{3}[-.\s]\d{4}/.test(visibleText);
   const looksMalformed = !/<html\b/i.test(html) && !/<body\b/i.test(html) && html.trim().length > 0;
+  const modernizationSignals = collectModernizationSignals(html, url, lower);
 
   const anchors = [...html.matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)];
   const sameSiteHrefs: string[] = [];
@@ -172,9 +175,123 @@ export function extractPageSignals(
     hasPlaceholderText,
     hasPlainPhoneText,
     looksMalformed,
+    modernizationSignals,
     sameSiteHrefs: [...new Set(sameSiteHrefs)].slice(0, 20),
     sameOriginHrefs: [...new Set(sameOriginHrefs)].slice(0, 40),
   };
+}
+
+function collectModernizationSignals(
+  html: string,
+  url: string,
+  lowerHtml: string,
+): ModernizationSignal[] {
+  const signals: ModernizationSignal[] = [];
+
+  addLegacyUrlSignal(signals, url);
+  const generatorTag = html.match(/<meta\b[^>]*(?:name|property)=["']generator["'][^>]*>/i)?.[0];
+  const generator = generatorTag ? attr(generatorTag, "content") : null;
+  if (generator && /frontpage|dreamweaver|microsoft visual studio|joomla!?\s*[123]\b|drupal\s*[567]\b|wordpress\s*[1-4]\./i.test(generator)) {
+    signals.push({
+      code: "legacy_generator_marker",
+      title: "Legacy generator marker detected",
+      evidence: `Generator metadata includes "${generator.slice(0, 80)}".`,
+      strength: "medium",
+    });
+  }
+
+  const deprecatedCount = countMatches(
+    html,
+    /<(?:font|center|marquee|frameset|frame)\b|<[^>]+\s(?:bgcolor|align|valign|border|cellpadding|cellspacing)=/gi,
+  );
+  if (deprecatedCount >= 3) {
+    signals.push({
+      code: "deprecated_markup",
+      title: "Deprecated or presentation-heavy markup detected",
+      evidence: `${deprecatedCount} legacy presentation markup patterns were detected.`,
+      strength: deprecatedCount >= 8 ? "high" : "medium",
+    });
+  }
+
+  const tableCount = countMatches(html, /<table\b/gi);
+  const semanticCount = countMatches(html, /<(?:main|section|article|header|footer|nav)\b/gi);
+  if (tableCount >= 3 && tableCount > semanticCount) {
+    signals.push({
+      code: "table_layout",
+      title: "Table-heavy page structure detected",
+      evidence: `${tableCount} table elements and ${semanticCount} semantic layout elements were detected.`,
+      strength: tableCount >= 6 ? "high" : "medium",
+    });
+  }
+
+  const inlineStyleCount = countMatches(html, /\sstyle=["'][^"']{20,}["']/gi);
+  if (inlineStyleCount >= 8) {
+    signals.push({
+      code: "excessive_inline_style",
+      title: "Excessive inline styling detected",
+      evidence: `${inlineStyleCount} substantial inline style attributes were detected.`,
+      strength: inlineStyleCount >= 20 ? "high" : "medium",
+    });
+  }
+
+  const legacyScriptCount = countMatches(
+    lowerHtml,
+    /jquery-migrate|jquery-[12]\.|prototype\.js|scriptaculous|mootools|swfobject|\.swf\b|pngfix|ie6|ie7|ie8|document\.write/gi,
+  );
+  if (legacyScriptCount >= 1) {
+    signals.push({
+      code: "legacy_script_pattern",
+      title: "Legacy script pattern detected",
+      evidence: `${legacyScriptCount} legacy script/plugin pattern${legacyScriptCount === 1 ? "" : "s"} detected.`,
+      strength: legacyScriptCount >= 3 ? "high" : "medium",
+    });
+  }
+
+  const legacyHrefCount = countMatches(
+    html,
+    /href=["'][^"']+\.(?:aspx?|php|cfm)(?:[?#][^"']*)?["']/gi,
+  );
+  if (legacyHrefCount >= 3) {
+    signals.push({
+      code: "fragmented_legacy_urls",
+      title: "Fragmented legacy URL patterns detected",
+      evidence: `${legacyHrefCount} internal links use legacy file-style URL paths.`,
+      strength: legacyHrefCount >= 8 ? "high" : "medium",
+    });
+  }
+
+  return dedupeModernizationSignals(signals);
+}
+
+function addLegacyUrlSignal(signals: ModernizationSignal[], url: string): void {
+  try {
+    const path = new URL(url).pathname;
+    if (/\.(?:aspx?|cfm)(?:\/)?$/i.test(path)) {
+      signals.push({
+        code: "legacy_url_extension",
+        title: "Legacy page URL extension detected",
+        evidence: `Inspected URL path uses "${path.slice(-16)}".`,
+        strength: "medium",
+      });
+    }
+  } catch {
+    // Ignore invalid URLs; SSRF-safe parsing happens before inspection.
+  }
+}
+
+function countMatches(value: string, pattern: RegExp): number {
+  return [...value.matchAll(pattern)].length;
+}
+
+function dedupeModernizationSignals(signals: ModernizationSignal[]): ModernizationSignal[] {
+  const seen = new Set<string>();
+  const out: ModernizationSignal[] = [];
+  for (const signal of signals) {
+    if (seen.has(signal.code)) continue;
+    seen.add(signal.code);
+    out.push(signal);
+  }
+  return out;
 }
 
 export function resolveHref(baseUrl: string, href: string): string | null {

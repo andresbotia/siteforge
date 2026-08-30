@@ -56,6 +56,7 @@ export function collectFindings(
   const homepage = crawl.pages.find((page) => page.kind === "home") ?? crawl.pages[0];
   const findings: AuditFinding[] = [];
   findings.push(...inspectTechnical(crawl, homepage));
+  findings.push(...inspectModernization(crawl));
   findings.push(...inspectSeo(crawl, homepage, lead));
   findings.push(...inspectUx(crawl, homepage, lead));
   findings.push(...inspectContent(crawl, homepage));
@@ -66,6 +67,26 @@ export function collectFindings(
     findings.push(...inspectHomeService(crawl, homepage, lead));
   }
   return dedupeFindings(findings);
+}
+
+function inspectModernization(crawl: CrawlResult): AuditFinding[] {
+  return crawl.pages.flatMap((page) =>
+    (page.signals?.modernizationSignals ?? []).map((signal) =>
+      finding({
+        category: "technical",
+        code: signal.code,
+        title: signal.title,
+        severity: "info",
+        evidence: `${signal.evidence} This is a deterministic modernization proxy, not a visual-design claim.`,
+        affectedUrl: page.url,
+        recommendation: "Review whether a modern responsive rebuild would simplify maintenance and improve conversion paths.",
+        confidence:
+          signal.strength === "high"
+            ? AUDIT_SCORING.confidence.structural
+            : AUDIT_SCORING.confidence.heuristic,
+      }),
+    ),
+  );
 }
 
 function inspectTechnical(crawl: CrawlResult, homepage: InspectedPage): AuditFinding[] {

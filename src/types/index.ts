@@ -97,6 +97,17 @@ export interface WebsiteAudit {
   uxScore: number | null;
   contentScore: number | null;
   redesignOpportunityScore: number | null;
+  redesignOpportunityBreakdown: {
+    score: number;
+    components: Array<{
+      id: string;
+      label: string;
+      score: number;
+      positiveEvidence: string[];
+      negativeEvidence: string[];
+      unknownEvidence: string[];
+    }>;
+  } | null;
   issues: string[];
   recommendations: string[];
   summary: string | null;

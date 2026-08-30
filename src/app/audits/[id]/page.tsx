@@ -89,6 +89,49 @@ export default async function AuditDetailPage({ params }: AuditPageProps) {
         </CardBody>
       </Card>
 
+      {audit.redesignOpportunityBreakdown ? (
+        <Card className="mt-4">
+          <CardHeader title="Redesign opportunity breakdown" description="100 = strong SiteForge candidate signal." />
+          <CardBody>
+            <div className="grid gap-4 md:grid-cols-2">
+              {audit.redesignOpportunityBreakdown.components.map((component) => (
+                <div key={component.id} className="rounded-md border border-border-subtle p-3">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-medium">{component.label}</h3>
+                    <span className="text-sm font-semibold tabular-nums">{component.score}</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-muted">
+                    <div
+                      className="h-full rounded-full bg-accent"
+                      style={{ width: `${component.score}%` }}
+                    />
+                  </div>
+                  {component.negativeEvidence.length > 0 ? (
+                    <ul className="mt-3 list-disc space-y-1 pl-4 text-xs text-muted">
+                      {component.negativeEvidence.slice(0, 3).map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : component.positiveEvidence.length > 0 ? (
+                    <ul className="mt-3 list-disc space-y-1 pl-4 text-xs text-muted">
+                      {component.positiveEvidence.slice(0, 2).map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : component.unknownEvidence.length > 0 ? (
+                    <ul className="mt-3 list-disc space-y-1 pl-4 text-xs text-muted">
+                      {component.unknownEvidence.slice(0, 2).map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </CardBody>
+        </Card>
+      ) : null}
+
       {audit.inspectedUrls.length > 0 ? (
         <Card className="mt-4">
           <CardHeader title="Pages inspected" />

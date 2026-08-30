@@ -74,6 +74,12 @@ export type PageSignals = {
   hasPlaceholderText: boolean;
   hasPlainPhoneText: boolean;
   looksMalformed: boolean;
+  modernizationSignals: Array<{
+    code: string;
+    title: string;
+    evidence: string;
+    strength: "low" | "medium" | "high";
+  }>;
   sameSiteHrefs: string[];
   sameOriginHrefs: string[];
 };

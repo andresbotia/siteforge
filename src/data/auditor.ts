@@ -169,6 +169,7 @@ export async function startAuditorRun(input: {
       content_score: pipeline.scores.contentScore,
       overall_audit_score: pipeline.scores.overallAuditScore,
       redesign_opportunity_score: pipeline.scores.redesignOpportunityScore,
+      redesign_opportunity_breakdown: pipeline.scores.redesignOpportunityBreakdown,
       next_status: pipeline.nextStatus,
       paid_ai: "not_required",
       cost_usd: 0,

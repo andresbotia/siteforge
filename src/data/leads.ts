@@ -20,7 +20,7 @@ import type {
   QualificationTier,
   WebsiteAudit,
 } from "@/types";
-import type { AuditRow, LeadRow } from "@/types/database";
+import type { AgentRunRow, AuditRow, LeadRow } from "@/types/database";
 import type { ExistingLeadRecord } from "@/lib/scout/types";
 
 const leadStatuses = new Set<LeadStatus>([
@@ -132,7 +132,34 @@ function mapInspectedUrl(value: unknown): InspectedUrlSummary | null {
   };
 }
 
-export function mapAudit(row: AuditRow): WebsiteAudit {
+function mapOpportunityBreakdown(value: unknown): WebsiteAudit["redesignOpportunityBreakdown"] {
+  const row = asRecord(value);
+  const score = asNumber(row.score);
+  const components = Array.isArray(row.components)
+    ? row.components.flatMap((component) => {
+        const item = asRecord(component);
+        const componentScore = asNumber(item.score);
+        if (typeof item.id !== "string" || typeof item.label !== "string" || componentScore === null) {
+          return [];
+        }
+        return [{
+          id: item.id,
+          label: item.label,
+          score: componentScore,
+          positiveEvidence: asStringArray(item.positiveEvidence),
+          negativeEvidence: asStringArray(item.negativeEvidence),
+          unknownEvidence: asStringArray(item.unknownEvidence),
+        }];
+      })
+    : [];
+  if (score === null || components.length === 0) return null;
+  return { score, components };
+}
+
+export function mapAudit(
+  row: AuditRow,
+  runOutput?: AgentRunRow["output"] | null,
+): WebsiteAudit {
   const findings = Array.isArray(row.findings)
     ? row.findings.flatMap((item) => {
         const mapped = mapFinding(item);
@@ -158,6 +185,9 @@ export function mapAudit(row: AuditRow): WebsiteAudit {
     uxScore: row.ux_score,
     contentScore: row.content_score,
     redesignOpportunityScore: row.redesign_opportunity_score,
+    redesignOpportunityBreakdown: mapOpportunityBreakdown(
+      asRecord(runOutput).redesign_opportunity_breakdown,
+    ),
     issues: asStringArray(row.issues),
     recommendations: asStringArray(row.recommendations),
     summary: row.summary,
@@ -169,6 +199,14 @@ export function mapAudit(row: AuditRow): WebsiteAudit {
     websiteUrl: row.website_url,
     createdAt: row.created_at,
   };
+}
+
+async function getRunOutput(runId: string | null): Promise<AgentRunRow["output"] | null> {
+  if (!runId) return null;
+  const run = await readTable<Pick<AgentRunRow, "output"> | null>((client) =>
+    client.from("agent_runs").select("output").eq("id", runId).maybeSingle(),
+  );
+  return run?.output ?? null;
 }
 
 export async function listLeads(): Promise<Lead[]> {
@@ -307,14 +345,16 @@ export async function getLatestAuditForLead(
       .limit(1)
       .maybeSingle(),
   );
-  return row ? mapAudit(row) : null;
+  if (!row) return null;
+  return mapAudit(row, await getRunOutput(row.source_run_id));
 }
 
 export async function getAuditById(id: string): Promise<WebsiteAudit | null> {
   const row = await readTable<AuditRow | null>((client) =>
     client.from("website_audits").select("*").eq("id", id).maybeSingle(),
   );
-  return row ? mapAudit(row) : null;
+  if (!row) return null;
+  return mapAudit(row, await getRunOutput(row.source_run_id));
 }
 
 export async function listAuditsForLead(leadId: string): Promise<WebsiteAudit[]> {

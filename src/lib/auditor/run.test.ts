@@ -41,6 +41,102 @@ const healthyPages = {
   },
 };
 
+function sitePages(
+  home: string,
+  extra: Record<string, { status?: number; body?: string }> = {},
+  origin = "https://site.example.test",
+) {
+  return {
+    [`${origin}/`]: { body: home },
+    [`${origin}/services`]: {
+      body: healthyHtml({ title: "Services | Local business" }),
+    },
+    [`${origin}/contact`]: {
+      body: healthyHtml({ title: "Contact | Local business" }),
+    },
+    ...extra,
+  };
+}
+
+function modernStrongLocalHtml(): string {
+  return `<!doctype html><html><head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harborline Plumbing | Fort Lauderdale plumbing services</title>
+<meta name="description" content="Plumbing repair, water heaters, and emergency service in Fort Lauderdale.">
+<link rel="canonical" href="https://site.example.test/">
+</head><body>
+<header><nav><a href="/services">Services</a><a href="/contact">Contact</a><a href="/about">About</a></nav></header>
+<main>
+<h1>Fort Lauderdale plumbing services</h1>
+<h2>Emergency plumbing and water heaters</h2>
+<p>We serve Fort Lauderdale, Pompano Beach, and nearby Broward County homes. Licensed local plumbing team at 1842 SE 17th Street with same-day repair options.</p>
+<p>Call <a href="tel:9545550142">(954) 555-0142</a> or <a href="/contact">request a quote</a>.</p>
+<form><input name="name"><button>Request a quote</button></form>
+</main><footer>Copyright 2026 Harborline Plumbing</footer>
+</body></html>`;
+}
+
+function legacyHealthyLocalHtml(): string {
+  const style = 'style="font-family:Arial;color:#333;margin:0;padding:4px;background:#fff"';
+  return `<!doctype html><html><head>
+<meta name="viewport" content="width=device-width">
+<meta name="generator" content="Microsoft FrontPage 5.0">
+<title>Harborline Plumbing | Fort Lauderdale plumbing services</title>
+<meta name="description" content="Plumbing repair, water heaters, and emergency service in Fort Lauderdale.">
+<link rel="canonical" href="https://site.example.test/default.aspx">
+<script src="/Scripts/jquery-1.7.2.min.js"></script>
+</head><body>
+<table width="100%" cellpadding="0" cellspacing="0"><tr><td>
+<center><font face="Arial"><nav><a href="/services.aspx">Services</a><a href="/contact.aspx">Contact</a><a href="/about.aspx">About</a></nav></font></center>
+<table><tr><td ${style}><h1>Fort Lauderdale plumbing services</h1></td></tr></table>
+<table><tr><td ${style}><h2>Emergency plumbing and water heaters</h2></td></tr></table>
+<p ${style}>We serve Fort Lauderdale, Pompano Beach, and nearby Broward County homes. Licensed local plumbing team at 1842 SE 17th Street with same-day repair options.</p>
+<p ${style}>Call <a href="tel:9545550142">(954) 555-0142</a> or <a href="/contact.aspx">request a quote</a>.</p>
+<form><input name="name"><button>Request a quote</button></form>
+<p ${style}>Copyright 2016 Harborline Plumbing</p>
+</td></tr></table>
+</body></html>`;
+}
+
+function weakConversionHtml(): string {
+  return `<!doctype html><html><head>
+<meta name="viewport" content="width=device-width">
+<title>Harborline Plumbing | Fort Lauderdale</title>
+<meta name="description" content="Local plumbing service in Fort Lauderdale.">
+<link rel="canonical" href="https://site.example.test/">
+</head><body>
+<nav><a href="/services">Services</a><a href="/about">About</a></nav>
+<h1>Harborline Plumbing</h1>
+<h2>Services</h2>
+<p>Drain cleaning, leak repair, and water heaters for Fort Lauderdale. We serve Broward County homes and provide scheduled plumbing repairs.</p>
+</body></html>`;
+}
+
+function modernWeakSeoContentHtml(): string {
+  return `<!doctype html><html><head>
+<meta name="viewport" content="width=device-width">
+<title>AC</title>
+<link rel="canonical" href="https://site.example.test/">
+</head><body>
+<main><nav><a href="/services">Services</a><a href="/contact">Contact</a></nav>
+<p>Serving Fort Lauderdale. <a href="tel:9545550142">Call now</a>.</p>
+<form><input name="name"><button>Contact</button></form>
+</main></body></html>`;
+}
+
+function poorLegacyHtml(): string {
+  return `<!doctype html><html><head>
+<title></title>
+<script>document.write("old");</script>
+<script src="/Scripts/jquery-1.4.2.min.js"></script>
+</head><body bgcolor="#ffffff">
+<table cellpadding="0" cellspacing="0"><tr><td><font>Welcome</font></td></tr></table>
+<table><tr><td><center><a href="/services.aspx">Services</a><a href="/contact.aspx">Contact</a></center></td></tr></table>
+<p style="font-size:12px;color:#333;margin:0;padding:2px">Call 954-555-0199.</p>
+<p>Copyright 2014 Sample Business</p>
+</body></html>`;
+}
+
 const scoredCrawl: CrawlResult = {
   targetUrl: "https://site.example.test/",
   finalHomepageUrl: "https://site.example.test/",
@@ -77,6 +173,15 @@ function auditFinding(
     confidence: 0.95,
     ...overrides,
   };
+}
+
+function componentScore(
+  result: Awaited<ReturnType<typeof runAuditorPipeline>>,
+  label: string,
+): number {
+  return result.scores.redesignOpportunityBreakdown.components.find(
+    (component) => component.label === label,
+  )?.score ?? -1;
 }
 
 function restaurantPages(home: string, extra: Record<string, { status?: number; body?: string }> = {}) {
@@ -141,7 +246,7 @@ describe("healthy vs poor quality scores", () => {
     );
 
     assert.ok(scores.overallAuditScore >= 95, String(scores.overallAuditScore));
-    assert.ok(scores.redesignOpportunityScore <= 10, String(scores.redesignOpportunityScore));
+    assert.ok(scores.redesignOpportunityScore <= 24, String(scores.redesignOpportunityScore));
   });
 
   it("can score redesign opportunity higher than health impact for conversion blockers", () => {
@@ -158,7 +263,182 @@ describe("healthy vs poor quality scores", () => {
     );
 
     assert.ok(scores.overallAuditScore >= 85, String(scores.overallAuditScore));
-    assert.ok(scores.redesignOpportunityScore >= 60, String(scores.redesignOpportunityScore));
+    assert.ok(scores.redesignOpportunityScore >= 35, String(scores.redesignOpportunityScore));
+  });
+});
+
+describe("opportunity differentiation profiles", () => {
+  it("keeps a modern strong local-business site high-health and low-opportunity", async () => {
+    const result = await runAuditorPipeline(lead(), {
+      http: createMockHttpClient(sitePages(modernStrongLocalHtml())),
+    });
+
+    assert.ok(result.scores.overallAuditScore >= 90, String(result.scores.overallAuditScore));
+    assert.ok(result.scores.redesignOpportunityScore <= 20, String(result.scores.redesignOpportunityScore));
+    assert.equal(componentScore(result, "Modernization") <= 10, true);
+  });
+
+  it("raises modernization opportunity for legacy structure without technical-health damage", async () => {
+    const modern = await runAuditorPipeline(lead(), {
+      http: createMockHttpClient(sitePages(modernStrongLocalHtml())),
+    });
+    const legacy = await runAuditorPipeline(
+      lead({ websiteUrl: "https://site.example.test/default.aspx" }),
+      {
+        http: createMockHttpClient({
+          "https://site.example.test/default.aspx": { body: legacyHealthyLocalHtml() },
+          "https://site.example.test/services.aspx": { body: healthyHtml({ title: "Services" }) },
+          "https://site.example.test/contact.aspx": { body: healthyHtml({ title: "Contact" }) },
+          "https://site.example.test/about.aspx": { body: healthyHtml({ title: "About" }) },
+        }),
+      },
+    );
+
+    assert.ok(legacy.scores.technicalScore >= 90, String(legacy.scores.technicalScore));
+    assert.ok(
+      legacy.scores.redesignOpportunityScore >= modern.scores.redesignOpportunityScore + 10,
+      `${legacy.scores.redesignOpportunityScore} vs ${modern.scores.redesignOpportunityScore}`,
+    );
+    assert.ok(componentScore(legacy, "Modernization") >= 40);
+  });
+
+  it("scores weak conversion combinations as moderate or high opportunity", async () => {
+    const result = await runAuditorPipeline(lead(), {
+      http: createMockHttpClient({
+        "https://site.example.test/": { body: weakConversionHtml() },
+        "https://site.example.test/services": { body: healthyHtml({ title: "Services" }) },
+        "https://site.example.test/about": { body: healthyHtml({ title: "About" }) },
+      }),
+    });
+
+    assert.ok(result.scores.redesignOpportunityScore >= 35, String(result.scores.redesignOpportunityScore));
+    assert.ok(componentScore(result, "Conversion") >= 45);
+  });
+
+  it("attributes modern technical SEO/content weakness to content expansion", async () => {
+    const result = await runAuditorPipeline(lead({ industry: "HVAC" }), {
+      http: createMockHttpClient(sitePages(modernWeakSeoContentHtml())),
+    });
+
+    assert.ok(componentScore(result, "Content/SEO expansion") > componentScore(result, "Modernization"));
+    assert.ok(componentScore(result, "Modernization") <= 10);
+  });
+
+  it("scores poor multi-dimensional sites as high redesign opportunity", async () => {
+    const result = await runAuditorPipeline(
+      lead({ websiteUrl: "https://site.example.test/index.aspx" }),
+      {
+        http: createMockHttpClient({
+          "https://site.example.test/index.aspx": { body: poorLegacyHtml() },
+          "https://site.example.test/services.aspx": { status: 404, body: "gone" },
+          "https://site.example.test/contact.aspx": { status: 404, body: "gone" },
+        }),
+      },
+    );
+
+    assert.ok(result.scores.overallAuditScore < 70, String(result.scores.overallAuditScore));
+    assert.ok(result.scores.redesignOpportunityScore >= 65, String(result.scores.redesignOpportunityScore));
+  });
+
+  it("keeps sparse unknown evidence away from unjustified extremes", () => {
+    const scores = scoreAudit([], scoredCrawl);
+
+    assert.ok(scores.redesignOpportunityScore >= 18, String(scores.redesignOpportunityScore));
+    assert.ok(scores.redesignOpportunityScore <= 58, String(scores.redesignOpportunityScore));
+    assert.ok(
+      scores.redesignOpportunityBreakdown.components.some(
+        (component) => component.unknownEvidence.length > 0,
+      ),
+    );
+  });
+
+  it("is deterministic and keeps all opportunity scores in bounds", async () => {
+    const first = await runAuditorPipeline(
+      lead({ websiteUrl: "https://site.example.test/default.aspx" }),
+      {
+        http: createMockHttpClient({
+          "https://site.example.test/default.aspx": { body: legacyHealthyLocalHtml() },
+          "https://site.example.test/services.aspx": { body: healthyHtml({ title: "Services" }) },
+          "https://site.example.test/contact.aspx": { body: healthyHtml({ title: "Contact" }) },
+          "https://site.example.test/about.aspx": { body: healthyHtml({ title: "About" }) },
+        }),
+      },
+    );
+    const second = await runAuditorPipeline(
+      lead({ websiteUrl: "https://site.example.test/default.aspx" }),
+      {
+        http: createMockHttpClient({
+          "https://site.example.test/default.aspx": { body: legacyHealthyLocalHtml() },
+          "https://site.example.test/services.aspx": { body: healthyHtml({ title: "Services" }) },
+          "https://site.example.test/contact.aspx": { body: healthyHtml({ title: "Contact" }) },
+          "https://site.example.test/about.aspx": { body: healthyHtml({ title: "About" }) },
+        }),
+      },
+    );
+
+    assert.deepEqual(first.scores, second.scores);
+    for (const component of first.scores.redesignOpportunityBreakdown.components) {
+      assert.ok(component.score >= 0 && component.score <= 100, component.label);
+    }
+    assert.ok(first.scores.redesignOpportunityScore >= 0);
+    assert.ok(first.scores.redesignOpportunityScore <= 100);
+  });
+
+  it("keeps opportunity independent from health", async () => {
+    const legacy = await runAuditorPipeline(
+      lead({ websiteUrl: "https://site.example.test/default.aspx" }),
+      {
+        http: createMockHttpClient({
+          "https://site.example.test/default.aspx": { body: legacyHealthyLocalHtml() },
+          "https://site.example.test/services.aspx": { body: healthyHtml({ title: "Services" }) },
+          "https://site.example.test/contact.aspx": { body: healthyHtml({ title: "Contact" }) },
+          "https://site.example.test/about.aspx": { body: healthyHtml({ title: "About" }) },
+        }),
+      },
+    );
+    const weakSeo = await runAuditorPipeline(lead({ industry: "HVAC" }), {
+      http: createMockHttpClient(sitePages(modernWeakSeoContentHtml())),
+    });
+
+    assert.ok(Math.abs(legacy.scores.overallAuditScore - weakSeo.scores.overallAuditScore) <= 20);
+    assert.notEqual(legacy.scores.redesignOpportunityScore, 100 - legacy.scores.overallAuditScore);
+    assert.notEqual(weakSeo.scores.redesignOpportunityScore, 100 - weakSeo.scores.overallAuditScore);
+  });
+
+  it("distinguishes CTA, tel, contact, service-area, trust, and hierarchy combinations", async () => {
+    const oneMissing = await runAuditorPipeline(lead(), {
+      http: createMockHttpClient(sitePages(modernStrongLocalHtml().replace(/<form>[\s\S]*?<\/form>/, ""))),
+    });
+    const severalMissing = await runAuditorPipeline(lead({ city: "Boca Raton" }), {
+      http: createMockHttpClient({
+        "https://site.example.test/": {
+          body: weakConversionHtml()
+            .replaceAll("Fort Lauderdale", "South Florida")
+            .replace("We serve Broward County homes and ", ""),
+        },
+        "https://site.example.test/services": {
+          body: `<html><head><meta name="viewport" content="width=device-width"><title>Services</title></head><body><h1>Services</h1><p>Repairs and maintenance.</p></body></html>`,
+        },
+      }),
+    });
+
+    assert.ok(componentScore(severalMissing, "Conversion") > componentScore(oneMissing, "Conversion"));
+    assert.ok(
+      componentScore(severalMissing, "Local marketing") > componentScore(oneMissing, "Local marketing"),
+    );
+    assert.ok(severalMissing.scores.redesignOpportunityScore > oneMissing.scores.redesignOpportunityScore);
+  });
+
+  it("records scoring version and keeps persistence insert-only", async () => {
+    const result = await runAuditorPipeline(lead(), {
+      http: createMockHttpClient(sitePages(modernStrongLocalHtml())),
+    });
+    const insert = buildWebsiteAuditInsert(result, "run-calibration", lead().websiteUrl);
+
+    assert.equal(result.version, "auditor.v1");
+    assert.equal("id" in insert, false);
+    assert.equal(insert.source_run_id, "run-calibration");
+    assert.equal(insert.redesign_opportunity_score, result.scores.redesignOpportunityScore);
   });
 });
 

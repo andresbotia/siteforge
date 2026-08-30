@@ -1,5 +1,13 @@
 import { AUDITOR_VERSION } from "./limits";
-import type { AuditFinding, AuditScores, AuditSeverity, CrawlResult } from "./types";
+import type {
+  AuditFinding,
+  AuditOpportunityBreakdown,
+  AuditOpportunityComponent,
+  AuditOpportunityComponentId,
+  AuditScores,
+  AuditSeverity,
+  CrawlResult,
+} from "./types";
 
 /**
  * Quality scores: 100 = healthy / strong, 0 = severely deficient.
@@ -78,6 +86,13 @@ export const AUDIT_SCORING = {
     home_service_area_missing: 16,
     home_service_emergency_cta_missing: 24,
     home_service_contact_form_missing: 8,
+    legacy_url_extension: 0,
+    legacy_generator_marker: 0,
+    deprecated_markup: 0,
+    table_layout: 0,
+    excessive_inline_style: 0,
+    legacy_script_pattern: 0,
+    fragmented_legacy_urls: 0,
   } satisfies Record<string, number>,
   conversionBlockerCodes: [
     "no_website",
@@ -92,6 +107,68 @@ export const AUDIT_SCORING = {
     "home_service_phone_cta_missing",
     "home_service_emergency_cta_missing",
   ] as readonly string[],
+  opportunityComponentWeights: {
+    modernization: 0.3,
+    conversion: 0.35,
+    localMarketing: 0.15,
+    contentSeo: 0.12,
+    structureNavigation: 0.08,
+  } satisfies Record<AuditOpportunityComponentId, number>,
+  modernizationOpportunity: {
+    legacy_url_extension: 20,
+    legacy_generator_marker: 22,
+    deprecated_markup: 22,
+    table_layout: 24,
+    excessive_inline_style: 20,
+    legacy_script_pattern: 18,
+    fragmented_legacy_urls: 20,
+    stale_copyright: 12,
+    malformed_html: 8,
+  } satisfies Record<string, number>,
+  conversionOpportunity: {
+    missing_cta: 35,
+    broken_cta: 35,
+    phone_not_clickable: 16,
+    contact_hard_to_find: 30,
+    restaurant_phone_missing: 16,
+    restaurant_reservation_broken: 28,
+    restaurant_reservation_unclear: 14,
+    restaurant_order_broken: 28,
+    home_service_phone_cta_missing: 35,
+    home_service_emergency_cta_missing: 22,
+    home_service_contact_form_missing: 8,
+  } satisfies Record<string, number>,
+  localMarketingOpportunity: {
+    weak_local_signals: 24,
+    missing_location_information: 22,
+    home_service_area_missing: 24,
+    restaurant_hours_missing: 14,
+  } satisfies Record<string, number>,
+  contentSeoOpportunity: {
+    missing_title: 18,
+    weak_title: 8,
+    missing_meta_description: 13,
+    missing_h1: 18,
+    multiple_h1: 5,
+    weak_heading_hierarchy: 8,
+    missing_canonical: 4,
+    duplicate_title: 12,
+    thin_service_information: 24,
+    placeholder_text: 26,
+    restaurant_menu_missing: 28,
+    restaurant_menu_pdf: 16,
+    home_service_services_undiscoverable: 26,
+  } satisfies Record<string, number>,
+  structureNavigationOpportunity: {
+    missing_viewport: 24,
+    poor_mobile_metadata: 18,
+    weak_navigation: 24,
+    broken_important_link: 30,
+    redirect_limit: 14,
+    excessive_page_size: 14,
+    slow_response: 12,
+    restaurant_menu_broken: 30,
+  } satisfies Record<string, number>,
   unscoredCap: 12,
   unscoredOpportunity: 92,
   slowMs: 3_000,
@@ -124,23 +201,25 @@ export function scoreAudit(findings: AuditFinding[], crawl: CrawlResult): AuditS
       contentScore * AUDIT_SCORING.categoryWeights.content,
   );
 
-  let opportunity = scoreRedesignOpportunity(findings, overall);
+  let breakdown = scoreRedesignOpportunity(findings, crawl, overall);
 
   const unavailable = findings.some((finding) => SITE_UNAVAILABLE_CODES.has(finding.code));
   if (unavailable || (!crawl.homepageOk && crawl.pages.length === 0)) {
+    breakdown = withBreakdownScore(breakdown, Math.max(breakdown.score, AUDIT_SCORING.unscoredOpportunity));
     return {
       technicalScore: Math.min(technicalScore, AUDIT_SCORING.unscoredCap),
       seoScore: Math.min(seoScore, AUDIT_SCORING.unscoredCap),
       uxScore: Math.min(uxScore, AUDIT_SCORING.unscoredCap),
       contentScore: Math.min(contentScore, AUDIT_SCORING.unscoredCap),
       overallAuditScore: AUDIT_SCORING.unscoredCap,
-      redesignOpportunityScore: Math.max(opportunity, AUDIT_SCORING.unscoredOpportunity),
+      redesignOpportunityScore: breakdown.score,
+      redesignOpportunityBreakdown: breakdown,
     };
   }
 
   if (findings.length === 0) {
     overall = 100;
-    opportunity = 0;
+    breakdown = scoreRedesignOpportunity(findings, crawl, overall);
   }
 
   return {
@@ -149,7 +228,8 @@ export function scoreAudit(findings: AuditFinding[], crawl: CrawlResult): AuditS
     uxScore,
     contentScore,
     overallAuditScore: overall,
-    redesignOpportunityScore: opportunity,
+    redesignOpportunityScore: breakdown.score,
+    redesignOpportunityBreakdown: breakdown,
   };
 }
 
@@ -160,28 +240,220 @@ function categoryScore(findings: AuditFinding[], category: AuditFinding["categor
   return clamp(AUDIT_SCORING.qualityStart - penalty);
 }
 
-function scoreRedesignOpportunity(findings: AuditFinding[], overallHealth: number): number {
-  const directOpportunity = findings.reduce((sum, finding) => {
-    const codePoints = (
-      AUDIT_SCORING.opportunityCodePoints as Record<string, number | undefined>
-    )[finding.code];
-    if (codePoints !== undefined) return sum + codePoints;
-    const severityPoints = AUDIT_SCORING.opportunityPoints[finding.severity];
-    return sum + severityPoints * AUDIT_SCORING.opportunityCategoryMultiplier[finding.category];
-  }, 0);
-  const healthDrag = overallHealth < 70 ? (70 - overallHealth) * 0.45 : 0;
-  let opportunity = clamp(directOpportunity + healthDrag);
+export function scoreRedesignOpportunity(
+  findings: AuditFinding[],
+  crawl: CrawlResult,
+  overallHealth: number,
+): AuditOpportunityBreakdown {
+  const components: AuditOpportunityComponent[] = [
+    component(
+      "modernization",
+      "Modernization",
+      findings,
+      crawl,
+      AUDIT_SCORING.modernizationOpportunity,
+      collectModernizationEvidence,
+    ),
+    component(
+      "conversion",
+      "Conversion",
+      findings,
+      crawl,
+      AUDIT_SCORING.conversionOpportunity,
+      collectConversionEvidence,
+    ),
+    component(
+      "localMarketing",
+      "Local marketing",
+      findings,
+      crawl,
+      AUDIT_SCORING.localMarketingOpportunity,
+      collectLocalMarketingEvidence,
+    ),
+    component(
+      "contentSeo",
+      "Content/SEO expansion",
+      findings,
+      crawl,
+      AUDIT_SCORING.contentSeoOpportunity,
+      collectContentSeoEvidence,
+    ),
+    component(
+      "structureNavigation",
+      "Structure/navigation",
+      findings,
+      crawl,
+      AUDIT_SCORING.structureNavigationOpportunity,
+      collectStructureEvidence,
+    ),
+  ];
 
-  const hasConversionBlocker = findings.some((finding) =>
-    AUDIT_SCORING.conversionBlockerCodes.includes(finding.code),
+  const weighted = components.reduce(
+    (sum, item) => sum + item.score * AUDIT_SCORING.opportunityComponentWeights[item.id],
+    0,
   );
-  if (!hasConversionBlocker && overallHealth >= 85) {
-    opportunity = Math.min(opportunity, 24);
-  } else if (!hasConversionBlocker && overallHealth >= 75) {
-    opportunity = Math.min(opportunity, 45);
-  }
+  const healthDrag = overallHealth < 70 ? (70 - overallHealth) * 0.25 : 0;
+  const conversionComponent = components.find((item) => item.id === "conversion")?.score ?? 0;
+  const unknownCount = components.reduce((sum, item) => sum + item.unknownEvidence.length, 0);
+  const observedCount = components.reduce(
+    (sum, item) => sum + item.positiveEvidence.length + item.negativeEvidence.length,
+    0,
+  );
+  const sparseEvidenceFloor = unknownCount > observedCount ? 18 : 0;
+  const sparseEvidenceCap = unknownCount > observedCount ? 58 : 100;
+  const componentFloor = conversionComponent >= 80 ? 45 : conversionComponent >= 55 ? 35 : 0;
+  const score = Math.min(
+    sparseEvidenceCap,
+    Math.max(sparseEvidenceFloor, componentFloor, clamp(weighted + healthDrag)),
+  );
 
-  return opportunity;
+  return { score, components };
+}
+
+type EvidenceCollector = (findings: AuditFinding[], crawl: CrawlResult) => {
+  positive: string[];
+  negative: string[];
+  unknown: string[];
+  comboBonus?: number;
+};
+
+function component(
+  id: AuditOpportunityComponentId,
+  label: string,
+  findings: AuditFinding[],
+  crawl: CrawlResult,
+  codeWeights: Record<string, number>,
+  collect: EvidenceCollector,
+): AuditOpportunityComponent {
+  const evidence = collect(findings, crawl);
+  const codeCounts = new Map<string, number>();
+  const weightedFindings = findings.reduce((sum, finding) => {
+    const exact = codeWeights[finding.code];
+    if (exact !== undefined) {
+      const count = codeCounts.get(finding.code) ?? 0;
+      codeCounts.set(finding.code, count + 1);
+      return sum + exact * (count === 0 ? 1 : 0.25);
+    }
+    return sum;
+  }, 0);
+  const rawScore = weightedFindings + (evidence.comboBonus ?? 0);
+  const unknownAdjustment = evidence.unknown.length > evidence.negative.length ? 6 : 0;
+  const positiveCredit = Math.min(12, evidence.positive.length * 2);
+
+  return {
+    id,
+    label,
+    score: clamp(rawScore + unknownAdjustment - positiveCredit),
+    positiveEvidence: evidence.positive.slice(0, 6),
+    negativeEvidence: evidence.negative.slice(0, 6),
+    unknownEvidence: evidence.unknown.slice(0, 6),
+  };
+}
+
+function collectModernizationEvidence(findings: AuditFinding[], crawl: CrawlResult) {
+  const modernCodes = new Set(Object.keys(AUDIT_SCORING.modernizationOpportunity));
+  const negatives = findings
+    .filter((finding) => modernCodes.has(finding.code))
+    .map((finding) => finding.title);
+  const pagesWithSignals = crawl.pages.filter((page) => page.signals);
+  return {
+    positive: pagesWithSignals.some((page) => (page.signals?.modernizationSignals.length ?? 0) === 0)
+      ? ["Inspected HTML did not expose configured legacy modernization proxies."]
+      : [],
+    negative: negatives,
+    unknown: pagesWithSignals.length === 0 ? ["No inspectable HTML page for modernization signals."] : [],
+  };
+}
+
+function collectConversionEvidence(findings: AuditFinding[], crawl: CrawlResult) {
+  const home = homepageSignals(crawl);
+  const negatives = titlesFor(findings, AUDIT_SCORING.conversionOpportunity);
+  const contactPageOk = crawl.pages.some((page) => page.kind === "contact" && page.ok);
+  const positives = [
+    home?.hasContactCta ? "Primary contact/quote CTA observed." : null,
+    home?.hasPhoneLink ? "Clickable phone path observed." : null,
+    home?.hasForm ? "Form conversion path observed." : null,
+    contactPageOk ? "Reachable contact page observed." : null,
+  ].filter(isString);
+  const missingSignals = [
+    home && !home.hasContactCta ? "primary CTA" : null,
+    home && !home.hasPhoneLink ? "clickable phone" : null,
+    home && !home.hasForm ? "form" : null,
+    !contactPageOk ? "reachable contact page" : null,
+  ].filter(isString);
+  const comboBonus = missingSignals.length >= 3 ? 16 : missingSignals.length === 2 ? 8 : 0;
+  return {
+    positive: positives,
+    negative: negatives,
+    unknown: home ? [] : ["Homepage conversion signals were not available."],
+    comboBonus,
+  };
+}
+
+function collectLocalMarketingEvidence(findings: AuditFinding[], crawl: CrawlResult) {
+  const home = homepageSignals(crawl);
+  return {
+    positive: [
+      crawl.pages.some((page) => page.signals?.hasAddressOrLocation)
+        ? "Address or location signal observed."
+        : null,
+      crawl.pages.some((page) => page.signals?.hasServiceArea)
+        ? "Service-area copy observed."
+        : null,
+    ].filter(isString),
+    negative: titlesFor(findings, AUDIT_SCORING.localMarketingOpportunity),
+    unknown: home ? [] : ["Local-business marketing signals were not available."],
+  };
+}
+
+function collectContentSeoEvidence(findings: AuditFinding[], crawl: CrawlResult) {
+  const home = homepageSignals(crawl);
+  return {
+    positive: [
+      home?.title ? "Document title observed." : null,
+      home?.metaDescription ? "Meta description observed." : null,
+      (home?.h1Count ?? 0) > 0 ? "Primary H1 observed." : null,
+      (home?.h2Count ?? 0) > 0 ? "Section hierarchy observed." : null,
+      (home?.visibleTextLength ?? 0) >= AUDIT_SCORING.thinTextChars
+        ? "Homepage has non-sparse visible copy."
+        : null,
+    ].filter(isString),
+    negative: titlesFor(findings, AUDIT_SCORING.contentSeoOpportunity),
+    unknown: home ? [] : ["Homepage content/SEO signals were not available."],
+  };
+}
+
+function collectStructureEvidence(findings: AuditFinding[], crawl: CrawlResult) {
+  const home = homepageSignals(crawl);
+  return {
+    positive: [
+      home?.hasViewport ? "Viewport metadata observed." : null,
+      home?.hasNav ? "Navigation landmark observed." : null,
+      home?.servicesLink ? "Service navigation path observed." : null,
+      home?.contactLink ? "Contact navigation path observed." : null,
+    ].filter(isString),
+    negative: titlesFor(findings, AUDIT_SCORING.structureNavigationOpportunity),
+    unknown: home ? [] : ["Structural/navigation signals were not available."],
+  };
+}
+
+function titlesFor(findings: AuditFinding[], weights: Record<string, number>): string[] {
+  return findings.filter((finding) => weights[finding.code] !== undefined).map((finding) => finding.title);
+}
+
+function homepageSignals(crawl: CrawlResult) {
+  return (crawl.pages.find((page) => page.kind === "home") ?? crawl.pages[0])?.signals ?? null;
+}
+
+function isString(value: string | null | false): value is string {
+  return typeof value === "string" && value.length > 0;
+}
+
+function withBreakdownScore(
+  breakdown: AuditOpportunityBreakdown,
+  score: number,
+): AuditOpportunityBreakdown {
+  return { ...breakdown, score: clamp(score) };
 }
 
 export function summarizeAudit(findings: AuditFinding[], scores: AuditScores): {

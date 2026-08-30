@@ -68,6 +68,28 @@ export type AuditScores = {
   contentScore: number;
   overallAuditScore: number;
   redesignOpportunityScore: number;
+  redesignOpportunityBreakdown: AuditOpportunityBreakdown;
+};
+
+export type AuditOpportunityComponentId =
+  | "modernization"
+  | "conversion"
+  | "localMarketing"
+  | "contentSeo"
+  | "structureNavigation";
+
+export type AuditOpportunityComponent = {
+  id: AuditOpportunityComponentId;
+  label: string;
+  score: number;
+  positiveEvidence: string[];
+  negativeEvidence: string[];
+  unknownEvidence: string[];
+};
+
+export type AuditOpportunityBreakdown = {
+  score: number;
+  components: AuditOpportunityComponent[];
 };
 
 export type AuditorLeadInput = {
