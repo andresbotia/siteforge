@@ -307,6 +307,8 @@ If they are missing, the app fails closed: dashboard routes redirect to `/login`
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key. Browser-safe. Not used for application-table access. Kept for future Supabase Auth. |
 | `SUPABASE_SECRET_KEY` | Server-only `sb_secret_...` key. Required locally and in Vercel for dashboard reads and approval writes. Never prefix with `NEXT_PUBLIC_`. |
 
+Do not configure `NEXT_PUBLIC_SUPABASE_SECRET_KEY`. A public-prefixed Supabase secret is ignored by server code and is unsafe because `NEXT_PUBLIC_*` values can be bundled for the browser.
+
 ### xAI credentials
 
 | Variable | Purpose |

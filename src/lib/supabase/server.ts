@@ -2,7 +2,10 @@ import "server-only";
 
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { requireAdminSession } from "@/lib/auth/guard";
-import { getSupabaseServerConfig } from "@/lib/supabase/config";
+import {
+  getSupabaseServerConfig,
+  getSupabaseServerConfigIssue,
+} from "@/lib/supabase/config";
 import type { Database } from "@/types/database";
 
 export function createServerSupabaseClient(): SupabaseClient<Database> | null {
@@ -28,7 +31,11 @@ export async function readTable<T>(
   await requireAdminSession();
 
   const client = createServerSupabaseClient();
-  if (!client) return null;
+  if (!client) {
+    const issue = getSupabaseServerConfigIssue();
+    console.error("Supabase read unavailable", issue?.code ?? "unknown_config");
+    return null;
+  }
 
   const { data, error } = await query(client);
   if (error) {
@@ -47,11 +54,18 @@ export async function mutateTable<T>(
   await requireAdminSession();
 
   const client = createServerSupabaseClient();
-  if (!client) return null;
+  if (!client) {
+    const issue = getSupabaseServerConfigIssue();
+    console.error("Supabase write unavailable", issue?.code ?? "unknown_config");
+    return null;
+  }
 
   const { data, error } = await query(client);
   if (error) {
-    console.error("Supabase write failed", error.code ?? "unknown");
+    console.error("Supabase write failed", {
+      code: error.code ?? "unknown",
+      message: error.message ?? "unknown",
+    });
     return null;
   }
 

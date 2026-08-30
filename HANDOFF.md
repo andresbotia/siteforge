@@ -121,6 +121,8 @@ M9 smoke conversion used mock Stripe IDs and must not be treated as real payment
 
 M9.5B manual prospect import is limited to public business facts supplied by the admin. It does not discover businesses in bulk, send outreach, process payments, call paid AI, or deploy customer production websites.
 
+First production import failure diagnosis: Vercel had `NEXT_PUBLIC_SUPABASE_SECRET_KEY` configured but not server-only `SUPABASE_SECRET_KEY`, so the server Supabase client could not initialize. The public-prefixed value must be removed/replaced with the correct server-only Vercel variable before retrying the manual import.
+
 ## Project
 
 - SiteForge: AI-assisted local-business website operations

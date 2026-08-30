@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getAuthConfig } from "@/lib/auth/config";
+import { getSupabaseServerConfigIssue } from "@/lib/supabase/config";
 import { readTable } from "@/lib/supabase/server";
 import type {
   ConnectionStatus,
@@ -93,10 +94,8 @@ export async function listSystemStatus(): Promise<SystemServiceStatus[]> {
 }
 
 export function getReadinessIndicators(): ReadinessIndicator[] {
-  const supabaseConfigured = Boolean(
-    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
-      process.env.SUPABASE_SECRET_KEY?.trim(),
-  );
+  const supabaseIssue = getSupabaseServerConfigIssue();
+  const supabaseConfigured = !supabaseIssue;
   const publishableSupabaseConfigured = Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim(),
   );
@@ -109,7 +108,9 @@ export function getReadinessIndicators(): ReadinessIndicator[] {
     {
       id: "supabase",
       label: "Supabase server access",
-      status: supabaseConfigured ? "Configured" : "Missing required server config",
+      status: supabaseConfigured
+        ? "Configured"
+        : supabaseIssue.message,
       severity: supabaseConfigured ? "ok" : "blocked",
     },
     {
@@ -145,7 +146,7 @@ export function getReadinessIndicators(): ReadinessIndicator[] {
     {
       id: "credential-rotation",
       label: "Credential rotation",
-      status: "Required before real prospect/customer data",
+      status: "Deferred for public-data-only validation; required before sensitive data",
       severity: "attention",
     },
     {

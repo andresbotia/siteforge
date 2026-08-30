@@ -8,6 +8,7 @@ import {
   validateManualPublicProspect,
   type ManualPublicProspectInput,
 } from "@/lib/prospects/manual-public";
+import { getSupabaseServerConfigIssue } from "@/lib/supabase/config";
 import type {
   AuditFinding,
   AuditCategory,
@@ -203,6 +204,12 @@ export type ManualPublicProspectImportResult =
 export async function createManualPublicProspect(
   input: ManualPublicProspectInput,
 ): Promise<ManualPublicProspectImportResult> {
+  const configIssue = getSupabaseServerConfigIssue();
+  if (configIssue) {
+    console.error("Manual public prospect import blocked", configIssue.code);
+    return { ok: false, error: configIssue.message };
+  }
+
   const existingRows = await readTable<LeadRow[]>((client) =>
     client.from("leads").select("*"),
   );
@@ -257,6 +264,7 @@ export async function createManualPublicProspect(
   );
 
   if (!row) {
+    console.error("Manual public prospect import insert returned no row");
     return { ok: false, error: "Could not import public prospect." };
   }
 
