@@ -73,7 +73,7 @@ export default async function AuditDetailPage({ params }: AuditPageProps) {
           </CardBody>
         </Card>
         <Card className="flex items-center justify-center py-6">
-          <ScoreRing value={audit.overallScore} label="Overall quality" />
+          <ScoreRing value={audit.overallScore} label="Website health" />
         </Card>
       </div>
 

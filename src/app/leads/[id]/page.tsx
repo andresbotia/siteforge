@@ -200,7 +200,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
                 : ""}
             </p>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-              <ScoreBar label="Overall" value={audit.overallScore} />
+              <ScoreBar label="Website health" value={audit.overallScore} />
               <ScoreBar label="Technical" value={audit.technicalScore ?? audit.performanceScore} />
               <ScoreBar label="SEO" value={audit.seoScore} />
               <ScoreBar

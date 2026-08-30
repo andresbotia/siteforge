@@ -72,6 +72,8 @@ Still blocked during M9.5B preparation:
 
 Manual public prospect import is the first real acquisition path for M9.5B. Broad Scout acquisition automation remains M12 backlog. M9.5C is not started. M10 is not started.
 
+M9.5B Auditor calibration is implemented for the first real manual prospects. Auditor now treats `overall_score` as deterministic website health (100 = technically/content healthy) and `redesign_opportunity_score` as a separate SiteForge fit signal weighted toward conversion blockers, contact paths, local trust signals, industry-specific gaps, and site availability. Minor maintenance findings should not by themselves make a healthy site look like a strong redesign candidate. No paid AI, email, Stripe, customer deployment, domain, or DNS action is part of this calibration.
+
 M9.5C:
 
 - Resend/provider integrated behind backend boundary

@@ -115,7 +115,7 @@ export function buildAuditorToolCalls(result: AuditorPipelineResult): Array<{
         seo: result.scores.seoScore,
         ux: result.scores.uxScore,
         content: result.scores.contentScore,
-        overall: result.scores.overallAuditScore,
+        website_health: result.scores.overallAuditScore,
         redesign_opportunity: result.scores.redesignOpportunityScore,
         cost_usd: 0,
       },

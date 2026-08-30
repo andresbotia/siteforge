@@ -191,13 +191,13 @@ export async function startAuditorRun(input: {
     await recordActivityEvent({
       eventType: "auditor_run_completed",
       title: "Website audit completed",
-      description: `${lead.business_name}: overall ${pipeline.scores.overallAuditScore}, opportunity ${pipeline.scores.redesignOpportunityScore}`,
+      description: `${lead.business_name}: website health ${pipeline.scores.overallAuditScore}, opportunity ${pipeline.scores.redesignOpportunityScore}`,
       actorType: "admin",
       leadId: lead.id,
       metadata: {
         run_id: run.id,
         audit_id: audit.id,
-        overall: String(pipeline.scores.overallAuditScore),
+        website_health: String(pipeline.scores.overallAuditScore),
       },
     });
 

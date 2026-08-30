@@ -11,8 +11,8 @@ import {
 } from "./policy";
 import { buildAuditorToolCalls, buildWebsiteAuditInsert } from "./persist";
 import { runAuditorPipeline } from "./run";
-import { AUDIT_SCORING } from "./scoring";
-import type { AuditorLeadInput } from "./types";
+import { AUDIT_SCORING, scoreAudit } from "./scoring";
+import type { AuditFinding, AuditorLeadInput, CrawlResult } from "./types";
 import { healthyHtml, healthyRestaurantHtml, poorHtml } from "./fixtures";
 
 function lead(overrides: Partial<AuditorLeadInput> = {}): AuditorLeadInput {
@@ -40,6 +40,44 @@ const healthyPages = {
     body: healthyHtml({ title: "About Harborline Plumbing" }),
   },
 };
+
+const scoredCrawl: CrawlResult = {
+  targetUrl: "https://site.example.test/",
+  finalHomepageUrl: "https://site.example.test/",
+  homepageOk: true,
+  blockedReason: null,
+  error: null,
+  pages: [
+    {
+      url: "https://site.example.test/",
+      kind: "home",
+      status: 200,
+      ok: true,
+      elapsedMs: 120,
+      truncated: false,
+      https: true,
+      isPdf: false,
+      error: null,
+      signals: null,
+    },
+  ],
+  linkChecks: [],
+  pagesFetched: 1,
+  linkChecksPerformed: 0,
+};
+
+function auditFinding(
+  overrides: Partial<AuditFinding> & Pick<AuditFinding, "category" | "code" | "severity">,
+): AuditFinding {
+  return {
+    title: overrides.code,
+    evidence: "test",
+    affectedUrl: "https://site.example.test/",
+    recommendation: "test",
+    confidence: 0.95,
+    ...overrides,
+  };
+}
 
 function restaurantPages(home: string, extra: Record<string, { status?: number; body?: string }> = {}) {
   return {
@@ -90,6 +128,37 @@ describe("healthy vs poor quality scores", () => {
     });
     assert.ok(poor.findings.length > healthy.findings.length);
     assert.ok(poor.scores.redesignOpportunityScore > healthy.scores.redesignOpportunityScore);
+  });
+
+  it("does not inflate redesign opportunity for minor maintenance findings", () => {
+    const scores = scoreAudit(
+      [
+        auditFinding({ category: "seo", code: "missing_canonical", severity: "low" }),
+        auditFinding({ category: "ux", code: "stale_copyright", severity: "low" }),
+        auditFinding({ category: "seo", code: "multiple_h1", severity: "low" }),
+      ],
+      scoredCrawl,
+    );
+
+    assert.ok(scores.overallAuditScore >= 95, String(scores.overallAuditScore));
+    assert.ok(scores.redesignOpportunityScore <= 10, String(scores.redesignOpportunityScore));
+  });
+
+  it("can score redesign opportunity higher than health impact for conversion blockers", () => {
+    const scores = scoreAudit(
+      [
+        auditFinding({ category: "ux", code: "missing_cta", severity: "high" }),
+        auditFinding({
+          category: "ux",
+          code: "home_service_phone_cta_missing",
+          severity: "high",
+        }),
+      ],
+      scoredCrawl,
+    );
+
+    assert.ok(scores.overallAuditScore >= 85, String(scores.overallAuditScore));
+    assert.ok(scores.redesignOpportunityScore >= 60, String(scores.redesignOpportunityScore));
   });
 });
 
