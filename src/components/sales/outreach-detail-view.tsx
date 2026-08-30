@@ -232,12 +232,12 @@ export function OutreachDetailView({
                     <form action={sendAction}>
                       <input type="hidden" name="outreachId" value={outreach.id} />
                       <Button type="submit" variant="primary" disabled={sending}>
-                        {sending ? "Sending..." : "Send Email (Mock Mode)"}
+                        {sending ? "Sending..." : "Send Approved Email"}
                       </Button>
                     </form>
                   </div>
                   <div className="mt-3 rounded border border-emerald-500/20 bg-emerald-950/40 p-2.5 text-xs text-emerald-200/70">
-                    <strong>Safe Test Mode:</strong> Uses the built-in mock email provider. No external network call or real prospect delivery is made.
+                    Backend execution revalidates approval, content hash, live-email gate, provider configuration, and suppression status.
                   </div>
                   {sendState?.error ? (
                     <p className="mt-2 text-xs text-danger">{sendState.error}</p>
@@ -249,7 +249,7 @@ export function OutreachDetailView({
               {isSent ? (
                 <div className="rounded-lg border border-blue-500/30 bg-blue-500/10 p-4">
                   <p className="text-sm font-medium text-blue-300">
-                    Email Sent Successfully (Mock/Test Mode)
+                    Email Sent Successfully
                   </p>
                   <p className="mt-1 text-xs text-blue-200/80">
                     Delivered via {outreach.provider} provider at {outreach.sentAt ? formatDateTime(outreach.sentAt) : ""}.

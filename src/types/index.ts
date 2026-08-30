@@ -520,3 +520,15 @@ export interface AiCostControlsView {
   monthlyUsedUsd: string;
   perRunCeilings: { agentId: AgentId; label: string; amountUsd: string }[];
 }
+
+export type EmailProviderStatus = {
+  provider: "resend";
+  providerKeyPresent: boolean;
+  liveEmailGateEnabled: boolean;
+  fromConfigured: boolean;
+  replyToConfigured: boolean;
+  internalTestRecipientConfigured: boolean;
+  webhookSecretPresent: boolean;
+  readyForInternalTest: boolean;
+  readyForProspectSend: boolean;
+};

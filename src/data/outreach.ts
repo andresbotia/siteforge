@@ -3,6 +3,13 @@ import "server-only";
 import { recordActivityEvent } from "@/data/activity";
 import { getAuthConfig } from "@/lib/auth/config";
 import { validateWebsiteSpec } from "@/lib/builder/validate";
+import { getEmailConfig, getEmailProviderStatus } from "@/lib/email/config";
+import {
+  hasUnsubscribeLanguage,
+  isRecipientSuppressed,
+  liveEmailAllowed,
+  verifyApprovedOutreachContent,
+} from "@/lib/email/delivery-policy";
 import { getEmailProvider, isValidEmail } from "@/lib/email/provider";
 import { asRecord } from "@/lib/json";
 import {
@@ -523,6 +530,7 @@ export async function sendApprovedOutreach(
   if (!outreach.recipient_email || !isValidEmail(outreach.recipient_email)) {
     return { ok: false, error: "A valid recipient email address is required to send." };
   }
+  const recipientEmail = outreach.recipient_email;
 
   if (!outreach.preview_deployment_id) {
     return { ok: false, error: "Outreach is missing an associated preview deployment." };
@@ -538,39 +546,50 @@ export async function sendApprovedOutreach(
     return { ok: false, error: "The associated preview deployment is revoked or inactive. Cannot send outreach with invalid preview." };
   }
 
-  // Verify approval exists and was executed
-  if (outreach.approval_id) {
-    const approval = await readTable<ApprovalRow | null>((client) =>
-      client.from("approvals").select("*").eq("id", outreach.approval_id!).maybeSingle(),
-    );
-    if (!approval || (approval.status !== "executed" && approval.status !== "approved")) {
-      return { ok: false, error: "Send approval is not in an approved state." };
-    }
-    const payload = asRecord(approval.payload);
-    const currentHash = computeOutreachContentHash({
-      subject: outreach.subject ?? "",
-      body: outreach.body ?? "",
-      recipient: outreach.recipient_email,
-      previewDeploymentId: outreach.preview_deployment_id,
-      attributionTokenHash: outreach.attribution_token_hash,
-    });
-    if (
-      payload.action !== "send_outreach_email" ||
-      payload.content_hash !== currentHash ||
-      payload.attribution_token_hash !== outreach.attribution_token_hash ||
-      payload.preview_deployment_id !== outreach.preview_deployment_id ||
-      payload.content_version !== outreach.content_version
-    ) {
-      return { ok: false, error: "Approved content no longer matches this outreach draft." };
-    }
-  } else {
-    return { ok: false, error: "Send approval is required before sending." };
-  }
+  if (!outreach.approval_id) return { ok: false, error: "Send approval is required before sending." };
+  const approval = await readTable<ApprovalRow | null>((client) =>
+    client.from("approvals").select("*").eq("id", outreach.approval_id!).maybeSingle(),
+  );
+  const approvalCheck = verifyApprovedOutreachContent(outreach, approval);
+  if (!approvalCheck.ok) return approvalCheck;
 
   const provider = getEmailProvider();
-  if (provider.id !== "mock") {
-    return { ok: false, error: "Only the mock email provider is allowed in Milestone 8." };
+  const emailConfig = getEmailConfig();
+  const emailStatus = getEmailProviderStatus(emailConfig);
+  const simulated = provider.id === "mock";
+  if (!simulated) {
+    const liveAllowed = liveEmailAllowed({
+      allowLiveEmail: emailConfig.allowLiveEmail,
+      providerKeyPresent: emailStatus.providerKeyPresent,
+      fromConfigured: emailStatus.fromConfigured,
+      replyToConfigured: emailStatus.replyToConfigured,
+    });
+    if (!liveAllowed.ok) return liveAllowed;
+    if (!hasUnsubscribeLanguage(outreach.body)) {
+      return {
+        ok: false,
+        error: "Real email delivery requires unsubscribe or opt-out language in the approved body.",
+      };
+    }
   }
+
+  const matchingRecipientRows = await readTable<Pick<OutreachRow, "id">[]>((client) =>
+    client
+      .from("outreach")
+      .select("id")
+      .eq("recipient_email", recipientEmail),
+  );
+  const matchingIds = new Set((matchingRecipientRows ?? []).map((row) => row.id));
+  const priorEvents = await readTable<OutreachEventRow[]>((client) =>
+    client.from("outreach_events").select("*"),
+  );
+  const suppressionEvents = (priorEvents ?? []).filter((event) =>
+    matchingIds.has(event.outreach_id),
+  );
+  if (isRecipientSuppressed(recipientEmail, suppressionEvents)) {
+    return { ok: false, error: "Recipient is suppressed or has unsubscribed." };
+  }
+
   const authConfig = getAuthConfig();
   if (!authConfig) return { ok: false, error: "Admin auth is not configured." };
   const attributionToken = createOutreachAttributionToken({
@@ -590,19 +609,23 @@ export async function sendApprovedOutreach(
     client.from("outreach_events").insert({
       outreach_id: outreach.id,
       event_type: "send_attempted",
-      payload: { provider: provider.id, simulated: true },
+      payload: { provider: provider.id, simulated },
     }),
   );
 
   const sendResult = await provider.sendEmail({
-    to: outreach.recipient_email,
-    from: outreach.sender_email || "outreach@siteforge.agency",
+    to: recipientEmail,
+    from: simulated
+      ? outreach.sender_email || "outreach@siteforge.agency"
+      : emailConfig.from ?? "",
     subject: outreach.subject ?? "",
     text: renderedBody,
+    replyTo: simulated ? undefined : emailConfig.replyTo ?? undefined,
     metadata: {
       outreach_id: outreach.id,
       lead_id: outreach.lead_id,
       preview_deployment_id: outreach.preview_deployment_id,
+      idempotency_key: `outreach/${outreach.id}/${approvalCheck.contentHash.slice(0, 16)}`,
     },
   });
 
@@ -676,7 +699,7 @@ export async function sendApprovedOutreach(
 
   await recordActivityEvent({
     eventType: "outreach_sent",
-    title: "Email outreach sent (simulated)",
+    title: simulated ? "Email outreach sent (simulated)" : "Email outreach sent",
     description: `${lead?.business_name ?? "Prospect"} (${outreach.recipient_email})`,
     actorType: "admin",
     leadId: outreach.lead_id,

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useActionState, useState } from "react";
+import { sendInternalTestEmailAction, type EmailActionState } from "@/app/actions/email";
 import { CostControlsPanel } from "@/components/ai/cost-controls-panel";
 import { Button } from "@/components/shared/button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
@@ -9,7 +10,12 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ConnectionBadge } from "@/components/shared/status-badge";
 import { settingsDefaults } from "@/lib/constants";
 import { cn } from "@/lib/cn";
-import type { AiCostControlsView, IntegrationStatus, ReadinessIndicator } from "@/types";
+import type {
+  AiCostControlsView,
+  EmailProviderStatus,
+  IntegrationStatus,
+  ReadinessIndicator,
+} from "@/types";
 
 const tabs = [
   "General",
@@ -27,13 +33,19 @@ export function SettingsView({
   integrations,
   costControls,
   readiness,
+  emailStatus,
 }: {
   integrations: IntegrationStatus[];
   costControls: AiCostControlsView;
   readiness: ReadinessIndicator[];
+  emailStatus: EmailProviderStatus;
 }) {
   const [tab, setTab] = useState<Tab>("General");
   const [settings, setSettings] = useState(settingsDefaults);
+  const [emailTestState, emailTestAction, emailTestPending] = useActionState<
+    EmailActionState,
+    FormData
+  >(sendInternalTestEmailAction, null);
 
   return (
     <>
@@ -224,59 +236,64 @@ export function SettingsView({
       ) : null}
 
       {tab === "Email" ? (
-        <Card>
-          <CardHeader
-            title="Email"
-            description="These addresses are placeholders. They do not exist and email is not implemented."
-          />
-          <CardBody className="grid gap-4 sm:grid-cols-2">
-            <Field label="Future sender domain" htmlFor="sender-domain">
-              <TextInput
-                id="sender-domain"
-                value={settings.email.senderDomain}
-                onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    email: {
-                      ...settings.email,
-                      senderDomain: event.target.value,
-                    },
-                  })
-                }
+        <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+          <Card>
+            <CardHeader
+              title="Real email status"
+              description="Server-derived configuration presence only. Secret values are never sent to the browser."
+            />
+            <CardBody className="space-y-2">
+              <EmailStatusRow label="Provider key" ready={emailStatus.providerKeyPresent} />
+              <EmailStatusRow label="Live-email gate" ready={emailStatus.liveEmailGateEnabled} />
+              <EmailStatusRow label="From address" ready={emailStatus.fromConfigured} />
+              <EmailStatusRow label="Reply-to address" ready={emailStatus.replyToConfigured} />
+              <EmailStatusRow
+                label="Internal test recipient"
+                ready={emailStatus.internalTestRecipientConfigured}
               />
-            </Field>
-            <Field label="Sales sender" htmlFor="sales-sender">
-              <TextInput
-                id="sales-sender"
-                value={settings.email.salesSender}
-                onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    email: {
-                      ...settings.email,
-                      salesSender: event.target.value,
-                    },
-                  })
-                }
-              />
-            </Field>
-            <Field label="Support sender" htmlFor="support-sender">
-              <TextInput
-                id="support-sender"
-                value={settings.email.supportSender}
-                onChange={(event) =>
-                  setSettings({
-                    ...settings,
-                    email: {
-                      ...settings.email,
-                      supportSender: event.target.value,
-                    },
-                  })
-                }
-              />
-            </Field>
-          </CardBody>
-        </Card>
+              <EmailStatusRow label="Webhook signing secret" ready={emailStatus.webhookSecretPresent} />
+              <div className="pt-2 text-xs text-muted">
+                Prospect sending remains approval-gated and suppression-checked. M9.5D campaign flow has not started.
+              </div>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader
+              title="Internal delivery test"
+              description="Operator-only TEST send. This does not touch lead funnel state."
+            />
+            <CardBody>
+              <form action={emailTestAction} className="grid gap-4">
+                <Field label="Internal recipient" htmlFor="internal-test-recipient">
+                  <TextInput
+                    id="internal-test-recipient"
+                    name="recipient"
+                    type="email"
+                    placeholder="operator@example.com"
+                    required
+                  />
+                </Field>
+                <Button
+                  type="submit"
+                  variant="primary"
+                  disabled={emailTestPending || !emailStatus.readyForInternalTest}
+                >
+                  {emailTestPending ? "Sending test..." : "Send TEST Email"}
+                </Button>
+                {emailTestState?.ok ? (
+                  <p className="text-xs text-success">
+                    Test send recorded{emailTestState.messageId ? ` (${emailTestState.messageId})` : ""}.
+                  </p>
+                ) : emailTestState?.error ? (
+                  <p className="text-xs text-danger" role="alert">
+                    {emailTestState.error}
+                  </p>
+                ) : null}
+              </form>
+            </CardBody>
+          </Card>
+        </div>
       ) : null}
 
       {tab === "Billing" ? (
@@ -387,5 +404,16 @@ export function SettingsView({
         </div>
       ) : null}
     </>
+  );
+}
+
+function EmailStatusRow({ label, ready }: { label: string; ready: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm">
+      <span>{label}</span>
+      <span className={cn("text-xs font-medium", ready ? "text-success" : "text-muted")}>
+        {ready ? "Configured" : "Not configured"}
+      </span>
+    </div>
   );
 }

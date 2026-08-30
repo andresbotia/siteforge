@@ -48,13 +48,15 @@ Agents never hold privileged infrastructure credentials, including `XAI_API_KEY`
 
 ## Current milestone
 
-M9.5B preparation adds a narrow **manual public-prospect import** path. An admin can enter a real business using public facts only, SiteForge validates and deduplicates it with existing Scout normalization logic, and the resulting lead is marked as `manual_public_prospect` so it cannot be confused with seed fixtures or automated Scout rows.
+M9.5C adds **guarded real email delivery infrastructure** for Resend and a narrow internal/operator test path. The deterministic mock provider remains the default for local development and tests. Live email fails closed unless `SITEFORGE_ALLOW_LIVE_EMAIL=true`, server-only Resend configuration is present, and the backend is executing an explicitly approved send.
 
-- Admin-only mutation through a Server Action and repository write.
-- Website input must be public http/https and passes the existing SSRF-safe URL checks.
-- No bulk discovery, crawling/searching, private customer data, payment/card data, real email, live Stripe, live paid AI, or customer production deployment is included.
-- Auditor and Builder remain deterministic `$0` manual workflows for the imported lead.
-- Credential rotation is deferred by operator decision for this public-data-only preparation, but remains required before sensitive customer/payment data, live provider use, or broader production operation.
+- Resend credentials are read only on the server; Client Components see presence/status booleans only.
+- Prospect sends still require the existing admin approval bound to exact recipient, subject, body, preview deployment, content version, and attribution token hash.
+- Live prospect delivery also checks provider readiness, suppression events, duplicate send state, and unsubscribe/opt-out language.
+- `/api/resend/webhook` verifies Svix/Resend signatures over the raw body, rejects unsigned live payloads, and records delivery/bounce/complaint/suppression events idempotently by provider event ID.
+- Settings includes an admin-only internal delivery test. It is labeled as a test, only allows the configured operator/admin recipient, records activity, and does not mark a lead contacted or mutate prospect funnel metrics.
+- No prospect email, campaign, Stripe call, paid AI call, deployment, DNS change, or autonomous send is part of M9.5C.
+- M9.5B manual public-prospect import and Auditor calibration are locked. M9.5D first controlled prospect campaign and M10 remain not started.
 
 Milestone 9 adds **Stripe Checkout + customer conversion**: manual commercial offers, approval-bound mock checkout creation, Stripe webhook ingestion, and idempotent lead-to-customer conversion. The migration has been applied to hosted Supabase and validated with mock Stripe checkout only.
 
@@ -125,14 +127,15 @@ Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek,
 | Manual public prospect import | Admin-only public-data import with normalization, dedupe, SSRF URL validation, and manual provenance |
 | Auditor | Manual $0 deterministic website audit |
 | Builder | Manual $0 deterministic template draft |
-| Sales | Manual $0 deterministic outreach drafting, approval binding, and mock send |
+| Sales | Manual $0 deterministic outreach drafting, approval binding, mock send, and guarded live-send boundary |
 | Preview deployments | Approval-gated tokenized public previews; not production hosting |
 | Other agents | Disabled |
 | xAI provider layer | Implemented, mock-tested, live calls gated off |
 | Supabase database | Server-side reads/writes with a secret key after admin session check |
-| Vercel / Resend / Stripe APIs | Not connected |
+| Vercel / Stripe APIs | Not connected |
+| Resend API | Server-only provider integrated; live sends gated off unless explicitly configured |
 | Authentication | Temporary single-admin env credentials. Not Supabase Auth. |
-| Email sending | Mock provider only; no real delivery or Resend call |
+| Email sending | Mock by default; guarded Resend path plus internal/operator test only |
 | Payments | M9 mock checkout workflow implemented and hosted-validated; live Stripe disabled |
 | Website generation and deploy | Internal drafts only; no customer production deploy |
 
@@ -232,7 +235,7 @@ src/
   lib/builder/      Deterministic template drafts and WebsiteSpec
   lib/previews/     Public preview tokens, policy, and tracking helpers
   lib/sales/        Deterministic outreach drafting, approval binding, attribution tokens
-  lib/email/        Mock-only email provider abstraction
+  lib/email/        Mock and guarded Resend provider, delivery policy, webhook verification
   lib/payments/     Commercial offers, checkout policy, mock Stripe provider, webhook parsing
   lib/supabase/     Server-only Supabase client
   lib/auth/         Temporary admin session
@@ -265,6 +268,12 @@ NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 SUPABASE_SECRET_KEY=sb_secret_...
 XAI_API_KEY=
 XAI_ALLOW_LIVE_INFERENCE=
+RESEND_API_KEY=
+SITEFORGE_EMAIL_FROM=
+SITEFORGE_EMAIL_REPLY_TO=
+SITEFORGE_ALLOW_LIVE_EMAIL=false
+SITEFORGE_INTERNAL_TEST_EMAIL=
+RESEND_WEBHOOK_SECRET=
 ```
 
 Generate `SITEFORGE_AUTH_SECRET` with a cryptographically random value, for example:
@@ -327,9 +336,22 @@ Live xAI inference cannot occur merely because `XAI_API_KEY` exists. A paid AI r
 | `STRIPE_SECRET_KEY` | Optional server-only key for a future live Stripe provider. |
 | `STRIPE_WEBHOOK_SECRET` | Optional server-only webhook signing secret. Required only for live Stripe webhook verification. |
 | `STRIPE_ALLOW_LIVE_PAYMENTS` | Live-action gate. Must be exactly `true`; default off. |
-| `RESEND_API_KEY` | Optional server-only key for future M9.5C real email integration. |
+| `RESEND_API_KEY` | Optional server-only Resend key. Required only for gated live email. |
+| `SITEFORGE_EMAIL_FROM` | Server-only sender identity used for gated live email. |
+| `SITEFORGE_EMAIL_REPLY_TO` | Server-only reply-to mailbox used for gated live prospect email. |
+| `SITEFORGE_ALLOW_LIVE_EMAIL` | Live-email gate. Must be exactly `true`; default off. |
+| `SITEFORGE_INTERNAL_TEST_EMAIL` | Optional allowlisted operator recipient for Settings internal test sends. Falls back to the admin email when absent. |
+| `RESEND_WEBHOOK_SECRET` | Optional server-only Resend/Svix webhook signing secret. Required before accepting live Resend webhook events. |
 
-Stripe checkout defaults to the mock provider. The live provider still fails closed in this milestone and does not create live checkout sessions. Email sending is mock-only; a Resend key alone does not enable delivery.
+Stripe checkout defaults to the mock provider. The live Stripe provider still fails closed in this milestone and does not create live checkout sessions. Email sending defaults to the mock provider; a Resend key alone does not enable delivery.
+
+To prepare M9.5C real email without sending prospects:
+
+1. Configure and verify the sending domain in Resend outside agent context.
+2. Add the Resend key and email settings only to server-side local/Vercel environment variables.
+3. Keep `SITEFORGE_ALLOW_LIVE_EMAIL=false` until approving an exact internal test or future prospect send.
+4. Configure the Resend webhook endpoint `/api/resend/webhook` with the signing secret, then verify delivery events with live gate controls still in place.
+5. Do not send prospect email until M9.5D explicitly starts.
 
 ### Vercel and future deployment automation
 
@@ -351,7 +373,8 @@ Set these variables in Vercel Project → Settings → Environment Variables for
 - `XAI_ALLOW_LIVE_INFERENCE` (leave unset)
 - `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` only when entering approved Stripe test/live work
 - `STRIPE_ALLOW_LIVE_PAYMENTS` (leave unset)
-- `RESEND_API_KEY` only when entering M9.5C email integration
+- `RESEND_API_KEY`, `SITEFORGE_EMAIL_FROM`, `SITEFORGE_EMAIL_REPLY_TO`, `SITEFORGE_INTERNAL_TEST_EMAIL`, and `RESEND_WEBHOOK_SECRET` only for M9.5C guarded email setup
+- `SITEFORGE_ALLOW_LIVE_EMAIL` only for an explicitly approved internal/operator test or later controlled prospect send
 - `VERCEL_TOKEN` only when entering approved deployment automation work
 
 Then redeploy.

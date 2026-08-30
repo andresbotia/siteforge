@@ -1,6 +1,6 @@
 # SiteForge Handoff
 
-For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5A Roadmap Persistence + Production/Security Readiness is COMPLETE / VALIDATED after the launch-readiness pass. M9.5B real-prospect preparation is implemented and validated as a public-data-only manual import path. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live email/payment use, or broader production operation. This is NOT M10.
+For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5A Roadmap Persistence + Production/Security Readiness is COMPLETE / VALIDATED after the launch-readiness pass. M9.5B real-prospect preparation and Auditor calibration are locked, with the M9.5B Auditor Calibration lock at `1358caad47c46b9832f875ec1e62d5834043906b`. M9.5C guarded real email infrastructure is implemented as a Resend-backed, fail-closed provider path plus internal/operator test workflow. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live email/payment use, or broader production operation. This is NOT M10.
 
 ## M9.5 Roadmap
 
@@ -22,7 +22,7 @@ Backlog after M9.5:
 - M12 - Scout Scaling: scalable real prospect discovery/enrichment, targeting, deduplication, scheduling, and acquisition automation.
 - M13 - Operations & Optimization: funnel analytics, experiments, scheduling, agent automation, cost optimization, operational dashboards and scaling.
 
-M10-M13 are backlog milestones and may be reordered based on real market evidence. Do not implement M10-M13 during M9.5A.
+M10-M13 are backlog milestones and may be reordered based on real market evidence. Do not implement M10-M13 during M9.5.
 
 ## M9.5A Safety Rule
 
@@ -70,7 +70,7 @@ Still blocked during M9.5B preparation:
 - Live paid AI calls
 - Customer production deployments, domains, or DNS
 
-Manual public prospect import is the first real acquisition path for M9.5B. Broad Scout acquisition automation remains M12 backlog. M9.5C is not started. M10 is not started.
+Manual public prospect import is the first real acquisition path for M9.5B. Broad Scout acquisition automation remains M12 backlog. M10 is not started.
 
 M9.5B Auditor calibration is implemented for the first real manual prospects. Auditor now treats `overall_score` as deterministic website health (100 = technically/content healthy) and `redesign_opportunity_score` as a separate SiteForge fit signal weighted toward conversion blockers, contact paths, local trust signals, industry-specific gaps, and site availability. Minor maintenance findings should not by themselves make a healthy site look like a strong redesign candidate. No paid AI, email, Stripe, customer deployment, domain, or DNS action is part of this calibration.
 
@@ -79,12 +79,23 @@ M9.5B.1 Auditor Opportunity Differentiation follow-up: commit `d7f85679bc846b49a
 M9.5C:
 
 - Resend/provider integrated behind backend boundary
-- Sending domain authenticated
+- Sending domain authentication remains an operator Resend/DNS setup task; SiteForge does not modify DNS.
 - Unsubscribe/suppression safeguards
 - Explicit live-email gate
 - Human approval still mandatory
-- One internal email successfully sent to operator
+- Internal/operator test path is implemented and allowlisted; run only after operator config and approval.
 - No prospect email yet
+
+M9.5C guarded email integration:
+
+- Default provider remains the deterministic mock provider unless `SITEFORGE_ALLOW_LIVE_EMAIL=true`.
+- Live Resend delivery requires server-only `RESEND_API_KEY`, `SITEFORGE_EMAIL_FROM`, `SITEFORGE_EMAIL_REPLY_TO`, and exact backend approval for the send.
+- Settings -> Email shows presence-only status for provider key, live gate, sender, reply-to, internal test recipient, and webhook signing secret.
+- The internal delivery test is admin-only, labeled test content, restricted to the configured operator/admin recipient, and records `internal_email_test_*` activity events without mutating leads, outreach, contacted status, prospect funnel metrics, or campaign state.
+- Prospect sends continue to require approval bound to exact recipient, subject, body, preview deployment, content version, and attribution token hash. Edited or stale content fails closed.
+- Live prospect sends additionally require provider readiness, duplicate-send blocking, suppression/DNC checks, and unsubscribe/opt-out language in the approved body.
+- `/api/resend/webhook` verifies Resend/Svix signatures against the raw body, rejects unsigned or invalid payloads, and stores supported delivery/bounce/complaint/suppression events idempotently by provider event ID.
+- No prospect email has been sent. No controlled prospect campaign has started. M9.5D is not started. M10 is not started.
 
 M9.5D:
 
@@ -125,6 +136,8 @@ M9 smoke conversion used mock Stripe IDs and must not be treated as real payment
 
 M9.5B manual prospect import is limited to public business facts supplied by the admin. It does not discover businesses in bulk, send outreach, process payments, call paid AI, or deploy customer production websites.
 
+M9.5C guarded email setup adds real Resend infrastructure but does not start prospect outreach. Configure Resend sender/domain, server-only environment variables, and webhook signing outside agent context. Keep live email disabled until approving an exact internal/operator test or a later M9.5D prospect send.
+
 First production import failure diagnosis: Vercel had `NEXT_PUBLIC_SUPABASE_SECRET_KEY` configured but not server-only `SUPABASE_SECRET_KEY`, so the server Supabase client could not initialize. The public-prefixed value must be removed/replaced with the correct server-only Vercel variable before retrying the manual import.
 
 ## Project
@@ -135,6 +148,7 @@ First production import failure diagnosis: Vercel had `NEXT_PUBLIC_SUPABASE_SECR
 - Vercel production admin app deployment
 - Temporary single-admin cookie auth (`SITEFORGE_ADMIN_*`)
 - xAI provider infrastructure exists; live inference remains disabled (`XAI_ALLOW_LIVE_INFERENCE` not `true`)
+- Resend provider infrastructure exists; live email remains disabled unless `SITEFORGE_ALLOW_LIVE_EMAIL=true` and all server-only provider settings are present.
 
 Repo: `https://github.com/andresbotia/siteforge`
 Branch: `main`
@@ -337,7 +351,7 @@ Validation:
 - Builder deterministic path remains $0
 - Sales deterministic draft path remains $0
 - Public prospect previews exist only after human approval and only as tokenized previews
-- Outreach send execution is mock-only; no real email is sent
+- Outreach send execution is mock by default; guarded Resend live delivery requires exact approval, provider readiness, suppression checks, and the live-email gate
 - No payments
 - No domain/DNS automation
 - Supabase public application-table access remains revoked
@@ -345,4 +359,4 @@ Validation:
 
 ## Next Milestone
 
-Continue M9.5B only inside the manual public-prospect boundary. Do not start M10.
+Continue with M9.5C operator setup/internal test only if explicitly approved, or start M9.5D only when the operator explicitly requests the first controlled prospect campaign. Do not start M10.

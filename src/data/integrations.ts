@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getAuthConfig } from "@/lib/auth/config";
+import { getEmailProviderStatus } from "@/lib/email/config";
 import { getSupabaseServerConfigIssue } from "@/lib/supabase/config";
 import { readTable } from "@/lib/supabase/server";
 import type {
@@ -102,7 +103,7 @@ export function getReadinessIndicators(): ReadinessIndicator[] {
   const authConfigured = Boolean(getAuthConfig());
   const liveAiEnabled = process.env.XAI_ALLOW_LIVE_INFERENCE === "true";
   const liveStripeEnabled = process.env.STRIPE_ALLOW_LIVE_PAYMENTS === "true";
-  const resendConfigured = Boolean(process.env.RESEND_API_KEY?.trim());
+  const emailStatus = getEmailProviderStatus();
 
   return [
     {
@@ -140,8 +141,12 @@ export function getReadinessIndicators(): ReadinessIndicator[] {
     {
       id: "email",
       label: "Real email provider",
-      status: resendConfigured ? "Key present but provider disabled" : "Disabled",
-      severity: resendConfigured ? "attention" : "ok",
+      status: emailStatus.providerKeyPresent
+        ? emailStatus.liveEmailGateEnabled
+          ? "Key present; live gate enabled"
+          : "Key present; live gate disabled"
+        : "Key missing; live gate disabled",
+      severity: emailStatus.liveEmailGateEnabled ? "attention" : "ok",
     },
     {
       id: "credential-rotation",
