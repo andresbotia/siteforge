@@ -1,4 +1,4 @@
-import type { EmailProviderStatus } from "@/types";
+import type { ConnectionStatus, EmailProviderStatus } from "@/types";
 import { isValidEmail } from "./validation";
 
 export type EmailConfig = {
@@ -45,6 +45,24 @@ export function isSafeInternalTestRecipient(
       normalized === config.internalTestRecipient.trim().toLowerCase() &&
       isValidEmail(normalized),
   );
+}
+
+export function getEmailConnectionStatus(status: EmailProviderStatus): ConnectionStatus {
+  const hasAnyEmailConfig =
+    status.providerKeyPresent ||
+    status.fromConfigured ||
+    status.replyToConfigured ||
+    status.webhookSecretPresent;
+  if (!hasAnyEmailConfig) return "not_connected";
+  if (
+    status.providerKeyPresent &&
+    status.fromConfigured &&
+    status.replyToConfigured &&
+    status.webhookSecretPresent
+  ) {
+    return "connected";
+  }
+  return "error";
 }
 
 function isValidEmailAddressLike(value: string): boolean {

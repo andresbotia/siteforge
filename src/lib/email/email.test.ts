@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, test } from "node:test";
-import { getEmailProviderStatus, isSafeInternalTestRecipient } from "./config-core";
+import {
+  getEmailConnectionStatus,
+  getEmailProviderStatus,
+  isSafeInternalTestRecipient,
+} from "./config-core";
 import {
   hasUnsubscribeLanguage,
   isRecipientSuppressed,
@@ -67,6 +71,37 @@ describe("email provider configuration", () => {
 
     assert.equal(isSafeInternalTestRecipient("operator@example.com", config), true);
     assert.equal(isSafeInternalTestRecipient("prospect@example.com", config), false);
+  });
+
+  test("email connection status reflects provider configuration without enabling sends", () => {
+    const configured = getEmailProviderStatus({
+      provider: "mock",
+      resendApiKey: "re_test",
+      from: "SiteForge <sender@example.com>",
+      replyTo: "reply@example.com",
+      allowLiveEmail: false,
+      internalTestRecipient: "operator@example.com",
+      webhookSecret: "whsec_test",
+    });
+
+    assert.equal(configured.liveEmailGateEnabled, false);
+    assert.equal(configured.readyForInternalTest, false);
+    assert.equal(configured.readyForProspectSend, false);
+    assert.equal(getEmailConnectionStatus(configured), "connected");
+  });
+
+  test("email connection status flags partial provider configuration", () => {
+    const partial = getEmailProviderStatus({
+      provider: "mock",
+      resendApiKey: "re_test",
+      from: null,
+      replyTo: "reply@example.com",
+      allowLiveEmail: false,
+      internalTestRecipient: "operator@example.com",
+      webhookSecret: null,
+    });
+
+    assert.equal(getEmailConnectionStatus(partial), "error");
   });
 
   test("provider credentials are not referenced by client components", () => {

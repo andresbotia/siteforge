@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getAuthConfig } from "@/lib/auth/config";
-import { getEmailProviderStatus } from "@/lib/email/config";
+import { getEmailConnectionStatus, getEmailProviderStatus } from "@/lib/email/config";
 import { getSupabaseServerConfigIssue } from "@/lib/supabase/config";
 import { readTable } from "@/lib/supabase/server";
 import type {
@@ -75,7 +75,12 @@ export async function listIntegrations(): Promise<IntegrationStatus[]> {
           };
         });
 
-  return mapped.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+  const emailConnectionStatus = getEmailConnectionStatus();
+  return mapped
+    .map((item) =>
+      item.id === "resend" ? { ...item, status: emailConnectionStatus } : item,
+    )
+    .sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
 }
 
 export async function listSystemStatus(): Promise<SystemServiceStatus[]> {

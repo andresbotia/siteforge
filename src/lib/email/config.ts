@@ -2,6 +2,7 @@ import "server-only";
 
 import { getAuthConfig } from "@/lib/auth/config";
 import {
+  getEmailConnectionStatus as getEmailConnectionStatusCore,
   getEmailProviderStatus as getEmailProviderStatusCore,
   isSafeInternalTestRecipient as isSafeInternalTestRecipientCore,
   type EmailConfig,
@@ -33,6 +34,10 @@ export function getEmailConfig(): EmailConfig {
 
 export function getEmailProviderStatus(config = getEmailConfig()) {
   return getEmailProviderStatusCore(config);
+}
+
+export function getEmailConnectionStatus(config = getEmailConfig()) {
+  return getEmailConnectionStatusCore(getEmailProviderStatus(config));
 }
 
 export function isSafeInternalTestRecipient(recipient: string, config = getEmailConfig()) {
