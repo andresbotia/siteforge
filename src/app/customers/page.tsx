@@ -50,16 +50,22 @@ export default async function CustomersPage() {
           {customers.map((customer) => (
             <tr key={customer.id} className="hover:bg-surface-hover/70">
               <Td>
+                <Link
+                  href={`/customers/${customer.id}`}
+                  className="font-medium hover:text-accent"
+                >
+                  {customer.businessName}
+                </Link>
                 {customer.leadId ? (
-                  <Link
-                    href={`/leads/${customer.leadId}`}
-                    className="font-medium hover:text-accent"
-                  >
-                    {customer.businessName}
-                  </Link>
-                ) : (
-                  customer.businessName
-                )}
+                  <div>
+                    <Link
+                      href={`/leads/${customer.leadId}`}
+                      className="text-[11px] text-muted hover:text-foreground"
+                    >
+                      Lead profile
+                    </Link>
+                  </div>
+                ) : null}
               </Td>
               <Td className="max-w-[240px] truncate text-xs text-muted">
                 {customer.website.replace("https://", "")}

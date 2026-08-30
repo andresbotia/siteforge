@@ -1,8 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { OutreachDetailView } from "@/components/sales/outreach-detail-view";
+import { CreateOfferForm } from "@/components/offers/create-offer-form";
+import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { getOutreachById } from "@/data/outreach";
+import { getLeadById } from "@/data/leads";
+import { getWebsiteById } from "@/data/websites";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +30,10 @@ export default async function OutreachDetailPage({
   const { id } = await params;
   const outreach = await getOutreachById(id);
   if (!outreach) notFound();
+  const [lead, website] = await Promise.all([
+    getLeadById(outreach.leadId),
+    outreach.generatedWebsiteId ? getWebsiteById(outreach.generatedWebsiteId) : null,
+  ]);
 
   return (
     <>
@@ -34,6 +42,17 @@ export default async function OutreachDetailPage({
         description="Deterministic email outreach draft with evidence traceability and approval gates."
       />
       <OutreachDetailView outreach={outreach} />
+      {lead ? (
+        <Card className="mt-6">
+          <CardHeader
+            title="Commercial offer"
+            description="Create an M9 offer connected to this outreach and preview context."
+          />
+          <CardBody>
+            <CreateOfferForm lead={lead} website={website} outreachId={outreach.id} />
+          </CardBody>
+        </Card>
+      ) : null}
     </>
   );
 }

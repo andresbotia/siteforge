@@ -69,6 +69,16 @@ export async function approveApprovalAction(
     return result;
   }
 
+  if (type === "payment_action" && payloadAction === "create_stripe_checkout_session") {
+    const { approveCommercialOfferApproval } = await import("@/data/payments");
+    const result = await approveCommercialOfferApproval(id);
+    if (result.ok) {
+      revalidatePath("/approvals");
+      revalidatePath("/offers");
+    }
+    return result;
+  }
+
   const result = await approveGenericApproval(id);
   if (result.ok) revalidatePath("/approvals");
   return result;

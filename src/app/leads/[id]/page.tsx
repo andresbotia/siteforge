@@ -4,8 +4,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AuditRunButton } from "@/components/auditor/audit-run-button";
 import { BuildRunButton } from "@/components/builder/build-run-button";
+import { CreateOfferForm } from "@/components/offers/create-offer-form";
 import { listActivityForLead } from "@/data/activity";
 import { getLatestAuditForLead, getLeadById, listAuditsForLead } from "@/data/leads";
+import { listCommercialOffersForLead } from "@/data/payments";
 import { getLatestWebsiteForLead } from "@/data/websites";
 import { isLeadEligibleForAudit } from "@/lib/auditor/eligibility";
 import { isLeadEligibleForBuild } from "@/lib/builder/eligibility";
@@ -13,6 +15,7 @@ import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { ScoreBar, ScoreRing } from "@/components/shared/score-bar";
 import {
+  CommercialOfferStatusBadge,
   LeadStatusBadge,
   QualificationBadge,
 } from "@/components/shared/status-badge";
@@ -38,11 +41,12 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
   const lead = await getLeadById(id);
   if (!lead) notFound();
 
-  const [audit, audits, activity, website] = await Promise.all([
+  const [audit, audits, activity, website, offers] = await Promise.all([
     getLatestAuditForLead(lead.id),
     listAuditsForLead(lead.id),
     listActivityForLead(lead.id),
     getLatestWebsiteForLead(lead.id),
+    listCommercialOffersForLead(lead.id),
   ]);
   const canAudit = isLeadEligibleForAudit(lead);
   const canBuild = isLeadEligibleForBuild(lead);
@@ -268,6 +272,40 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           </CardBody>
         </Card>
       )}
+
+      <Card className="mt-4">
+        <CardHeader
+          title="Commercial offers"
+          description="M9 local checkout offers. Mock payment execution only."
+        />
+        <CardBody className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div>
+            {offers.length === 0 ? (
+              <p className="text-sm text-muted">No offers yet.</p>
+            ) : (
+              <ul className="space-y-2">
+                {offers.map((offer) => (
+                  <li key={offer.id} className="rounded border border-border-subtle p-3 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <Link href={`/offers/${offer.id}`} className="font-medium text-accent hover:underline">
+                        Offer {offer.id.slice(0, 8)}
+                      </Link>
+                      <CommercialOfferStatusBadge status={offer.status} />
+                    </div>
+                    <p className="mt-1 text-xs text-muted">
+                      Setup cents: {offer.setupAmountCents}
+                      {offer.managedPlanSelected && offer.managedMonthlyAmountCents
+                        ? `; managed monthly cents: ${offer.managedMonthlyAmountCents}`
+                        : ""}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <CreateOfferForm lead={lead} website={website} />
+        </CardBody>
+      </Card>
 
       <Card className="mt-4">
         <CardHeader title="Activity timeline" />

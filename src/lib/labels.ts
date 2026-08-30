@@ -9,6 +9,7 @@ import type {
   OutreachStatus,
   QualificationTier,
   RiskLevel,
+  CommercialOfferStatus,
 } from "@/types";
 
 export const qualificationTierLabel: Record<QualificationTier, string> = {
@@ -94,4 +95,14 @@ export const connectionStatusLabel: Record<ConnectionStatus, string> = {
 export const customerPlanPrice: Record<CustomerPlan, string> = {
   website_only: "$99 one time",
   managed: "$39/month",
+};
+
+export const commercialOfferStatusLabel: Record<CommercialOfferStatus, string> = {
+  draft: "Draft",
+  awaiting_approval: "Awaiting Approval",
+  approved: "Approved",
+  checkout_created: "Checkout Created",
+  paid: "Paid",
+  expired: "Expired",
+  cancelled: "Cancelled",
 };

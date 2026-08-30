@@ -1,6 +1,7 @@
 import { Badge } from "@/components/shared/badge";
 import {
   approvalTypeLabel,
+  commercialOfferStatusLabel,
   connectionStatusLabel,
   customerPlanLabel,
   customerStatusLabel,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/labels";
 import type {
   ApprovalType,
+  CommercialOfferStatus,
   ConnectionStatus,
   CustomerPlan,
   CustomerStatus,
@@ -75,6 +77,16 @@ const approvalTone = {
   destructive_infrastructure_action: "danger",
 } as const;
 
+const commercialOfferTone = {
+  draft: "neutral",
+  awaiting_approval: "warning",
+  approved: "accent",
+  checkout_created: "info",
+  paid: "success",
+  expired: "neutral",
+  cancelled: "danger",
+} as const;
+
 const riskTone = {
   low: "success",
   medium: "warning",
@@ -135,6 +147,18 @@ export function PlanBadge({ plan }: { plan: CustomerPlan }) {
 export function ApprovalTypeBadge({ type }: { type: ApprovalType }) {
   return (
     <Badge tone={approvalTone[type]}>{approvalTypeLabel[type]}</Badge>
+  );
+}
+
+export function CommercialOfferStatusBadge({
+  status,
+}: {
+  status: CommercialOfferStatus;
+}) {
+  return (
+    <Badge tone={commercialOfferTone[status]}>
+      {commercialOfferStatusLabel[status]}
+    </Badge>
   );
 }
 

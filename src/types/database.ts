@@ -549,36 +549,248 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      commercial_offers: {
+        Row: {
+          id: string;
+          lead_id: string;
+          generated_website_id: string | null;
+          outreach_id: string | null;
+          customer_id: string | null;
+          approval_id: string | null;
+          status: string;
+          currency: string;
+          setup_amount_cents: number;
+          managed_monthly_amount_cents: number | null;
+          managed_plan_selected: boolean;
+          description: string;
+          content_hash: string;
+          content_version: string;
+          approved_at: string | null;
+          expires_at: string | null;
+          metadata: Json;
+        } & Timestamps;
+        Insert: {
+          id?: string;
+          lead_id: string;
+          generated_website_id?: string | null;
+          outreach_id?: string | null;
+          customer_id?: string | null;
+          approval_id?: string | null;
+          status?: string;
+          currency?: string;
+          setup_amount_cents: number;
+          managed_monthly_amount_cents?: number | null;
+          managed_plan_selected?: boolean;
+          description: string;
+          content_hash: string;
+          content_version?: string;
+          approved_at?: string | null;
+          expires_at?: string | null;
+          metadata?: Json;
+        };
+        Update: {
+          generated_website_id?: string | null;
+          outreach_id?: string | null;
+          customer_id?: string | null;
+          approval_id?: string | null;
+          status?: string;
+          currency?: string;
+          setup_amount_cents?: number;
+          managed_monthly_amount_cents?: number | null;
+          managed_plan_selected?: boolean;
+          description?: string;
+          content_hash?: string;
+          content_version?: string;
+          approved_at?: string | null;
+          expires_at?: string | null;
+          metadata?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      stripe_checkout_sessions: {
+        Row: {
+          id: string;
+          commercial_offer_id: string;
+          lead_id: string;
+          stripe_checkout_session_id: string;
+          stripe_customer_id: string | null;
+          stripe_payment_intent_id: string | null;
+          stripe_subscription_id: string | null;
+          mode: string;
+          status: string;
+          checkout_url: string | null;
+          amount_total_cents: number | null;
+          currency: string | null;
+          expires_at: string | null;
+          completed_at: string | null;
+          last_event_at: string | null;
+          metadata: Json;
+        } & Timestamps;
+        Insert: {
+          id?: string;
+          commercial_offer_id: string;
+          lead_id: string;
+          stripe_checkout_session_id: string;
+          stripe_customer_id?: string | null;
+          stripe_payment_intent_id?: string | null;
+          stripe_subscription_id?: string | null;
+          mode: string;
+          status?: string;
+          checkout_url?: string | null;
+          amount_total_cents?: number | null;
+          currency?: string | null;
+          expires_at?: string | null;
+          completed_at?: string | null;
+          last_event_at?: string | null;
+          metadata?: Json;
+        };
+        Update: {
+          stripe_customer_id?: string | null;
+          stripe_payment_intent_id?: string | null;
+          stripe_subscription_id?: string | null;
+          status?: string;
+          checkout_url?: string | null;
+          amount_total_cents?: number | null;
+          currency?: string | null;
+          expires_at?: string | null;
+          completed_at?: string | null;
+          last_event_at?: string | null;
+          metadata?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      stripe_webhook_events: {
+        Row: {
+          id: string;
+          stripe_event_id: string;
+          event_type: string;
+          object_id: string | null;
+          processing_status: string;
+          payload_metadata: Json;
+          processed_at: string | null;
+          error: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          stripe_event_id: string;
+          event_type: string;
+          object_id?: string | null;
+          processing_status?: string;
+          payload_metadata?: Json;
+          processed_at?: string | null;
+          error?: string | null;
+        };
+        Update: {
+          processing_status?: string;
+          payload_metadata?: Json;
+          processed_at?: string | null;
+          error?: string | null;
+        };
+        Relationships: [];
+      };
       customers: {
         Row: {
           id: string;
           lead_id: string | null;
+          commercial_offer_id: string | null;
+          stripe_customer_id: string | null;
           business_name: string;
           contact_name: string | null;
           contact_email: string | null;
           plan: string;
           status: string;
           production_url: string | null;
+          converted_at: string | null;
+          conversion_metadata: Json;
         } & Timestamps;
-        Insert: Record<string, never>;
-        Update: Record<string, never>;
+        Insert: {
+          id?: string;
+          lead_id?: string | null;
+          commercial_offer_id?: string | null;
+          stripe_customer_id?: string | null;
+          business_name: string;
+          contact_name?: string | null;
+          contact_email?: string | null;
+          plan: string;
+          status: string;
+          production_url?: string | null;
+          converted_at?: string | null;
+          conversion_metadata?: Json;
+        };
+        Update: {
+          lead_id?: string | null;
+          commercial_offer_id?: string | null;
+          stripe_customer_id?: string | null;
+          business_name?: string;
+          contact_name?: string | null;
+          contact_email?: string | null;
+          plan?: string;
+          status?: string;
+          production_url?: string | null;
+          converted_at?: string | null;
+          conversion_metadata?: Json;
+          updated_at?: string;
+        };
         Relationships: [];
       };
       subscriptions: {
         Row: {
           id: string;
           customer_id: string;
+          commercial_offer_id: string | null;
           provider: string | null;
           provider_customer_id: string | null;
           provider_subscription_id: string | null;
           amount_usd: number;
+          amount_cents: number | null;
+          currency: string | null;
           interval: string | null;
           status: string;
           started_at: string | null;
           cancelled_at: string | null;
+          current_period_start: string | null;
+          current_period_end: string | null;
+          conversion_metadata: Json;
         } & Timestamps;
-        Insert: Record<string, never>;
-        Update: Record<string, never>;
+        Insert: {
+          id?: string;
+          customer_id: string;
+          commercial_offer_id?: string | null;
+          provider?: string | null;
+          provider_customer_id?: string | null;
+          provider_subscription_id?: string | null;
+          amount_usd?: number;
+          amount_cents?: number | null;
+          currency?: string | null;
+          interval?: string | null;
+          status: string;
+          started_at?: string | null;
+          cancelled_at?: string | null;
+          current_period_start?: string | null;
+          current_period_end?: string | null;
+          conversion_metadata?: Json;
+        };
+        Update: {
+          customer_id?: string;
+          commercial_offer_id?: string | null;
+          provider?: string | null;
+          provider_customer_id?: string | null;
+          provider_subscription_id?: string | null;
+          amount_usd?: number;
+          amount_cents?: number | null;
+          currency?: string | null;
+          interval?: string | null;
+          status?: string;
+          started_at?: string | null;
+          cancelled_at?: string | null;
+          current_period_start?: string | null;
+          current_period_end?: string | null;
+          conversion_metadata?: Json;
+          updated_at?: string;
+        };
         Relationships: [];
       };
       integration_status: {
@@ -655,6 +867,12 @@ export type ApprovalRow = Database["public"]["Tables"]["approvals"]["Row"];
 export type OutreachRow = Database["public"]["Tables"]["outreach"]["Row"];
 export type OutreachEventRow =
   Database["public"]["Tables"]["outreach_events"]["Row"];
+export type CommercialOfferRow =
+  Database["public"]["Tables"]["commercial_offers"]["Row"];
+export type StripeCheckoutSessionRow =
+  Database["public"]["Tables"]["stripe_checkout_sessions"]["Row"];
+export type StripeWebhookEventRow =
+  Database["public"]["Tables"]["stripe_webhook_events"]["Row"];
 export type CustomerRow = Database["public"]["Tables"]["customers"]["Row"];
 export type SubscriptionRow =
   Database["public"]["Tables"]["subscriptions"]["Row"];

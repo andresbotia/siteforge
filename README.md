@@ -48,7 +48,19 @@ Agents never hold privileged infrastructure credentials, including `XAI_API_KEY`
 
 ## Current milestone
 
-Milestone 8 adds **Sales Agent + email approval** locally: a manual, deterministic outreach workflow that drafts prospect email, requires human approval, uses a mock email provider, and attributes public preview activity back to the outreach record.
+Milestone 9 adds **Stripe Checkout + customer conversion**: manual commercial offers, approval-bound mock checkout creation, Stripe webhook ingestion, and idempotent lead-to-customer conversion. The migration has been applied to hosted Supabase and validated with mock Stripe checkout only.
+
+- Offers live at `/offers`, `/offers/[id]`, on lead detail, and from outreach detail.
+- Offer creation is manual and deterministic. It does not call paid AI and does not contact a prospect.
+- Checkout approval binds the exact lead, generated website, outreach record, currency, setup amount, managed monthly amount, plan selection, content version, and content hash.
+- Editing approved offer terms resets approval and expires the pending approval when applicable.
+- The default payment provider is mock Stripe. It creates deterministic `cs_mock_*`, `cus_mock_*`, `pi_mock_*`, and optional `sub_mock_*` identifiers without a network call.
+- Live Stripe fails closed unless `STRIPE_ALLOW_LIVE_PAYMENTS=true` and server-side Stripe secrets are configured. Live checkout creation is not enabled for this milestone.
+- `/api/stripe/webhook` reads the raw body, separates mock test traffic via `x-siteforge-mock-stripe: true`, and requires a valid Stripe signature for live traffic.
+- `checkout.session.completed` is idempotent by Stripe event ID, updates the checkout session, creates or updates a customer, creates a managed subscription only when selected, and advances the lead to `customer`.
+- No Stripe API call, real charge, production deployment, Resend call, email delivery, or paid AI/API call is part of Milestone 9.
+
+Milestone 8 added **Sales Agent + email approval**: a manual, deterministic outreach workflow that drafts prospect email, requires human approval, uses a mock email provider, and attributes public preview activity back to the outreach record.
 
 - Sales is available at `/agents/sales`; outreach review lives at `/outreach` and `/outreach/[id]`.
 - Drafting is deterministic and `$0`; it does not call paid AI and does not invent emails, contact names, testimonials, pricing, or unsupported claims.
@@ -57,7 +69,7 @@ Milestone 8 adds **Sales Agent + email approval** locally: a manual, determinist
 - M7 preview raw tokens are still never persisted, and M7 token hints are never used to reconstruct public URLs.
 - Approval binds the exact recipient, subject, body, preview deployment, content version, and attribution token hash. Editing the draft resets send approval.
 - The only wired email provider is the deterministic mock provider. It returns fake `msg_mock_*` IDs and performs no external network call or real delivery.
-- The M8 migration is version-controlled locally but must be applied to Supabase separately before hosted smoke testing.
+- The M8 migration was version-controlled, applied to hosted Supabase, smoke-tested, and locked in commit `42e3752c25deabe6464a318b7ae1cbbaadcf9815`.
 - No Resend integration, production deployment, domain/DNS change, payment, or paid AI call is part of Milestone 8.
 
 Milestone 7 added **Preview Deployments + Tracking**: a manual, approval-gated way to share generated Builder drafts with prospects.
@@ -112,7 +124,7 @@ Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek,
 | Vercel / Resend / Stripe APIs | Not connected |
 | Authentication | Temporary single-admin env credentials. Not Supabase Auth. |
 | Email sending | Mock provider only; no real delivery or Resend call |
-| Payments | Not implemented |
+| Payments | M9 mock checkout workflow implemented and hosted-validated; live Stripe disabled |
 | Website generation and deploy | Internal drafts only; no customer production deploy |
 
 ## Paid AI cost controls
@@ -211,6 +223,7 @@ src/
   lib/previews/     Public preview tokens, policy, and tracking helpers
   lib/sales/        Deterministic outreach drafting, approval binding, attribution tokens
   lib/email/        Mock-only email provider abstraction
+  lib/payments/     Commercial offers, checkout policy, mock Stripe provider, webhook parsing
   lib/supabase/     Server-only Supabase client
   lib/auth/         Temporary admin session
   agents/           Future agent packages (empty)

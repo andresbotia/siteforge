@@ -54,7 +54,7 @@ Examples of privileged / approval-gated actions:
 
 ## Milestone boundary
 
-Milestone 8 adds manual Sales outreach drafts, approval binding, mock email sending, and tracked outreach preview attribution. Milestone 7 Preview, Milestone 6 Builder, Milestone 5 Auditor, Milestone 4 Scout, and Milestone 3 paid-AI gates remain mandatory. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`.
+Milestone 9 adds manual Stripe Checkout offer drafting, approval binding, mock checkout session creation, Stripe webhook ingestion, and customer conversion. Milestone 8 Sales, Milestone 7 Preview, Milestone 6 Builder, Milestone 5 Auditor, Milestone 4 Scout, and Milestone 3 paid-AI gates remain mandatory. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`.
 
 - Database migrations must be version-controlled under `supabase/migrations`.
 - Never expose privileged credentials client-side. Never put `SUPABASE_SECRET_KEY` or `XAI_API_KEY` in `NEXT_PUBLIC_*` or Client Components.
@@ -92,6 +92,9 @@ Milestone 8 adds manual Sales outreach drafts, approval binding, mock email send
 - Outreach attribution must use separate opaque tokens from M7 preview tokens. Store only hash plus hint; never reconstruct M7 preview URLs from token hints.
 - Send approval must bind exact recipient, subject, body, preview deployment, content version, and attribution token hash. Edits must invalidate approval.
 - Email execution is mock-only unless a later milestone explicitly adds a real provider. Do not call Resend or send real email.
+- Payments use the mock Stripe provider by default. Do not call live Stripe unless a later approval explicitly sets `STRIPE_ALLOW_LIVE_PAYMENTS=true`, configures Stripe server secrets, and approves the exact action.
+- Checkout approvals must bind the exact offer amount, currency, plan selection, website, outreach, content version, and content hash. Material offer edits must invalidate approval.
+- Stripe webhook handling must be idempotent by provider event ID and must not create duplicate customers or subscriptions for the same completed checkout.
 - Do not implement Manager execution.
 - Do not process payments or deploy generated websites.
 - Do not connect Stripe, Resend, or production Vercel APIs.
@@ -110,6 +113,8 @@ Milestone 8 adds manual Sales outreach drafts, approval binding, mock email send
 - Builder lives in `src/lib/builder` and `src/data/builder.ts`. Manual UI: `/agents/builder`. Internal draft: `/websites/[id]`. Preview: `/websites/[id]/preview`.
 - Sales lives in `src/lib/sales` and `src/data/sales.ts`. Manual UI: `/agents/sales`. Outreach review UI: `/outreach`.
 - Mock email provider code lives in `src/lib/email`.
+- Payment provider and checkout policy code lives in `src/lib/payments`.
+- Payment data access lives in `src/data/payments.ts`.
 - Server Supabase utilities live in `src/lib/supabase` and are `server-only`.
 - Shared UI lives in `src/components/shared`.
 - Agent placeholders live in `src/agents`.

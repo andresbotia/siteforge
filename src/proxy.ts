@@ -13,6 +13,10 @@ import {
   isPublicPreviewPath,
 } from "@/lib/previews/routes";
 
+function isPublicStripeWebhookPath(pathname: string): boolean {
+  return pathname === "/api/stripe/webhook";
+}
+
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const config = getAuthConfig();
@@ -33,7 +37,8 @@ export async function proxy(request: NextRequest) {
   if (
     isPublicPreviewPath(pathname) ||
     isPublicOutreachPreviewPath(pathname) ||
-    isPreviewEventPath(pathname)
+    isPreviewEventPath(pathname) ||
+    isPublicStripeWebhookPath(pathname)
   ) {
     return NextResponse.next();
   }

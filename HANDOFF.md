@@ -1,6 +1,6 @@
 # SiteForge Handoff
 
-For the next session. Milestone 8 Sales Agent + email approval is implemented, migrated to hosted Supabase, and hosted-smoke-validated. It is NOT committed, pushed, deployed, or advanced to Milestone 9.
+For the next session. Milestone 9 Stripe Checkout + customer conversion is implemented locally, migrated to hosted Supabase, and hosted-smoke-validated. It is NOT committed, pushed, deployed, or advanced to Milestone 10.
 
 ## Project
 
@@ -27,7 +27,48 @@ Branch: `main`
 | 5 Auditor | `68ad58761ca00863970c9cd650e4f66a431532df` | Manual $0 deterministic website audit |
 | 6 Builder | `cf7f1c59f4924202cdfab0b55720299521e95557` | Manual $0 deterministic website drafts |
 | 7 Preview deployments | `7c0aaee36a72568db43348b7f0f734e0ce40c918` | Hosted migration applied, smoke-tested, and validated |
-| 8 Sales Agent + email approval | local only | Hosted migration applied and smoke-validated; pending commit |
+| 8 Sales Agent + email approval | `42e3752c25deabe6464a318b7ae1cbbaadcf9815` | Hosted migration applied, smoke-validated, committed, and pushed |
+| 9 Stripe Checkout + customer conversion | local only | Hosted migration applied and smoke-validated; ready to lock |
+
+## Milestone 9 Summary
+
+- Adds migration `20260830142525_stripe_customer_conversion.sql`; applied remotely.
+- Adds `commercial_offers`, `stripe_checkout_sessions`, and `stripe_webhook_events` with RLS enabled and public/anon/authenticated access revoked.
+- Extends `customers` and `subscriptions` for offer/Stripe conversion metadata.
+- Adds `/offers`, `/offers/[id]`, lead-detail offer creation, outreach-detail offer creation, and customer detail.
+- Offer approval uses existing `payment_action` approvals and binds exact offer terms, content version, and SHA-256 content hash.
+- Material offer edits reset approval. Paid and checkout-created offers are locked from material edits.
+- Mock Stripe provider is the default and creates deterministic `cs_mock_*` sessions without external network calls.
+- Live Stripe fails closed unless explicitly enabled with server-side Stripe secrets; live checkout creation remains disabled in M9 code.
+- `/api/stripe/webhook` uses raw request body, separates mock test events, requires Stripe HMAC verification for live events, and records event IDs idempotently.
+- `checkout.session.completed` updates checkout status, creates or updates one customer per lead/Stripe customer, creates managed subscription rows only when selected, preserves production deployment isolation, and advances leads to `customer`.
+- Hosted schema/RLS verified after migration: new payment tables exist, additive customer/subscription columns exist, RLS is enabled, and `anon`/`authenticated`/`public` grants are revoked.
+- Hosted smoke used existing test-safe lead `ee0aa3e0-78f9-478a-bdba-f5db6e7db1d3` and generated website `29ca4d70-a474-44d0-8470-347adba511bc`.
+- Smoke offer `f19d2198-c137-4fb8-afeb-5284b1f7c067` used setup `12345` cents and managed monthly `4500` cents.
+- Smoke approval `dc3e9488-36f3-4844-ae7c-d258a1d8ec00` verified exact content hash/fingerprint binding.
+- Mock checkout session `cs_mock_e1bb593aafac01d716ee3ddd` was created with the mock provider only.
+- Mock completion processed one webhook event, converted the lead to customer, created one customer, and created one active managed subscription.
+- Duplicate webhook event processing was idempotent through the unique Stripe event ID constraint.
+- `generated_websites.production_url` stayed `null`; payment did not trigger production deployment.
+- No real Stripe API call, charge, email, Resend call, paid AI/API call, push, deploy, domain/DNS action, refund, or cancellation action was made.
+- M10 was not started.
+
+Validation before lock:
+
+- `npx tsc --noEmit`
+- `npm test` (182/182)
+- `npm run lint`
+- `npm run build`
+- `git diff --check`
+
+Before accepting real payments:
+
+- Configure the Stripe account separately outside agent context.
+- Use Stripe test/sandbox credentials first.
+- Store Stripe secrets securely in server-only environment variables.
+- Configure and verify the Stripe webhook secret securely.
+- Validate real Stripe test-mode checkout and webhook delivery end to end.
+- Keep live payments disabled until explicit human approval for the exact action.
 
 ## Milestone 8 Summary
 

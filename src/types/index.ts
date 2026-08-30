@@ -314,6 +314,62 @@ export interface Outreach {
   metadata?: Record<string, unknown>;
 }
 
+export type CommercialOfferStatus =
+  | "draft"
+  | "awaiting_approval"
+  | "approved"
+  | "checkout_created"
+  | "paid"
+  | "expired"
+  | "cancelled";
+
+export interface CommercialOffer {
+  id: string;
+  leadId: string;
+  generatedWebsiteId: string | null;
+  outreachId: string | null;
+  customerId: string | null;
+  approvalId: string | null;
+  businessName: string;
+  status: CommercialOfferStatus;
+  currency: "usd";
+  setupAmountCents: number;
+  managedMonthlyAmountCents: number | null;
+  managedPlanSelected: boolean;
+  description: string;
+  contentHash: string;
+  contentVersion: string;
+  approvedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type StripeCheckoutStatus =
+  | "created"
+  | "completed"
+  | "expired"
+  | "cancelled"
+  | "failed";
+
+export interface StripeCheckoutSession {
+  id: string;
+  commercialOfferId: string;
+  leadId: string;
+  stripeCheckoutSessionId: string;
+  stripeCustomerId: string | null;
+  stripePaymentIntentId: string | null;
+  stripeSubscriptionId: string | null;
+  mode: "payment" | "subscription";
+  status: StripeCheckoutStatus;
+  checkoutUrl: string | null;
+  amountTotalCents: number | null;
+  currency: string | null;
+  expiresAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
 export type CustomerPlan = "website_only" | "managed";
 
 export type CustomerStatus = "active" | "pending_setup" | "cancelled";
@@ -321,12 +377,15 @@ export type CustomerStatus = "active" | "pending_setup" | "cancelled";
 export interface Customer {
   id: string;
   leadId: string;
+  commercialOfferId?: string | null;
+  stripeCustomerId?: string | null;
   businessName: string;
   website: string;
   plan: CustomerPlan;
   status: CustomerStatus;
   monthlyRevenue: number;
   joinedAt: string;
+  convertedAt?: string | null;
 }
 
 export interface Subscription {
