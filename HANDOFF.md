@@ -1,6 +1,102 @@
 # SiteForge Handoff
 
-For the next session. Milestone 9 Stripe Checkout + customer conversion is implemented locally, migrated to hosted Supabase, and hosted-smoke-validated. It is NOT committed, pushed, deployed, or advanced to Milestone 10.
+For the next session. Milestones 1 through 9 are locked at `0d582148807a496f46318b2183aa6ff481b9602b`. M9.5A Roadmap Persistence + Production/Security Readiness is COMPLETE / VALIDATED after the launch-readiness pass. M9.5B is NOT STARTED and is BLOCKED on human credential rotation and production login verification. It is NOT M10.
+
+## M9.5 Roadmap
+
+M9.5 - Launch Readiness / Market Validation
+
+Goal: take a real business through real prospect -> real website audit -> generated replacement -> human review -> approved public preview -> approved real email -> tracked engagement.
+
+M9.5 gates:
+
+- A. Production/security readiness
+- B. Real prospect acquisition
+- C. Real email integration/internal send
+- D. First controlled prospect campaign
+
+Backlog after M9.5:
+
+- M10 - Manager: customer requests, managed-site changes, approval workflows, maintenance history, managed-site status, and initially approval-gated customer-facing changes.
+- M11 - Production Deployment & Handoff: customer production deployment, domains, DNS, releases, rollback, ownership/export, transfer, cancellation/handoff.
+- M12 - Scout Scaling: scalable real prospect discovery/enrichment, targeting, deduplication, scheduling, and acquisition automation.
+- M13 - Operations & Optimization: funnel analytics, experiments, scheduling, agent automation, cost optimization, operational dashboards and scaling.
+
+M10-M13 are backlog milestones and may be reordered based on real market evidence. Do not implement M10-M13 during M9.5A.
+
+## M9.5A Safety Rule
+
+No external side effects during M9.5A. Do not send email, call Resend, call Stripe, process real payment, enable live xAI inference, call paid AI APIs, publish a new prospect preview, deploy a customer website, buy domains, modify DNS, create real prospect records, scrape/search real businesses, run real Scout acquisition, or perform production customer actions. Hosted read-only verification is allowed.
+
+## M9.5 Exit Criteria
+
+M9.5A:
+
+- Roadmap persisted
+- Secret audit complete
+- Environment contract documented
+- External live-action gates reviewed
+- Temporary auth reviewed
+- Credential rotation checklist created
+- Mock/test data cannot be mistaken for real revenue
+- Production login verification procedure documented
+- Tests/build clean
+- No real external side effects
+
+M9.5B - NOT STARTED / BLOCKED ON HUMAN CREDENTIAL ROTATION AND PRODUCTION LOGIN CHECK:
+
+- First real prospect can safely enter system
+- Real public website can be inspected
+- Auditor/Builder work on real prospect
+- Human reviews generated result
+- No outreach yet
+
+M9.5C:
+
+- Resend/provider integrated behind backend boundary
+- Sending domain authenticated
+- Unsubscribe/suppression safeguards
+- Explicit live-email gate
+- Human approval still mandatory
+- One internal email successfully sent to operator
+- No prospect email yet
+
+M9.5D:
+
+- Small manually selected real prospect cohort
+- Each site manually reviewed
+- Each email individually approved
+- Conservative rate limits
+- Real sends tracked
+- Opt-outs respected
+- Campaign results measurable
+
+## Credential Rotation Before Real Data
+
+Rotate these before entering real prospect/customer data. Do not store rotated values in git or share them with agents.
+
+- Supabase secret/server key: prior local/screenshot exposure risk. Update local environment, Vercel environment, and Supabase dashboard-created key as applicable. Re-test dashboard reads, approvals, webhook processing, and RLS-denied anon access.
+- Temporary SiteForge admin password: prior local/screenshot exposure risk. Update local and Vercel environment. Re-test valid login, invalid login, logout, and protected-route redirect.
+- SiteForge auth signing secret: prior local/screenshot exposure risk; existing sessions remain valid until expiry if the old secret stays active. Update local and Vercel environment. Re-test that old sessions fail and new login succeeds.
+- Supabase personal access token, if still active: operator-only credential may have been exposed during local setup. Revoke/rotate in Supabase account settings and re-test CLI/project access.
+- Any Stripe, Resend, Vercel, GitHub, or xAI credential found outside secure provider storage: rotate in the relevant provider dashboard, update local/Vercel server-only env, then re-test the specific integration with live gates still disabled unless explicitly approved.
+
+## Production Login Verification
+
+Do not retrieve or print secret values. Presence-only configuration status can be viewed in Settings -> Safety.
+
+Manual procedure:
+
+1. Visit `/leads` or another protected admin route while signed out; expect redirect to `/login`.
+2. Enter the configured admin email/password; expect redirect to `/dashboard` and a secure HttpOnly session cookie.
+3. Use logout; expect the next protected route request to redirect to `/login`.
+4. Try an invalid password; expect no authenticated session.
+
+Temporary single-admin auth remains future hardening. Do not replace it with Supabase Auth during M9.5A unless a severe concrete issue requires it.
+
+## Real-Data Readiness Note
+
+M9 smoke conversion used mock Stripe IDs and must not be treated as real payment or revenue. Customer views now classify payment provenance as mock/live/unknown and exclude mock or unknown subscription amounts from monthly revenue display.
 
 ## Project
 

@@ -5,6 +5,7 @@ import { DataTable, Td, Th, THead } from "@/components/shared/data-table";
 import { PageHeader } from "@/components/shared/page-header";
 import {
   CustomerStatusBadge,
+  PaymentEnvironmentBadge,
   PlanBadge,
 } from "@/components/shared/status-badge";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -73,6 +74,7 @@ export default async function CustomersPage() {
               <Td>
                 <div className="flex flex-col gap-1">
                   <PlanBadge plan={customer.plan} />
+                  <PaymentEnvironmentBadge environment={customer.paymentEnvironment} />
                   <span className="text-[11px] text-muted-foreground">
                     {customerPlanPrice[customer.plan]}
                   </span>
@@ -82,7 +84,9 @@ export default async function CustomersPage() {
                 <CustomerStatusBadge status={customer.status} />
               </Td>
               <Td className="tabular-nums">
-                {formatCurrency(customer.monthlyRevenue, true)}
+                {customer.paymentEnvironment === "live"
+                  ? formatCurrency(customer.monthlyRevenue, true)
+                  : "Not real revenue"}
               </Td>
               <Td className="text-muted whitespace-nowrap">
                 {formatDate(customer.joinedAt)}

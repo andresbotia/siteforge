@@ -275,9 +275,11 @@ npm run build
 
 Copy `.env.example` to `.env.local` and fill in values locally. Never commit real secrets. `.env*` files are gitignored except `.env.example`.
 
+Secrets must never be prefixed with `NEXT_PUBLIC_`; Next.js bundles `NEXT_PUBLIC_*` values into browser JavaScript at build time.
+
 ### Temporary admin authentication
 
-These three variables are required to sign in. They are server-only and must not be prefixed with `NEXT_PUBLIC_`.
+These three variables are required locally and in Vercel to sign in. They are server-only and must not be prefixed with `NEXT_PUBLIC_`.
 
 | Variable | Purpose |
 | --- | --- |
@@ -291,18 +293,37 @@ If they are missing, the app fails closed: dashboard routes redirect to `/login`
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_SUPABASE_URL` | Project URL. Public. |
-| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key. Not used for application-table access. Kept for future Supabase Auth. |
-| `SUPABASE_SECRET_KEY` | Server-only `sb_secret_...` key. Required for dashboard reads and approval writes. Never prefix with `NEXT_PUBLIC_`. |
+| `NEXT_PUBLIC_SUPABASE_URL` | Project URL. Browser-safe. Required locally and in Vercel. |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Publishable key. Browser-safe. Not used for application-table access. Kept for future Supabase Auth. |
+| `SUPABASE_SECRET_KEY` | Server-only `sb_secret_...` key. Required locally and in Vercel for dashboard reads and approval writes. Never prefix with `NEXT_PUBLIC_`. |
 
 ### xAI credentials
 
 | Variable | Purpose |
 | --- | --- |
-| `XAI_API_KEY` | Server-only. Empty until you create a key in the xAI console. |
-| `XAI_ALLOW_LIVE_INFERENCE` | Must be exactly `true` to allow a live paid call. Default off. |
+| `XAI_API_KEY` | Optional server-only key. Empty until the operator creates a key in the xAI console. |
+| `XAI_ALLOW_LIVE_INFERENCE` | Live-action gate. Must be exactly `true` to allow a live paid call. Default off. |
 
 The publishable key authenticates as the Postgres `anon` role. It cannot read application tables. Trusted server access uses the secret key (`service_role`), after `requireAdminSession()`.
+
+Live xAI inference cannot occur merely because `XAI_API_KEY` exists. A paid AI run still requires admin session authorization, an approved budget ceiling, database reservation/finalization, and `XAI_ALLOW_LIVE_INFERENCE=true`.
+
+### Stripe and email
+
+| Variable | Purpose |
+| --- | --- |
+| `STRIPE_SECRET_KEY` | Optional server-only key for a future live Stripe provider. |
+| `STRIPE_WEBHOOK_SECRET` | Optional server-only webhook signing secret. Required only for live Stripe webhook verification. |
+| `STRIPE_ALLOW_LIVE_PAYMENTS` | Live-action gate. Must be exactly `true`; default off. |
+| `RESEND_API_KEY` | Optional server-only key for future M9.5C real email integration. |
+
+Stripe checkout defaults to the mock provider. The live provider still fails closed in this milestone and does not create live checkout sessions. Email sending is mock-only; a Resend key alone does not enable delivery.
+
+### Vercel and future deployment automation
+
+| Variable | Purpose |
+| --- | --- |
+| `VERCEL_TOKEN` | Optional server-only token for future deployment automation. Do not provide to agents or configure for autonomous M9.5A actions. |
 
 ### Vercel
 
@@ -316,8 +337,21 @@ Set these variables in Vercel Project → Settings → Environment Variables for
 - `SUPABASE_SECRET_KEY`
 - `XAI_API_KEY` (only after you create a key; still not required for the dashboard)
 - `XAI_ALLOW_LIVE_INFERENCE` (leave unset)
+- `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` only when entering approved Stripe test/live work
+- `STRIPE_ALLOW_LIVE_PAYMENTS` (leave unset)
+- `RESEND_API_KEY` only when entering M9.5C email integration
+- `VERCEL_TOKEN` only when entering approved deployment automation work
 
 Then redeploy.
+
+Production login manual verification:
+
+1. Visit a protected route such as `/leads` while signed out; it must redirect to `/login`.
+2. Submit the configured admin email/password; it must create a secure authenticated session and redirect to `/dashboard`.
+3. Use logout; the next protected route visit must redirect to `/login`.
+4. Submit an invalid password; it must not create a session.
+
+The temporary single-admin auth remains a launch bridge. Stronger production authentication is future hardening.
 
 ## Supabase setup
 

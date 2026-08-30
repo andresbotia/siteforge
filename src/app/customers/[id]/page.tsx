@@ -3,7 +3,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
-import { CustomerStatusBadge, PlanBadge } from "@/components/shared/status-badge";
+import {
+  CustomerStatusBadge,
+  PaymentEnvironmentBadge,
+  PlanBadge,
+} from "@/components/shared/status-badge";
 import { getCustomerById } from "@/data/customers";
 import { formatCurrency, formatDateTime } from "@/lib/format";
 
@@ -48,12 +52,23 @@ export default async function CustomerDetailPage({ params }: CustomerPageProps) 
             <div className="flex gap-2">
               <PlanBadge plan={customer.plan} />
               <CustomerStatusBadge status={customer.status} />
+              <PaymentEnvironmentBadge environment={customer.paymentEnvironment} />
             </div>
             <p className="text-muted">Stripe customer: {customer.stripeCustomerId ?? "N/A"}</p>
             <p className="text-muted">
               Converted: {customer.convertedAt ? formatDateTime(customer.convertedAt) : "N/A"}
             </p>
-            <p className="text-muted">Monthly revenue: {formatCurrency(customer.monthlyRevenue)}</p>
+            <p className="text-muted">
+              Monthly revenue:{" "}
+              {customer.paymentEnvironment === "live"
+                ? formatCurrency(customer.monthlyRevenue)
+                : "Not real revenue"}
+            </p>
+            {customer.paymentEnvironment !== "live" && customer.grossMonthlyAmount > 0 ? (
+              <p className="text-muted">
+                Mock monthly amount: {formatCurrency(customer.grossMonthlyAmount)}
+              </p>
+            ) : null}
           </CardBody>
         </Card>
         <Card>

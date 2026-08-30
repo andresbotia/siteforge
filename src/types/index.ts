@@ -374,6 +374,8 @@ export type CustomerPlan = "website_only" | "managed";
 
 export type CustomerStatus = "active" | "pending_setup" | "cancelled";
 
+export type PaymentEnvironment = "mock" | "live" | "unknown";
+
 export interface Customer {
   id: string;
   leadId: string;
@@ -384,6 +386,8 @@ export interface Customer {
   plan: CustomerPlan;
   status: CustomerStatus;
   monthlyRevenue: number;
+  grossMonthlyAmount: number;
+  paymentEnvironment: PaymentEnvironment;
   joinedAt: string;
   convertedAt?: string | null;
 }
@@ -420,6 +424,15 @@ export interface IntegrationStatus {
   name: string;
   purpose: string;
   status: ConnectionStatus;
+}
+
+export type ReadinessSeverity = "ok" | "attention" | "blocked";
+
+export interface ReadinessIndicator {
+  id: string;
+  label: string;
+  status: string;
+  severity: ReadinessSeverity;
 }
 
 export interface LeadActivity {

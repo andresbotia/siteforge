@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { SettingsView } from "@/components/settings/settings-view";
 import { getBudgetSnapshot, toCostControlsView } from "@/data/budget";
-import { listIntegrations } from "@/data/integrations";
+import { getReadinessIndicators, listIntegrations } from "@/data/integrations";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +18,7 @@ export default async function SettingsPage() {
     <SettingsView
       integrations={integrations}
       costControls={toCostControlsView(budget)}
+      readiness={getReadinessIndicators()}
     />
   );
 }

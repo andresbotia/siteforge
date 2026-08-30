@@ -9,7 +9,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ConnectionBadge } from "@/components/shared/status-badge";
 import { settingsDefaults } from "@/lib/constants";
 import { cn } from "@/lib/cn";
-import type { AiCostControlsView, IntegrationStatus } from "@/types";
+import type { AiCostControlsView, IntegrationStatus, ReadinessIndicator } from "@/types";
 
 const tabs = [
   "General",
@@ -26,9 +26,11 @@ type Tab = (typeof tabs)[number];
 export function SettingsView({
   integrations,
   costControls,
+  readiness,
 }: {
   integrations: IntegrationStatus[];
   costControls: AiCostControlsView;
+  readiness: ReadinessIndicator[];
 }) {
   const [tab, setTab] = useState<Tab>("General");
   const [settings, setSettings] = useState(settingsDefaults);
@@ -304,55 +306,85 @@ export function SettingsView({
       ) : null}
 
       {tab === "Safety" ? (
-        <Card>
-          <CardHeader
-            title="Approval policy"
-            description="These switches default to required. They do not enforce backend policy yet."
-          />
-          <CardBody className="space-y-3">
-            {(
-              [
+        <div className="grid gap-4 lg:grid-cols-[1fr_1fr]">
+          <Card>
+            <CardHeader
+              title="Readiness"
+              description="Server-derived configuration presence only. Secret values are never sent to the browser."
+            />
+            <CardBody className="space-y-2">
+              {readiness.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm"
+                >
+                  <span>{item.label}</span>
+                  <span
+                    className={cn(
+                      "text-right text-xs font-medium",
+                      item.severity === "ok"
+                        ? "text-success"
+                        : item.severity === "attention"
+                          ? "text-warning"
+                          : "text-danger",
+                    )}
+                  >
+                    {item.status}
+                  </span>
+                </div>
+              ))}
+            </CardBody>
+          </Card>
+          <Card>
+            <CardHeader
+              title="Approval policy"
+              description="These switches default to required. They do not enforce backend policy yet."
+            />
+            <CardBody className="space-y-3">
+              {(
                 [
-                  "requireApprovalBeforeExternalEmail",
-                  "Require approval before external email",
-                ],
-                [
-                  "requireApprovalBeforeProductionDeployment",
-                  "Require approval before production deployment",
-                ],
-                [
-                  "requireApprovalBeforeModifyingCustomerWebsite",
-                  "Require approval before modifying a customer website",
-                ],
-                [
-                  "requireApprovalBeforePaymentActions",
-                  "Require approval before payment or refund actions",
-                ],
-              ] as const
-            ).map(([key, label]) => (
-              <label
-                key={key}
-                className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm"
-              >
-                <span>{label}</span>
-                <input
-                  type="checkbox"
-                  checked={settings.safety[key]}
-                  onChange={(event) =>
-                    setSettings({
-                      ...settings,
-                      safety: {
-                        ...settings.safety,
-                        [key]: event.target.checked,
-                      },
-                    })
-                  }
-                  className="size-4 accent-accent"
-                />
-              </label>
-            ))}
-          </CardBody>
-        </Card>
+                  [
+                    "requireApprovalBeforeExternalEmail",
+                    "Require approval before external email",
+                  ],
+                  [
+                    "requireApprovalBeforeProductionDeployment",
+                    "Require approval before production deployment",
+                  ],
+                  [
+                    "requireApprovalBeforeModifyingCustomerWebsite",
+                    "Require approval before modifying a customer website",
+                  ],
+                  [
+                    "requireApprovalBeforePaymentActions",
+                    "Require approval before payment or refund actions",
+                  ],
+                ] as const
+              ).map(([key, label]) => (
+                <label
+                  key={key}
+                  className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm"
+                >
+                  <span>{label}</span>
+                  <input
+                    type="checkbox"
+                    checked={settings.safety[key]}
+                    onChange={(event) =>
+                      setSettings({
+                        ...settings,
+                        safety: {
+                          ...settings.safety,
+                          [key]: event.target.checked,
+                        },
+                      })
+                    }
+                    className="size-4 accent-accent"
+                  />
+                </label>
+              ))}
+            </CardBody>
+          </Card>
+        </div>
       ) : null}
     </>
   );

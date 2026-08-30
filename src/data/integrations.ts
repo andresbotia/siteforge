@@ -1,7 +1,13 @@
 import "server-only";
 
+import { getAuthConfig } from "@/lib/auth/config";
 import { readTable } from "@/lib/supabase/server";
-import type { ConnectionStatus, IntegrationStatus, SystemServiceStatus } from "@/types";
+import type {
+  ConnectionStatus,
+  IntegrationStatus,
+  ReadinessIndicator,
+  SystemServiceStatus,
+} from "@/types";
 import type { IntegrationRow } from "@/types/database";
 
 const labels: Record<
@@ -82,6 +88,71 @@ export async function listSystemStatus(): Promise<SystemServiceStatus[]> {
       id: "deployments",
       name: "Deployments",
       status: byId.get("vercel") ?? "not_connected",
+    },
+  ];
+}
+
+export function getReadinessIndicators(): ReadinessIndicator[] {
+  const supabaseConfigured = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() &&
+      process.env.SUPABASE_SECRET_KEY?.trim(),
+  );
+  const publishableSupabaseConfigured = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY?.trim(),
+  );
+  const authConfigured = Boolean(getAuthConfig());
+  const liveAiEnabled = process.env.XAI_ALLOW_LIVE_INFERENCE === "true";
+  const liveStripeEnabled = process.env.STRIPE_ALLOW_LIVE_PAYMENTS === "true";
+  const resendConfigured = Boolean(process.env.RESEND_API_KEY?.trim());
+
+  return [
+    {
+      id: "supabase",
+      label: "Supabase server access",
+      status: supabaseConfigured ? "Configured" : "Missing required server config",
+      severity: supabaseConfigured ? "ok" : "blocked",
+    },
+    {
+      id: "supabase-browser",
+      label: "Supabase browser key",
+      status: publishableSupabaseConfigured ? "Configured for future auth" : "Optional",
+      severity: "ok",
+    },
+    {
+      id: "admin-auth",
+      label: "Temporary admin auth",
+      status: authConfigured ? "Configured" : "Missing or invalid",
+      severity: authConfigured ? "ok" : "blocked",
+    },
+    {
+      id: "paid-ai",
+      label: "Paid AI live gate",
+      status: liveAiEnabled ? "Enabled" : "Disabled",
+      severity: liveAiEnabled ? "attention" : "ok",
+    },
+    {
+      id: "stripe",
+      label: "Stripe live payments",
+      status: liveStripeEnabled ? "Enabled" : "Disabled",
+      severity: liveStripeEnabled ? "attention" : "ok",
+    },
+    {
+      id: "email",
+      label: "Real email provider",
+      status: resendConfigured ? "Key present but provider disabled" : "Disabled",
+      severity: resendConfigured ? "attention" : "ok",
+    },
+    {
+      id: "credential-rotation",
+      label: "Credential rotation",
+      status: "Required before real prospect/customer data",
+      severity: "attention",
+    },
+    {
+      id: "real-prospects",
+      label: "Real prospect acquisition",
+      status: "Not started",
+      severity: "ok",
     },
   ];
 }

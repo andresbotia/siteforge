@@ -20,6 +20,7 @@ import type {
   GeneratedWebsiteStatus,
   LeadStatus,
   OutreachStatus,
+  PaymentEnvironment,
   QualificationTier,
   RiskLevel,
 } from "@/types";
@@ -99,6 +100,12 @@ const connectionTone = {
   error: "danger",
 } as const;
 
+const paymentEnvironmentTone = {
+  mock: "warning",
+  live: "success",
+  unknown: "neutral",
+} as const;
+
 const qualificationTone = {
   reject: "danger",
   review: "warning",
@@ -172,4 +179,18 @@ export function ConnectionBadge({ status }: { status: ConnectionStatus }) {
       {connectionStatusLabel[status]}
     </Badge>
   );
+}
+
+export function PaymentEnvironmentBadge({
+  environment,
+}: {
+  environment: PaymentEnvironment;
+}) {
+  const label =
+    environment === "live"
+      ? "Live payment"
+      : environment === "mock"
+        ? "Mock payment"
+        : "Payment unknown";
+  return <Badge tone={paymentEnvironmentTone[environment]}>{label}</Badge>;
 }

@@ -1,7 +1,12 @@
 import { createHmac } from "node:crypto";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { nextLeadStatusAfterCheckout, resolveCustomerPlan, shouldCreateManagedSubscription } from "@/lib/payments/conversion";
+import {
+  inferPaymentEnvironment,
+  nextLeadStatusAfterCheckout,
+  resolveCustomerPlan,
+  shouldCreateManagedSubscription,
+} from "@/lib/payments/conversion";
 import { computeCommercialOfferContentHash } from "@/lib/payments/offer-hash";
 import { buildCommercialOfferDraft, buildDefaultCommercialOffer, canCreateCheckoutForOffer, validateCommercialOfferInput } from "@/lib/payments/offers";
 import { MockStripeProvider, createPaymentProviderFromEnv } from "@/lib/payments/provider-core";
@@ -353,5 +358,32 @@ describe("customer conversion helpers", () => {
 
   it("does not overwrite rejected leads", () => {
     assert.equal(nextLeadStatusAfterCheckout("rejected"), "rejected");
+  });
+
+  it("identifies mock checkout-derived customers", () => {
+    assert.equal(
+      inferPaymentEnvironment({
+        stripeCustomerId: "cus_mock_123",
+        stripeCheckoutSessionId: "cs_mock_123",
+        subscriptionProviderId: "sub_mock_123",
+      }),
+      "mock",
+    );
+  });
+
+  it("identifies live Stripe-derived customers", () => {
+    assert.equal(
+      inferPaymentEnvironment({
+        stripeCustomerId: "cus_123",
+        stripeCheckoutSessionId: "cs_live_123",
+        subscriptionProviderId: "sub_123",
+        sessionProvider: "stripe",
+      }),
+      "live",
+    );
+  });
+
+  it("keeps missing payment provenance unknown", () => {
+    assert.equal(inferPaymentEnvironment({}), "unknown");
   });
 });
