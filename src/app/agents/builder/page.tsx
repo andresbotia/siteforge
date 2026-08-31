@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { BuilderRunForm } from "@/components/builder/builder-run-form";
+import { ExternalSiteImportForm } from "@/components/builder/external-site-import-form";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { LeadStatusBadge } from "@/components/shared/status-badge";
@@ -34,6 +35,15 @@ export default async function BuilderPage() {
           />
           <CardBody>
             <BuilderRunForm leads={leads} />
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader
+            title="Import external generated draft"
+            description="Admin-only import for operator-supplied generated source evidence. The deterministic Builder remains the fallback."
+          />
+          <CardBody>
+            <ExternalSiteImportForm leads={leads} />
           </CardBody>
         </Card>
         <Card>

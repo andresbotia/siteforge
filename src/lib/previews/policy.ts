@@ -1,3 +1,4 @@
+import { canApproveExternalGeneratedSite } from "@/lib/builder/external-sites";
 import { validateWebsiteSpec } from "@/lib/builder/validate";
 import type { GeneratedWebsite } from "@/types";
 
@@ -6,7 +7,7 @@ export type PreviewPublicationPolicyResult =
   | { ok: false; error: string };
 
 export function assertPreviewPublicationAllowed(input: {
-  site: Pick<GeneratedWebsite, "status" | "spec"> | null;
+  site: Pick<GeneratedWebsite, "status" | "spec" | "externalGeneratedSite"> | null;
   hasActiveDeployment: boolean;
   hasPendingApproval: boolean;
 }): PreviewPublicationPolicyResult {
@@ -21,6 +22,8 @@ export function assertPreviewPublicationAllowed(input: {
   if (input.site.status === "failed" || input.site.status === "building") {
     return { ok: false, error: "Only completed Builder drafts can be published." };
   }
+  const externalPolicy = canApproveExternalGeneratedSite(input.site.externalGeneratedSite);
+  if (!externalPolicy.ok) return externalPolicy;
   if (input.hasActiveDeployment) {
     return { ok: false, error: "This website already has an active public preview." };
   }

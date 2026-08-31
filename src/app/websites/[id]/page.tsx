@@ -69,6 +69,7 @@ export default async function WebsiteDetailPage({ params }: WebsitePageProps) {
         <CardHeader title="Draft metadata" />
         <CardBody className="grid gap-3 sm:grid-cols-2">
           <Detail label="Status" value={<WebsiteStatusBadge status={site.status} />} />
+          <Detail label="Source" value={site.generationSource === "external_generated" ? "External generated" : "Deterministic Builder"} />
           <Detail label="Template" value={site.template || site.templateKey || "—"} />
           <Detail label="Build version" value={site.buildVersion ?? "legacy seed"} />
           <Detail label="Built" value={formatDateTime(site.createdAt)} />
@@ -79,6 +80,58 @@ export default async function WebsiteDetailPage({ params }: WebsitePageProps) {
           <Detail label="Internal preview" value={site.previewUrl || "—"} />
         </CardBody>
       </Card>
+
+      {site.externalGeneratedSite ? (
+        <Card className="mt-4">
+          <CardHeader
+            title="External generated review"
+            description="Provider metadata is admin-only. Preview approval remains blocked unless validation and build checks pass."
+            action={
+              <Badge tone={site.externalGeneratedSite.validation.ok ? "success" : "danger"}>
+                {site.externalGeneratedSite.lifecycleStatus}
+              </Badge>
+            }
+          />
+          <CardBody className="space-y-4">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Detail label="Provider" value={site.externalGeneratedSite.externalProvider} />
+              <Detail label="Project ID" value={site.externalGeneratedSite.providerProjectId ?? "none"} />
+              <Detail label="Commit SHA" value={site.externalGeneratedSite.providerCommitSha ?? "none"} />
+              <Detail label="Provider preview" value={site.externalGeneratedSite.providerPreviewUrl ?? "none"} />
+              <Detail label="SiteForge target" value={site.externalGeneratedSite.controlledPreviewUrl ?? "missing"} />
+              <Detail label="Fact fingerprint" value={site.externalGeneratedSite.verifiedFactFingerprint || "none"} />
+              <Detail label="Validation" value={site.externalGeneratedSite.validation.status} />
+              <Detail label="Build" value={`${site.externalGeneratedSite.build.status} - ${site.externalGeneratedSite.build.reason}`} />
+            </div>
+            {site.externalGeneratedSite.staleFactWarnings.length ? (
+              <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900">
+                <p className="font-medium">Website was generated from an older verified-facts snapshot.</p>
+                <ul className="mt-2 list-disc pl-5">
+                  {site.externalGeneratedSite.staleFactWarnings.map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {site.externalGeneratedSite.validation.findings.length ? (
+              <ul className="divide-y divide-border-subtle rounded-md border border-border-subtle text-sm">
+                {site.externalGeneratedSite.validation.findings.map((finding) => (
+                  <li key={`${finding.code}-${finding.path ?? ""}`} className="p-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge tone={finding.severity === "severe" ? "danger" : "warning"}>{finding.severity}</Badge>
+                      <span className="font-medium">{finding.code}</span>
+                      {finding.path ? <span className="text-muted">{finding.path}</span> : null}
+                    </div>
+                    <p className="mt-1 text-muted">{finding.message}</p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted">No static safety findings recorded.</p>
+            )}
+          </CardBody>
+        </Card>
+      ) : null}
 
       <PreviewManagementCard site={site} analytics={previewAnalytics} />
 

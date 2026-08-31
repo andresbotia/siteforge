@@ -326,6 +326,8 @@ export type Database = {
           estimated_cost_usd?: number | null;
           estimated_cost_ticks?: number | string;
           approved_cost_limit_ticks?: number | string;
+          started_at?: string | null;
+          completed_at?: string | null;
         };
         Update: {
           status?: string;

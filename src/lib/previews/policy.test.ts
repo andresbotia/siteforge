@@ -31,7 +31,7 @@ describe("preview publication policy", () => {
   it("allows a completed renderable draft without active or pending publication", () => {
     assert.deepEqual(
       assertPreviewPublicationAllowed({
-        site: { status: "review_required", spec: validSpec },
+        site: { status: "review_required", spec: validSpec, externalGeneratedSite: null },
         hasActiveDeployment: false,
         hasPendingApproval: false,
       }),
@@ -42,7 +42,7 @@ describe("preview publication policy", () => {
   it("blocks invalid specs, active deployments, pending approvals, and incomplete builds", () => {
     assert.equal(
       assertPreviewPublicationAllowed({
-        site: { status: "review_required", spec: null },
+        site: { status: "review_required", spec: null, externalGeneratedSite: null },
         hasActiveDeployment: false,
         hasPendingApproval: false,
       }).ok,
@@ -50,7 +50,7 @@ describe("preview publication policy", () => {
     );
     assert.equal(
       assertPreviewPublicationAllowed({
-        site: { status: "review_required", spec: validSpec },
+        site: { status: "review_required", spec: validSpec, externalGeneratedSite: null },
         hasActiveDeployment: true,
         hasPendingApproval: false,
       }).ok,
@@ -58,7 +58,7 @@ describe("preview publication policy", () => {
     );
     assert.equal(
       assertPreviewPublicationAllowed({
-        site: { status: "review_required", spec: validSpec },
+        site: { status: "review_required", spec: validSpec, externalGeneratedSite: null },
         hasActiveDeployment: false,
         hasPendingApproval: true,
       }).ok,
@@ -66,7 +66,7 @@ describe("preview publication policy", () => {
     );
     assert.equal(
       assertPreviewPublicationAllowed({
-        site: { status: "building", spec: validSpec },
+        site: { status: "building", spec: validSpec, externalGeneratedSite: null },
         hasActiveDeployment: false,
         hasPendingApproval: false,
       }).ok,

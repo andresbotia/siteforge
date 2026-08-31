@@ -1,5 +1,9 @@
 import "server-only";
 
+import {
+  generationSourceFromMetadata,
+  parseExternalGeneratedSiteMetadata,
+} from "@/lib/builder/external-sites";
 import { asNumber, asRecord } from "@/lib/json";
 import { readTable } from "@/lib/supabase/server";
 import type { GeneratedWebsite, GeneratedWebsiteStatus } from "@/types";
@@ -25,6 +29,8 @@ function mapWebsite(row: WebsiteRow, businessName: string): GeneratedWebsite {
     status: statuses.has(row.status as GeneratedWebsiteStatus)
       ? (row.status as GeneratedWebsiteStatus)
       : "building",
+    generationSource: generationSourceFromMetadata(row.metadata),
+    externalGeneratedSite: parseExternalGeneratedSiteMetadata(row.metadata),
     template: row.template ?? "",
     templateKey: row.template_key,
     beforeScore: asNumber(metadata.before_score) ?? 0,

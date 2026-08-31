@@ -2,6 +2,11 @@ import "server-only";
 
 import { recordActivityEvent } from "@/data/activity";
 import { getWebsiteById } from "@/data/websites";
+import {
+  generationSourceFromMetadata,
+  getExternalPreviewTarget,
+  parseExternalGeneratedSiteMetadata,
+} from "@/lib/builder/external-sites";
 import { createPreviewToken, hashPreviewToken, isPreviewToken } from "@/lib/previews/tokens";
 import {
   classifyBot,
@@ -103,6 +108,8 @@ function mapWebsite(row: WebsiteRow, businessName: string): GeneratedWebsite {
     leadId: row.lead_id,
     businessName,
     status: row.status as GeneratedWebsite["status"],
+    generationSource: generationSourceFromMetadata(row.metadata),
+    externalGeneratedSite: parseExternalGeneratedSiteMetadata(row.metadata),
     template: row.template ?? "",
     templateKey: row.template_key,
     beforeScore: typeof metadata.before_score === "number" ? metadata.before_score : 0,
@@ -468,6 +475,10 @@ export async function getPublicPreviewByToken(token: string): Promise<PublicPrev
   if (!site.spec) return null;
 
   return { deployment: mapDeployment(deployment), site, token };
+}
+
+export function getPublicPreviewExternalTarget(site: GeneratedWebsite): string | null {
+  return getExternalPreviewTarget(site.externalGeneratedSite);
 }
 
 export async function recordPreviewEvent(input: {

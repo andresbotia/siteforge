@@ -129,11 +129,61 @@ export type GeneratedWebsiteStatus =
   | "live"
   | "failed";
 
+export type GenerationSource = "deterministic_builder" | "external_generated";
+
+export interface ExternalGeneratedSite {
+  externalProvider: "lovable" | "manual" | "other";
+  providerProjectId: string | null;
+  providerCommitSha: string | null;
+  providerPreviewUrl: string | null;
+  controlledPreviewUrl: string | null;
+  lifecycleStatus:
+    | "imported"
+    | "validating"
+    | "validation_failed"
+    | "ready_for_review"
+    | "approved_for_preview"
+    | "preview_deployed"
+    | "revoked";
+  importedAt: string;
+  importedBy: "admin";
+  generationCostCredits: number | null;
+  generationCostUsdEstimate: number | null;
+  providerCostNotes: string | null;
+  verifiedFactFingerprint: string;
+  staleFactWarnings: string[];
+  validation: {
+    ok: boolean;
+    status: "passed" | "failed";
+    findings: Array<{
+      code: string;
+      severity: "warning" | "severe";
+      message: string;
+      path?: string;
+    }>;
+    packageSummary: {
+      framework: "vite-react" | "static" | "unknown";
+      packageManager: "npm" | "none";
+      dependencies: string[];
+      devDependencies: string[];
+      scripts: Record<string, string>;
+    };
+  };
+  build: {
+    ok: boolean;
+    status: "passed" | "blocked" | "unsupported";
+    command: string;
+    reason: string;
+  };
+}
+
 export interface GeneratedWebsite {
   id: string;
   leadId: string;
   businessName: string;
   status: GeneratedWebsiteStatus;
+  generationSource: GenerationSource;
+  externalGeneratedSite: ExternalGeneratedSite | null;
   template: string;
   templateKey: string | null;
   beforeScore: number;

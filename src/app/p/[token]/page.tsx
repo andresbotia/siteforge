@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { DraftSite } from "@/components/builder/site/draft-site";
 import {
+  getPublicPreviewExternalTarget,
   getPublicPreviewByToken,
   recordPreviewEvent,
 } from "@/data/previews";
@@ -49,6 +50,11 @@ export default async function PublicPreviewPage({
       path: `/p/${token}${query.page ? `?page=${query.page}` : ""}`,
     },
   });
+
+  const externalTarget = getPublicPreviewExternalTarget(preview.site);
+  if (externalTarget) {
+    redirect(externalTarget);
+  }
 
   return (
     <DraftSite
