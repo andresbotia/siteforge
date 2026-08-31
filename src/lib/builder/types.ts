@@ -19,7 +19,15 @@ export type NavItem = {
   label: string;
 };
 
-export type CtaKind = "phone" | "quote" | "contact" | "emergency" | "reservation" | "order" | "menu";
+export type CtaKind =
+  | "phone"
+  | "quote"
+  | "contact"
+  | "emergency"
+  | "reservation"
+  | "order"
+  | "menu"
+  | "social";
 
 export type SiteCta = {
   kind: CtaKind;
@@ -125,6 +133,13 @@ export type WebsiteSpec = {
     websiteUrl: string | null;
     rating: number | null;
     reviewCount: number | null;
+    description: string | null;
+    cuisine: string | null;
+    hours: string | null;
+    socialUrl: string | null;
+    menuUrl: string | null;
+    orderUrl: string | null;
+    reservationUrl: string | null;
   };
   navigation: NavItem[];
   pages: SpecPage[];

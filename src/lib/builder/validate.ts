@@ -15,7 +15,16 @@ import type { Section, WebsiteSpec } from "./types";
 
 const PAGE_SET = new Set<string>(PAGE_IDS);
 const SECTION_SET = new Set<string>(SECTION_TYPES);
-const CTA_KINDS = new Set(["phone", "quote", "contact", "emergency", "reservation", "order", "menu"]);
+const CTA_KINDS = new Set([
+  "phone",
+  "quote",
+  "contact",
+  "emergency",
+  "reservation",
+  "order",
+  "menu",
+  "social",
+]);
 
 export type SpecValidation =
   | { ok: true; spec: WebsiteSpec }
@@ -86,7 +95,8 @@ function validateSection(section: Section): string | null {
       if (section.href && !safeHref(section.href)) return "unsafe_menu_href";
       return null;
     case "hoursLocation":
-      if (section.hours) return "hours_must_be_sourced";
+      if (section.location && !safeString(section.location)) return "unsafe_location";
+      if (section.hours && !safeString(section.hours)) return "unsafe_hours";
       return null;
     case "cta":
       if (!safeString(section.heading) || !safeString(section.body)) return "unsafe_cta";

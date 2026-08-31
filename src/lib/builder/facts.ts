@@ -1,5 +1,6 @@
 import type { BuilderAuditInput, BuilderLeadInput, ProvenanceRecord } from "./types";
 import { isNoStandaloneWebsiteLead } from "@/lib/prospects/no-website";
+import { readVerifiedPublicFacts } from "@/lib/prospects/verified-public-facts";
 
 function blankToNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? "";
@@ -33,7 +34,13 @@ export type BuilderFacts = {
   websiteUrl: string | null;
   rating: number | null;
   reviewCount: number | null;
+  description: string | null;
+  cuisine: string | null;
+  hours: string | null;
   menuLink: string | null;
+  reservationUrl: string | null;
+  orderUrl: string | null;
+  socialUrl: string | null;
   reservationsOffered: boolean;
   orderingOffered: boolean;
   emergencyOffered: boolean;
@@ -53,23 +60,36 @@ export function extractFacts(
   const websiteUrl = blankToNull(lead.websiteUrl);
   const noStandaloneWebsite = isNoStandaloneWebsiteLead(lead);
   const region = [city, state].filter(Boolean).join(", ") || null;
-  const rating = lead.rating && lead.rating > 0 ? lead.rating : null;
-  const reviewCount = lead.reviewCount > 0 ? lead.reviewCount : null;
+  const verified = readVerifiedPublicFacts(lead.inspectionSummary);
+  const verifiedFacts = verified?.facts ?? null;
+  const rating = verifiedFacts?.rating ?? (lead.rating && lead.rating > 0 ? lead.rating : null);
+  const reviewCount =
+    verifiedFacts?.reviewCount ?? (lead.reviewCount > 0 ? lead.reviewCount : null);
   const codes = new Set(audit.findings.map((item) => item.code));
-  const menuLinkRaw = summaryString(lead.inspectionSummary, "menu_link");
+  const description = verifiedFacts?.description ?? summaryString(lead.inspectionSummary, "public_description");
+  const cuisine = verifiedFacts?.cuisine ?? summaryString(lead.inspectionSummary, "cuisine");
+  const hours = verifiedFacts?.hours ?? summaryString(lead.inspectionSummary, "public_hours");
+  const menuLinkRaw = verifiedFacts?.menuUrl ?? summaryString(lead.inspectionSummary, "menu_link");
   const reservationLink = summaryString(lead.inspectionSummary, "reservation_link");
   const orderLink = summaryString(lead.inspectionSummary, "order_link");
+  const reservationUrlRaw = verifiedFacts?.reservationUrl ?? reservationLink;
+  const orderUrlRaw = verifiedFacts?.orderUrl ?? orderLink;
+  const socialUrlRaw = verifiedFacts?.socialUrl ?? summaryString(lead.inspectionSummary, "social_url");
   const menuLink =
     menuLinkRaw && isHttpUrl(menuLinkRaw) && !menuLinkRaw.toLowerCase().startsWith("javascript:")
       ? menuLinkRaw
       : null;
+  const reservationUrl =
+    reservationUrlRaw && isHttpUrl(reservationUrlRaw) ? reservationUrlRaw : null;
+  const orderUrl = orderUrlRaw && isHttpUrl(orderUrlRaw) ? orderUrlRaw : null;
+  const socialUrl = socialUrlRaw && isHttpUrl(socialUrlRaw) ? socialUrlRaw : null;
 
   const reservationsOffered =
-    Boolean(reservationLink) ||
+    Boolean(reservationUrl) ||
     codes.has("restaurant_reservation_broken") ||
     codes.has("restaurant_reservation_unclear");
   const orderingOffered =
-    Boolean(orderLink) || codes.has("restaurant_order_broken");
+    Boolean(orderUrl) || codes.has("restaurant_order_broken");
   const emergencyOffered = codes.has("home_service_emergency_cta_missing");
 
   const record = (field: string, provenanceKind: ProvenanceRecord["provenance"], source: string | null) => {
@@ -86,10 +106,15 @@ export function extractFacts(
   if (noStandaloneWebsite) {
     record("websiteStatus", "sourced", "lead.inspection_summary.no_standalone_website");
   }
-  record("rating", rating ? "sourced" : "omitted", rating ? "lead.google_rating" : null);
-  record("reviewCount", reviewCount ? "sourced" : "omitted", reviewCount ? "lead.review_count" : null);
-  record("hours", "omitted", null);
-  record("menuLink", menuLink ? "sourced" : "omitted", menuLink ? "lead.inspection_summary.menu_link" : null);
+  record("rating", rating ? "sourced" : "omitted", rating ? (verifiedFacts?.rating === rating ? "lead.inspection_summary.verified_public_facts.rating" : "lead.google_rating") : null);
+  record("reviewCount", reviewCount ? "sourced" : "omitted", reviewCount ? (verifiedFacts?.reviewCount === reviewCount ? "lead.inspection_summary.verified_public_facts.reviewCount" : "lead.review_count") : null);
+  record("description", description ? "sourced" : "omitted", description ? (verifiedFacts?.description === description ? "lead.inspection_summary.verified_public_facts.description" : "lead.inspection_summary.public_description") : null);
+  record("cuisine", cuisine ? "sourced" : "omitted", cuisine ? (verifiedFacts?.cuisine === cuisine ? "lead.inspection_summary.verified_public_facts.cuisine" : "lead.inspection_summary.cuisine") : null);
+  record("hours", hours ? "sourced" : "omitted", hours ? (verifiedFacts?.hours === hours ? "lead.inspection_summary.verified_public_facts.hours" : "lead.inspection_summary.public_hours") : null);
+  record("menuLink", menuLink ? "sourced" : "omitted", menuLink ? (verifiedFacts?.menuUrl === menuLink ? "lead.inspection_summary.verified_public_facts.menuUrl" : "lead.inspection_summary.menu_link") : null);
+  record("reservationUrl", reservationUrl ? "sourced" : "omitted", reservationUrl ? (verifiedFacts?.reservationUrl === reservationUrl ? "lead.inspection_summary.verified_public_facts.reservationUrl" : "lead.inspection_summary.reservation_link") : null);
+  record("orderUrl", orderUrl ? "sourced" : "omitted", orderUrl ? (verifiedFacts?.orderUrl === orderUrl ? "lead.inspection_summary.verified_public_facts.orderUrl" : "lead.inspection_summary.order_link") : null);
+  record("socialUrl", socialUrl ? "sourced" : "omitted", socialUrl ? (verifiedFacts?.socialUrl === socialUrl ? "lead.inspection_summary.verified_public_facts.socialUrl" : "lead.inspection_summary.social_url") : null);
   record("reservationsOffered", reservationsOffered ? "sourced" : "omitted", reservationsOffered ? "inspection_or_audit" : null);
   record("orderingOffered", orderingOffered ? "sourced" : "omitted", orderingOffered ? "inspection_or_audit" : null);
   record("emergencyOffered", emergencyOffered ? "sourced" : "omitted", emergencyOffered ? "audit.findings" : null);
@@ -108,7 +133,13 @@ export function extractFacts(
     websiteUrl,
     rating,
     reviewCount,
+    description,
+    cuisine,
+    hours,
     menuLink,
+    reservationUrl,
+    orderUrl,
+    socialUrl,
     reservationsOffered,
     orderingOffered,
     emergencyOffered,

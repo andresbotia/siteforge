@@ -61,6 +61,7 @@ export interface Lead {
   discoverySource: string | null;
   lastScoutRunId: string | null;
   inspectionSummary: Record<string, unknown> | null;
+  verifiedPublicFacts: Record<string, unknown> | null;
 }
 
 export type AuditCategory = "technical" | "seo" | "ux" | "content";

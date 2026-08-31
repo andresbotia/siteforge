@@ -12,6 +12,13 @@ import {
   isNoStandaloneWebsiteSummary,
   noStandaloneWebsiteSummary,
 } from "@/lib/prospects/no-website";
+import {
+  buildVerifiedPublicFactsInspectionSummary,
+  readVerifiedPublicFacts,
+  validateVerifiedPublicFacts,
+  type VerifiedPublicFactKey,
+  type VerifiedPublicFactsInput,
+} from "@/lib/prospects/verified-public-facts";
 import { getSupabaseServerConfigIssue } from "@/lib/supabase/config";
 import type {
   AuditFinding,
@@ -24,7 +31,7 @@ import type {
   QualificationTier,
   WebsiteAudit,
 } from "@/types";
-import type { AgentRunRow, AuditRow, LeadRow } from "@/types/database";
+import type { AgentRunRow, AuditRow, Json, LeadRow } from "@/types/database";
 import type { ExistingLeadRecord } from "@/lib/scout/types";
 
 const leadStatuses = new Set<LeadStatus>([
@@ -54,6 +61,10 @@ function mapLead(row: LeadRow, websiteScore = 0): Lead {
   const city = row.city ?? "";
   const state = row.state ?? "";
   const noStandaloneWebsite = isNoStandaloneWebsiteSummary(row.inspection_summary);
+  const inspectionSummary = Object.keys(asRecord(row.inspection_summary)).length
+    ? asRecord(row.inspection_summary)
+    : null;
+  const verifiedPublicFacts = readVerifiedPublicFacts(inspectionSummary);
   const opportunity = row.website_opportunity_score;
   const derivedWebsiteScore =
     opportunity === null || opportunity === undefined
@@ -90,8 +101,9 @@ function mapLead(row: LeadRow, websiteScore = 0): Lead {
     qualificationReasons: asStringArray(row.qualification_reasons),
     discoverySource: row.source,
     lastScoutRunId: row.last_scout_run_id,
-    inspectionSummary: Object.keys(asRecord(row.inspection_summary)).length
-      ? asRecord(row.inspection_summary)
+    inspectionSummary,
+    verifiedPublicFacts: verifiedPublicFacts
+      ? (verifiedPublicFacts as unknown as Record<string, unknown>)
       : null,
   };
 }
@@ -345,6 +357,64 @@ export async function createManualPublicProspect(
   });
 
   return { ok: true, leadId: row.id, duplicate: false };
+}
+
+export type VerifiedPublicFactsUpdateResult =
+  | { ok: true }
+  | { ok: false; error: string; field?: VerifiedPublicFactKey };
+
+export async function updateLeadVerifiedPublicFacts(
+  input: { leadId: string; facts: VerifiedPublicFactsInput },
+): Promise<VerifiedPublicFactsUpdateResult> {
+  const configIssue = getSupabaseServerConfigIssue();
+  if (configIssue) {
+    console.error("Verified public facts update blocked", configIssue.code);
+    return { ok: false, error: configIssue.message };
+  }
+
+  const lead = await readTable<LeadRow | null>((client) =>
+    client.from("leads").select("*").eq("id", input.leadId).maybeSingle(),
+  );
+  if (!lead) return { ok: false, error: "Lead was not found." };
+
+  const validation = await validateVerifiedPublicFacts(input.facts);
+  if (!validation.ok) return validation;
+
+  const facts = validation.summary.facts;
+  const nextSummary = buildVerifiedPublicFactsInspectionSummary(
+    lead.inspection_summary,
+    validation.summary,
+  );
+
+  await mutateTable((client) =>
+    client
+      .from("leads")
+      .update({
+        inspection_summary: nextSummary as Json,
+        google_rating: facts.rating,
+        review_count: facts.reviewCount ?? 0,
+      })
+      .eq("id", lead.id)
+      .select("id")
+      .maybeSingle(),
+  );
+
+  await recordActivityEvent({
+    eventType: "verified_public_facts_updated",
+    title: "Verified public facts updated",
+    description:
+      "Operator attached bounded manually verified public facts for Builder enrichment.",
+    actorType: "admin",
+    leadId: lead.id,
+    metadata: {
+      source_type: validation.summary.source_type,
+      fields: Object.entries(facts)
+        .filter(([, value]) => value !== null)
+        .map(([field]) => field),
+    },
+  });
+
+  return { ok: true };
 }
 
 export async function getLeadById(id: string): Promise<Lead | null> {

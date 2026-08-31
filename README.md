@@ -57,6 +57,7 @@ M9.5D prospect sends require all of the following:
 - Operator manually selects the prospect and uses only reliable public business contact information.
 - Deterministic Auditor and Builder results are reviewed before Sales drafting.
 - If the operator has explicitly verified that a prospect has no standalone business website, SiteForge stores that as a new-website opportunity instead of inventing a URL or audit score. Auditor is skipped; Builder uses only sourced lead facts.
+- For explicit no-website prospects, the lead detail page supports admin-only verified public fact enrichment: source URL, public summary, cuisine/category, hours, rating, review count, and public social/menu/order/reservation URLs. Saved enrichment stores provenance in `inspection_summary.verified_public_facts` and can be used by a later Builder regeneration.
 - The tracked public preview is approved, active, public, not revoked, not expired, and linked to the same lead and generated website.
 - Sales draft content is deterministic; no paid AI writes official email copy.
 - A human approval binds the exact recipient, subject, body, preview deployment, content version, and attribution token hash.
@@ -135,7 +136,7 @@ Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek,
 | Scout | Manual $0 catalog discovery + bounded inspection |
 | Manual public prospect import | Admin-only public-data import with normalization, dedupe, SSRF URL validation when a website exists, explicit no-website marking, and manual provenance |
 | Auditor | Manual $0 deterministic website audit; explicit no-website prospects are excluded |
-| Builder | Manual $0 deterministic template draft; explicit no-website prospects may build from sourced lead facts without a crawled audit |
+| Builder | Manual $0 deterministic template draft; explicit no-website prospects may build from sourced lead facts and verified public enrichment without a crawled audit |
 | Sales | Manual $0 deterministic outreach drafting, approval binding, mock send, guarded live-send boundary, and no-website-safe copy |
 | Preview deployments | Approval-gated tokenized public previews; not production hosting |
 | Other agents | Disabled |

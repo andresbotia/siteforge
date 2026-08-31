@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AuditRunButton } from "@/components/auditor/audit-run-button";
 import { BuildRunButton } from "@/components/builder/build-run-button";
+import { VerifiedPublicFactsForm } from "@/components/leads/verified-public-facts-form";
 import { CreateOfferForm } from "@/components/offers/create-offer-form";
 import { listActivityForLead } from "@/data/activity";
 import { getLatestAuditForLead, getLeadById, listAuditsForLead } from "@/data/leads";
@@ -192,6 +193,21 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           ) : null}
         </CardBody>
       </Card>
+
+      {isNoStandaloneWebsite ? (
+        <Card className="mt-4">
+          <CardHeader
+            title="Verified public facts"
+            description="Operator-attached public facts for Builder regeneration. Saving does not publish, send outreach, or call paid services."
+          />
+          <CardBody>
+            <VerifiedPublicFactsForm
+              leadId={lead.id}
+              verifiedPublicFacts={lead.verifiedPublicFacts}
+            />
+          </CardBody>
+        </Card>
+      ) : null}
 
       {audit ? (
         <Card className="mt-4">

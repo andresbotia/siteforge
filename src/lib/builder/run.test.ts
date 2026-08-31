@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { resolveMonotonicLeadStatus } from "../scout/status";
 import { noStandaloneWebsiteSummary } from "../prospects/no-website";
+import { validateVerifiedPublicFacts } from "../prospects/verified-public-facts";
 import { BUILDER_SIDE_EFFECTS, builderPaidAiPath, denyDirectPaidAi } from "./policy";
 import { buildBuilderToolCalls, buildGeneratedWebsiteInsert } from "./persist";
 import { runBuilderPipeline } from "./run";
@@ -224,6 +225,72 @@ describe("factual integrity", () => {
     assert.ok(result.spec.provenance.some((item) => item.field === "hours" && item.provenance === "omitted"));
     assert.ok(result.spec.provenance.some((item) => item.field === "menuLink" && item.provenance === "omitted"));
     assert.ok(result.spec.provenance.some((item) => item.field === "email" && item.provenance === "omitted"));
+    assert.equal(
+      /This draft uses only sourced|Menu details will be confirmed|No dishes or prices were invented|not in the sourced lead data|does not submit forms|SiteForge/i.test(blob),
+      false,
+    );
+  });
+
+  it("enriches a no-website restaurant draft only from verified public facts", async () => {
+    const verified = await validateVerifiedPublicFacts(
+      {
+        sourceUrl: "https://public.example.test/antojitos-profile",
+        description: "Salvadoran restaurant serving public menu favorites in Margate.",
+        cuisine: "Salvadoran",
+        hours: "Mon-Sat 10 AM - 8 PM",
+        rating: "4.7",
+        reviewCount: "186",
+        socialUrl: "https://social.example.test/antojitos",
+        menuUrl: "https://public.example.test/antojitos-menu",
+        orderUrl: "https://orders.example.test/antojitos",
+      },
+      {
+        verifiedAt: "2026-08-30T12:00:00.000Z",
+        lookup: async () => ["93.184.216.34"],
+      },
+    );
+    assert.equal(verified.ok, true);
+    if (!verified.ok) return;
+
+    const result = runBuilderPipeline(
+      lead({
+        businessName: "Antojitos Test",
+        industry: "Restaurant",
+        city: "Margate",
+        state: "FL",
+        address: "123 Sample Road, Margate, FL",
+        websiteUrl: null,
+        email: null,
+        rating: null,
+        reviewCount: 0,
+        inspectionSummary: {
+          ...noStandaloneWebsiteSummary(),
+          verified_public_facts: verified.summary,
+        },
+      }),
+      noWebsiteAudit(),
+    );
+    const blob = JSON.stringify(result.spec);
+
+    assert.equal(validateWebsiteSpec(result.spec).ok, true);
+    assert.equal(result.spec.business.websiteUrl, null);
+    assert.equal(result.spec.business.cuisine, "Salvadoran");
+    assert.equal(result.spec.business.rating, 4.7);
+    assert.equal(result.spec.business.reviewCount, 186);
+    assert.ok(blob.includes("Salvadoran restaurant serving public menu favorites in Margate."));
+    assert.ok(blob.includes("Mon-Sat 10 AM - 8 PM"));
+    assert.ok(blob.includes("https://public.example.test/antojitos-menu"));
+    assert.ok(blob.includes("https://orders.example.test/antojitos"));
+    assert.ok(blob.includes("https://social.example.test/antojitos"));
+    assert.equal(/\$\d+|family owned|award|fresh daily|since 19|best in/i.test(blob), false);
+    assert.ok(
+      result.spec.provenance.some(
+        (item) =>
+          item.field === "description" &&
+          item.provenance === "sourced" &&
+          item.source === "lead.inspection_summary.verified_public_facts.description",
+      ),
+    );
   });
 });
 
@@ -332,6 +399,7 @@ describe("lead status and history", () => {
     assert.equal("id" in first && first.id === "web-1", true);
     assert.notEqual(first.id, second.id);
     assert.equal(first.production_url, null);
+    assert.equal(first.status, "review_required");
     assert.equal(second.source_run_id, "run-2");
   });
 });
