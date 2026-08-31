@@ -265,6 +265,73 @@ describe("external source artifacts", () => {
     assert.equal(leaked.ok, false);
   });
 
+  it("blocks provider/editor branding in built browser output", async () => {
+    const checked = validateExternalSourceArtifact({
+      provider: "lovable",
+      controlledPreviewUrl: null,
+      providerPreviewUrl: null,
+      manifest: viteRestaurantManifest,
+    });
+    const artifact = createExternalSourceArtifact({
+      id: "artifact-provider-leak",
+      generatedWebsiteId: "website-provider-leak",
+      leadId: "lead-provider-leak",
+      provider: "lovable",
+      manifest: viteRestaurantManifest,
+      importedAt: "2026-08-30T00:00:00.000Z",
+      validation: checked.validation,
+      build: checked.build,
+    });
+    const runner: BuildCommandRunner = async (input) => {
+      if (input.args.includes("build")) {
+        const out = join(input.cwd, "dist", "assets");
+        await mkdir(out, { recursive: true });
+        await writeFile(join(input.cwd, "dist", "index.html"), "<main>Built with Lovable</main>");
+        await writeFile(join(out, "app.js"), "console.log('Built with Lovable')");
+      }
+      return { ok: true, exitCode: 0, stdout: "", stderr: "" };
+    };
+
+    const built = await buildExternalSourceArtifact({ artifact, runner });
+
+    assert.equal(built.ok, false);
+    assert.equal(
+      built.ok === false && built.findings?.some((finding) => finding.code === "provider_editor_leak"),
+      true,
+    );
+  });
+
+  it("does not treat source-only repository dotfiles as deployable output file types", async () => {
+    const manifest: ExternalSiteImportManifest = {
+      files: [...staticManifest.files, { path: ".gitignore", content: "dist\n" }],
+      packageJson: null,
+    };
+    const checked = validateExternalSourceArtifact({
+      provider: "manual",
+      controlledPreviewUrl: null,
+      providerPreviewUrl: null,
+      manifest,
+    });
+    const artifact = createExternalSourceArtifact({
+      id: "artifact-dotfile-output",
+      generatedWebsiteId: "website-dotfile-output",
+      leadId: "lead-dotfile-output",
+      provider: "manual",
+      manifest,
+      importedAt: "2026-08-30T00:00:00.000Z",
+      validation: checked.validation,
+      build: checked.build,
+    });
+
+    assert.equal(checked.validation.ok, true);
+    const built = await buildExternalSourceArtifact({ artifact });
+    assert.equal(built.ok, false);
+    assert.equal(
+      built.ok === false && built.findings?.some((finding) => finding.code === "unsupported_output_file_type"),
+      true,
+    );
+  });
+
   it("supports fake deployment success and failure without calling Vercel", async () => {
     const ok = await createFakePreviewDeploymentProvider().deployStaticOutput({
       artifactId: "artifact-1",

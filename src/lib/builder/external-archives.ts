@@ -19,6 +19,7 @@ const LOCAL_FILE_SIGNATURE = 0x04034b50;
 const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true });
 const SAFE_FILE_PATH = /^[A-Za-z0-9._/@+-]+$/;
 const TEXT_EXTENSIONS = new Set([".ts", ".tsx", ".js", ".jsx", ".json", ".css", ".html", ".svg", ".txt", ".md", ".toml", ".lock"]);
+const EXACT_TEXT_FILENAMES = new Set([".gitignore", ".prettierignore", ".prettierrc"]);
 const BINARY_SIGNATURES: Record<string, (bytes: Buffer) => boolean> = {
   ".png": (bytes) => bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
   ".jpg": (bytes) => bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff,
@@ -100,7 +101,7 @@ export function inspectExternalSourceArchive(archive: Buffer): ExternalArchiveIn
     }
     seen.add(path);
     const extension = extensionFor(path);
-    if (!extension || !ALLOWED_EXTENSIONS.has(extension)) {
+    if (!isAllowedArchiveTextOrBinaryPath(path, extension)) {
       findings.push({ code: "unsupported_archive_file_type", severity: "severe", message: "ZIP entry file type is not allowlisted.", path });
     }
     if (NESTED_ARCHIVE_OR_EXECUTABLE.test(path)) {
@@ -272,6 +273,11 @@ function isSafeRelativePath(path: string): boolean {
 function extensionFor(path: string): string | null {
   const match = path.toLowerCase().match(/(\.[a-z0-9]+)$/);
   return match?.[1] ?? null;
+}
+
+function isAllowedArchiveTextOrBinaryPath(path: string, extension: string | null): boolean {
+  const fileName = path.replace(/\\/g, "/").split("/").pop() ?? path;
+  return EXACT_TEXT_FILENAMES.has(fileName) || Boolean(extension && ALLOWED_EXTENSIONS.has(extension));
 }
 
 function isSymlinkLike(externalAttributes: number): boolean {

@@ -138,16 +138,6 @@ const SAFE_FILE_PATH = /^[A-Za-z0-9._/@+-]+$/;
 const MAX_FILES = 160;
 const MAX_FILE_BYTES = 5_000_000;
 const MAX_TOTAL_BYTES = 25_000_000;
-const PRIVATE_HOST_PATTERNS = [
-  /\blocalhost\b/i,
-  /\b127\./,
-  /\b0\.0\.0\.0\b/,
-  /\b10\./,
-  /\b172\.(1[6-9]|2\d|3[01])\./,
-  /\b192\.168\./,
-  /\b169\.254\./,
-  /\bmetadata\.google\.internal\b/i,
-];
 const SECRET_PATTERNS = [
   /\b[A-Za-z0-9_]*API[_-]?KEY\b\s*[:=]/i,
   /\b[A-Za-z0-9_]*SECRET\b\s*[:=]/i,
@@ -157,6 +147,20 @@ const SECRET_PATTERNS = [
   /\bSUPABASE_SERVICE_ROLE_KEY\b/i,
   /\bRESEND_API_KEY\b/i,
 ];
+const URL_REFERENCE = /\bhttps?:\/\/[^\s"'<>`\\)]+/gi;
+const HOST_PORT_REFERENCE =
+  /(?<![\w.])(?:localhost|metadata\.google\.internal|(?:\d{1,3}\.){3}\d{1,3}|\[[0-9a-f:.]+\]|::1):\d{1,5}\b/gi;
+const CIDR_REFERENCE = /(?<![\w.])((?:\d{1,3}\.){3}\d{1,3})\/(\d{1,2})\b/g;
+const EXACT_REPOSITORY_METADATA_FILES = new Set([".gitignore", ".prettierignore", ".prettierrc", ".prettierrc.json"]);
+const PACKAGE_METADATA_FILES = new Set(["package.json", "package-lock.json", "bun.lock", "bun.lockb"]);
+
+type ExternalSourceFileCategory =
+  | "runtime_source"
+  | "static_asset"
+  | "build_config"
+  | "package_metadata"
+  | "repository_metadata"
+  | "documentation";
 
 export function parseExternalProvider(value: string): ExternalProvider | null {
   return PROVIDER_SET.has(value) ? (value as ExternalProvider) : null;
@@ -553,10 +557,11 @@ function lifecycleStatusFor(
 
 function inspectFile(path: string, content: string, findings: ExternalSiteFinding[]): void {
   const lowerPath = path.toLowerCase();
+  const category = classifyExternalSourceFile(path);
   if (/(^|\/)\.env(\.|$)|\.pem$|\.key$/i.test(lowerPath)) {
     findings.push({ code: "secret_file", severity: "severe", message: "Secret-bearing files are not allowed in imported site source.", path });
   }
-  if (/https?:\/\/[^"'\s]*lovable\.app|data-lovable|lovable editor/i.test(content)) {
+  if (shouldScanProviderLeak(category) && hasProviderEditorLeak(content)) {
     findings.push({ code: "provider_editor_leak", severity: "severe", message: "Provider editor links or metadata must not leak into imported source.", path });
   }
   if (/<script\b(?![^>]*\btype=["']module["'][^>]*\bsrc=)[\s\S]*?>[\s\S]*?<\/script>/i.test(content)) {
@@ -565,11 +570,8 @@ function inspectFile(path: string, content: string, findings: ExternalSiteFindin
   if (/javascript:/i.test(content)) {
     findings.push({ code: "javascript_url", severity: "severe", message: "javascript: URLs are forbidden.", path });
   }
-  for (const pattern of PRIVATE_HOST_PATTERNS) {
-    if (pattern.test(content)) {
-      findings.push({ code: "private_network_reference", severity: "severe", message: "Localhost, private, link-local, or metadata URLs are forbidden.", path });
-      break;
-    }
+  if (hasPrivateNetworkReference(content)) {
+    findings.push({ code: "private_network_reference", severity: "severe", message: "Localhost, private, link-local, or metadata URLs are forbidden.", path });
   }
   for (const pattern of SECRET_PATTERNS) {
     if (pattern.test(content)) {
@@ -583,6 +585,83 @@ function inspectFile(path: string, content: string, findings: ExternalSiteFindin
   if (/<script[^>]+src=["']https?:\/\//i.test(content)) {
     findings.push({ code: "external_script_reference", severity: "warning", message: "External scripts require manual operator review.", path });
   }
+}
+
+function classifyExternalSourceFile(path: string): ExternalSourceFileCategory {
+  const normalized = path.replace(/\\/g, "/").toLowerCase();
+  const fileName = normalized.split("/").pop() ?? normalized;
+  if (normalized.startsWith("public/")) return "static_asset";
+  if (PACKAGE_METADATA_FILES.has(fileName)) return "package_metadata";
+  if (EXACT_REPOSITORY_METADATA_FILES.has(fileName)) return "repository_metadata";
+  if (fileName === "readme.md" || fileName === "agents.md" || normalized.endsWith(".md")) return "documentation";
+  if (
+    fileName === "components.json" ||
+    fileName === "tsconfig.json" ||
+    fileName === "bunfig.toml" ||
+    fileName === "vite.config.ts" ||
+    fileName === "eslint.config.js" ||
+    normalized === ".lovable/project.json"
+  ) {
+    return "build_config";
+  }
+  return "runtime_source";
+}
+
+function shouldScanProviderLeak(category: ExternalSourceFileCategory): boolean {
+  return category === "runtime_source" || category === "static_asset";
+}
+
+function hasProviderEditorLeak(content: string): boolean {
+  return /https?:\/\/[^"'\s]*lovable\.(?:app|dev)|data-lovable|lovable editor|built with lovable/i.test(content);
+}
+
+function hasPrivateNetworkReference(content: string): boolean {
+  for (const match of content.matchAll(URL_REFERENCE)) {
+    if (isPrivateUrl(match[0])) return true;
+  }
+  for (const match of content.matchAll(HOST_PORT_REFERENCE)) {
+    const host = match[0].replace(/:\d{1,5}$/, "");
+    if (isPrivateHost(host)) return true;
+  }
+  for (const match of content.matchAll(CIDR_REFERENCE)) {
+    const host = match[1];
+    const prefix = Number(match[2]);
+    if (Number.isInteger(prefix) && prefix >= 0 && prefix <= 32 && isPrivateIpv4(host)) return true;
+  }
+  return false;
+}
+
+function isPrivateUrl(value: string): boolean {
+  try {
+    return isPrivateHost(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function isPrivateHost(value: string): boolean {
+  const host = value.trim().replace(/^\[/, "").replace(/\]$/, "").toLowerCase();
+  if (host === "localhost" || host === "metadata.google.internal") return true;
+  if (host.includes(":")) {
+    return host === "::1" || host.startsWith("fe80:") || host.startsWith("fc") || host.startsWith("fd");
+  }
+  return isPrivateIpv4(host);
+}
+
+function isPrivateIpv4(value: string): boolean {
+  const parts = value.split(".");
+  if (parts.length !== 4) return false;
+  const octets = parts.map((part) => (/^\d{1,3}$/.test(part) ? Number(part) : Number.NaN));
+  if (octets.some((octet) => !Number.isInteger(octet) || octet < 0 || octet > 255)) return false;
+  const [first, second, third, fourth] = octets;
+  return (
+    first === 127 ||
+    (first === 0 && second === 0 && third === 0 && fourth === 0) ||
+    first === 10 ||
+    (first === 172 && second >= 16 && second <= 31) ||
+    (first === 192 && second === 168) ||
+    (first === 169 && second === 254)
+  );
 }
 
 function summarizePackage(value: Record<string, unknown> | null, paths: string[] = []): ExternalSitePackageSummary {

@@ -155,6 +155,10 @@ describe("external generated site import validation", () => {
       ["src/key.ts", "const key = '-----BEGIN PRIVATE KEY-----'"],
       ["src/api.ts", "const url = 'http://127.0.0.1:54321'"],
       ["src/metadata.ts", "fetch('http://169.254.169.254/latest/meta-data')"],
+      ["src/loopback.ts", "const url = 'http://[::1]:3000'"],
+      ["src/private.ts", "const url = 'http://10.0.0.12:5173'"],
+      ["src/lan.ts", "const endpoint = '192.168.1.10:8080'"],
+      ["src/cidr.ts", "const blocked = '172.16.0.0/12'"],
       ["src/link.tsx", "<a href=\"javascript:alert(1)\">Bad</a>"],
       ["src/stripe.ts", "const stripe = 'sk_live_123'"],
       ["src/editor.tsx", "<a href=\"https://lovable.app/projects/abc\">Edit</a>"],
@@ -172,6 +176,74 @@ describe("external generated site import validation", () => {
       });
       assert.equal(result.validation.ok, false, path);
       assert.equal(result.build.ok, false, path);
+    }
+  });
+
+  it("does not treat semver, package metadata, or lockfile text as private network endpoints", () => {
+    const packageJson = {
+      scripts: { build: "vite build" },
+      dependencies: {
+        react: "^19.2.0",
+        "eslint-config-prettier": "^10.1.1",
+        vite: "8.1.5",
+      },
+    };
+    const result = validateExternalSiteSource({
+      provider: "lovable",
+      controlledPreviewUrl: null,
+      providerPreviewUrl: null,
+      manifest: {
+        files: [
+          { path: "package.json", content: JSON.stringify(packageJson) },
+          { path: "bun.lock", content: "\"eslint-config-prettier@^10.1.1\":\n  version \"10.1.1\"\n  integrity \"sha512-abc123\"" },
+          { path: "src/App.tsx", content: "export default function App(){return <main>Ok</main>}" },
+        ],
+        packageJson,
+      },
+    });
+
+    assert.equal(
+      result.validation.findings.some((finding) => finding.code === "private_network_reference"),
+      false,
+    );
+  });
+
+  it("allows private repository documentation to mention Lovable provenance", () => {
+    const result = validateExternalSiteSource({
+      provider: "lovable",
+      controlledPreviewUrl: null,
+      providerPreviewUrl: null,
+      manifest: {
+        files: [
+          ...fixtureManifest.files,
+          { path: "README.md", content: "This project was built with Lovable. Open it at https://lovable.dev." },
+          { path: "AGENTS.md", content: "This project is connected to Lovable." },
+        ],
+        packageJson: fixtureManifest.packageJson,
+      },
+    });
+
+    assert.equal(result.validation.ok, true);
+    assert.equal(
+      result.validation.findings.some((finding) => finding.code === "provider_editor_leak"),
+      false,
+    );
+  });
+
+  it("still blocks provider attribution in material browser-facing source", () => {
+    for (const path of ["index.html", "public/metadata.json", "src/App.tsx"]) {
+      const result = validateExternalSiteSource({
+        provider: "lovable",
+        controlledPreviewUrl: null,
+        providerPreviewUrl: null,
+        manifest: {
+          ...fixtureManifest,
+          files: [...fixtureManifest.files, { path, content: "Built with Lovable at https://lovable.dev" }],
+        },
+      });
+
+      assert.equal(result.validation.ok, false, path);
+      assert.equal(result.validation.findings.some((finding) => finding.code === "provider_editor_leak"), true, path);
     }
   });
 

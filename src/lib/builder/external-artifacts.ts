@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { delimiter, dirname, join, resolve, sep } from "node:path";
 import { spawn } from "node:child_process";
 import { asRecord } from "@/lib/json";
 import {
@@ -52,6 +53,7 @@ export const ALLOWED_EXTERNAL_SOURCE_EXTENSIONS = new Set([
   ".toml",
   ".lock",
 ]);
+const ALLOWED_EXTERNAL_SOURCE_FILENAMES = new Set([".gitignore", ".prettierignore", ".prettierrc"]);
 
 const UNSUPPORTED_EXTENSIONS = /\.(exe|dll|so|dylib|sh|bat|cmd|ps1|zip|tar|gz|7z|rar)$/i;
 const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp)$/i;
@@ -300,7 +302,7 @@ export function validateExternalSourceArtifact(input: {
     const path = normalizePath(String(file.path ?? ""));
     const extension = extensionFor(path);
     const content = String(file.content ?? "");
-    if (!extension || !ALLOWED_EXTERNAL_SOURCE_EXTENSIONS.has(extension)) {
+    if (!isAllowedExternalSourcePath(path, extension)) {
       findings.push({ code: "unsupported_file_type", severity: "severe", message: "External source file type is not allowlisted.", path });
     }
     if (UNSUPPORTED_EXTENSIONS.test(path)) {
@@ -706,15 +708,30 @@ async function directoryBytes(path: string): Promise<number> {
 
 function defaultBuildCommandRunner(input: Parameters<BuildCommandRunner>[0]): ReturnType<BuildCommandRunner> {
   return new Promise((resolveCommand) => {
-    const child = spawn(input.command, input.args, {
-      cwd: input.cwd,
-      env: input.env,
-      shell: false,
-      windowsHide: true,
-    });
     let stdout = "";
     let stderr = "";
+    let settled = false;
+    const command = resolveBuildCommand(input.command, input.args, input.env);
+    let child: ReturnType<typeof spawn>;
+    try {
+      child = spawn(/* turbopackIgnore: true */ command.command, command.args, {
+        cwd: input.cwd,
+        env: input.env,
+        shell: false,
+        windowsHide: true,
+      });
+    } catch (error) {
+      resolveCommand({
+        ok: false,
+        exitCode: null,
+        stdout: "",
+        stderr: sanitizeLog(error instanceof Error ? error.message : "could not start command"),
+      });
+      return;
+    }
     const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
       child.kill();
       resolveCommand({ ok: false, exitCode: null, stdout: boundLog(stdout), stderr: boundLog(stderr), timedOut: true });
     }, input.timeoutMs);
@@ -724,17 +741,71 @@ function defaultBuildCommandRunner(input: Parameters<BuildCommandRunner>[0]): Re
     child.stderr?.on("data", (chunk) => {
       stderr = boundLog(stderr + String(chunk));
     });
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolveCommand({ ok: false, exitCode: null, stdout: boundLog(stdout), stderr: sanitizeLog(error.message) });
+    });
     child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timeout);
       resolveCommand({ ok: code === 0, exitCode: code, stdout: boundLog(stdout), stderr: boundLog(stderr) });
     });
   });
 }
 
+function resolveBuildCommand(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): { command: string; args: string[] } {
+  if (process.platform !== "win32") return { command, args };
+  if (command === "bun") {
+    const bunExe = findOnPath("bun.exe", env) ?? findNpmPackageBin("bun", "bun.exe", env);
+    if (bunExe) return { command: bunExe, args };
+  }
+  if (command === "npm") {
+    const npmCli = findNpmCli();
+    if (npmCli) return { command: process.execPath, args: [npmCli, ...args] };
+  }
+  return { command, args };
+}
+
+function findOnPath(fileName: string, env: NodeJS.ProcessEnv): string | null {
+  const pathValue = env.Path ?? env.PATH ?? "";
+  for (const part of pathValue.split(delimiter)) {
+    if (!part) continue;
+    const candidate = join(part, fileName);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function findNpmPackageBin(packageName: string, binFileName: string, env: NodeJS.ProcessEnv): string | null {
+  const pathValue = env.Path ?? env.PATH ?? "";
+  for (const part of pathValue.split(delimiter)) {
+    if (!part) continue;
+    const candidate = join(part, "node_modules", packageName, "bin", binFileName);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function findNpmCli(): string | null {
+  const candidates = [
+    join(dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js"),
+    join(process.env.APPDATA ?? "", "npm", "node_modules", "npm", "bin", "npm-cli.js"),
+  ];
+  return candidates.find((candidate) => candidate && existsSync(candidate)) ?? null;
+}
+
 function minimalBuildEnvironment(): NodeJS.ProcessEnv {
   return {
     PATH: process.env.PATH ?? "",
     Path: process.env.Path ?? process.env.PATH ?? "",
+    PATHEXT: process.env.PATHEXT ?? process.env.Pathext ?? ".COM;.EXE;.BAT;.CMD",
     SystemRoot: process.env.SystemRoot,
     ComSpec: process.env.ComSpec,
     CI: "true",
@@ -774,6 +845,11 @@ function normalizePath(value: string): string {
 function extensionFor(path: string): string | null {
   const match = path.toLowerCase().match(/(\.[a-z0-9]+)$/);
   return match?.[1] ?? null;
+}
+
+function isAllowedExternalSourcePath(path: string, extension: string | null): boolean {
+  const fileName = path.replace(/\\/g, "/").split("/").pop() ?? path;
+  return ALLOWED_EXTERNAL_SOURCE_FILENAMES.has(fileName) || Boolean(extension && ALLOWED_EXTERNAL_SOURCE_EXTENSIONS.has(extension));
 }
 
 function hasBinaryControlCharacters(content: string): boolean {

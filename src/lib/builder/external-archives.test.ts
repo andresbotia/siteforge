@@ -33,6 +33,9 @@ const tanstackPackageJson = {
 describe("external source ZIP archives", () => {
   it("accepts Lovable-style TanStack/Vite ZIP exports with binary assets", async () => {
     const archive = zip([
+      [".gitignore", "node_modules\n"],
+      [".prettierignore", "dist\n"],
+      [".prettierrc", "{ \"printWidth\": 100 }\n"],
       ["package.json", JSON.stringify(tanstackPackageJson)],
       ["bun.lock", ""],
       ["vite.config.ts", "export default {}"],
@@ -52,6 +55,7 @@ describe("external source ZIP archives", () => {
     assert.equal(checked.validation.packageSummary.framework, "vite-tanstack-start");
     assert.equal(checked.validation.packageSummary.packageManager, "bun");
     assert.equal(checked.validation.packageSummary.lockfiles.includes("bun.lock"), true);
+    assert.equal(checked.validation.findings.some((finding) => finding.code === "unsupported_archive_file_type"), false);
     assert.equal(checked.build.command, "bun install --frozen-lockfile --ignore-scripts && bun run build");
 
     const artifact = createExternalSourceArchiveArtifact({
@@ -105,6 +109,7 @@ describe("external source ZIP archives", () => {
       ["traversal", zip([["../secret.ts", "export {}"]]), "unsafe_archive_path"],
       ["absolute", zip([["C:/secret.ts", "export {}"]]), "unsafe_archive_path"],
       ["nested archive", zip([["source.zip", "zip"]]), "unsupported_archive_file_type"],
+      ["unknown extensionless", zip([["deploy", "echo no"]]), "unsupported_archive_file_type"],
       ["symlink", zip([["src/link.ts", "target"]], { unixMode: 0o120000 }), "archive_symlink"],
       ["spoofed jpg", zip([["src/assets/photo.jpg", "not-a-jpeg"]]), "invalid_binary_signature"],
       ["compression", zip([["src/large.txt", "x".repeat(1_100_000)]], { deflate: true }), "suspicious_compression_ratio"],
