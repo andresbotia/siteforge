@@ -11,6 +11,10 @@ import {
   SALES_PROVIDER_ID,
   SALES_VERSION,
 } from "@/lib/sales/limits";
+import {
+  canAddToM95DFirstCampaign,
+  M95D_FIRST_CAMPAIGN_ID,
+} from "@/lib/sales/campaign";
 import { buildOutreachInsert, buildSalesToolCalls } from "@/lib/sales/persist";
 import { runSalesPipeline } from "@/lib/sales/run";
 import { mutateTable, readTable } from "@/lib/supabase/server";
@@ -169,6 +173,17 @@ export async function startSalesDraftRun(input: {
   if (!preview || preview.status !== "active" || preview.revoked_at) {
     return { ok: false, error: "An active approved preview deployment is required before drafting outreach." };
   }
+  if (preview.expires_at && new Date(preview.expires_at) <= new Date()) {
+    return { ok: false, error: "The active preview deployment is expired. Publish a fresh preview before drafting outreach." };
+  }
+
+  const campaignRows = await readTable<Pick<OutreachRow, "lead_id">[]>((client) =>
+    client.from("outreach").select("lead_id").eq("campaign_id", M95D_FIRST_CAMPAIGN_ID),
+  );
+  const selectedLeadIds = new Set((campaignRows ?? []).map((row) => row.lead_id));
+  if (!selectedLeadIds.has(lead.id) && !canAddToM95DFirstCampaign(selectedLeadIds.size)) {
+    return { ok: false, error: "M9.5D first campaign is capped at 5 manually selected prospects." };
+  }
 
   const audit = await getLatestAuditForLead(lead.id);
 
@@ -298,7 +313,7 @@ export async function startSalesDraftRun(input: {
     await mutateTable((client) =>
       client
         .from("preview_deployments")
-        .update({ outreach_id: outreach.id })
+        .update({ outreach_id: outreach.id, campaign_id: M95D_FIRST_CAMPAIGN_ID })
         .eq("id", preview.id)
         .select("id")
         .maybeSingle(),

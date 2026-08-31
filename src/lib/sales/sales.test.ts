@@ -7,6 +7,11 @@ import {
   isOutreachAttributionToken,
   renderOutreachBody,
 } from "@/lib/sales/attribution";
+import {
+  canAddToM95DFirstCampaign,
+  M95D_FIRST_CAMPAIGN_ID,
+  M95D_FIRST_CAMPAIGN_MAX_PROSPECTS,
+} from "./campaign";
 import { computeOutreachContentHash, verifyOutreachContentHash } from "./content-hash";
 import { composeSalesDraft } from "./draft";
 import { isLeadEligibleForSales } from "./eligibility";
@@ -254,8 +259,15 @@ describe("Sales Agent: pipeline execution & tool calls", () => {
     assert.equal(insert.sales_run_id, "run-999");
     assert.equal(insert.status, "draft");
     assert.equal(insert.provider, "mock");
+    assert.equal(insert.campaign_id, M95D_FIRST_CAMPAIGN_ID);
     assert.equal(insert.content_hash, result.draft.contentHash);
     assert.equal(insert.attribution_token_hash, result.draft.attributionTokenHash);
+  });
+
+  test("caps the first M9.5D campaign cohort at five manually selected prospects", () => {
+    assert.equal(M95D_FIRST_CAMPAIGN_MAX_PROSPECTS, 5);
+    assert.equal(canAddToM95DFirstCampaign(4), true);
+    assert.equal(canAddToM95DFirstCampaign(5), false);
   });
 
   test("throws error when trying to run on ineligible lead", () => {

@@ -253,7 +253,7 @@ export function SettingsView({
               />
               <EmailStatusRow label="Webhook signing secret" ready={emailStatus.webhookSecretPresent} />
               <div className="pt-2 text-xs text-muted">
-                Prospect sending remains approval-gated and suppression-checked. M9.5D campaign flow has not started.
+                Prospect sending remains approval-gated, suppression-checked, and limited to the M9.5D controlled campaign.
               </div>
             </CardBody>
           </Card>

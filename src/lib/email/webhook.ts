@@ -14,6 +14,7 @@ const SUPPORTED_EVENTS = new Set([
   "email.sent",
   "email.delivered",
   "email.delivery_delayed",
+  "email.failed",
   "email.complained",
   "email.bounced",
   "email.opened",

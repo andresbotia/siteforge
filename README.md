@@ -48,15 +48,21 @@ Agents never hold privileged infrastructure credentials, including `XAI_API_KEY`
 
 ## Current milestone
 
-M9.5C adds **guarded real email delivery infrastructure** for Resend and a narrow internal/operator test path. The deterministic mock provider remains the default for local development and tests. Live email fails closed unless `SITEFORGE_ALLOW_LIVE_EMAIL=true`, server-only Resend configuration is present, and the backend is executing an explicitly approved send.
+M9.5D prepares the **first controlled prospect campaign**. The campaign is bounded to at most five manually selected real prospects and reuses the existing deterministic Scout/Auditor/Builder/Sales workflow. There is no bulk discovery, no bulk send, no scheduler, and no AI-generated outreach copy.
 
-- Resend credentials are read only on the server; Client Components see presence/status booleans only.
-- Prospect sends still require the existing admin approval bound to exact recipient, subject, body, preview deployment, content version, and attribution token hash.
-- Live prospect delivery also checks provider readiness, suppression events, duplicate send state, and unsubscribe/opt-out language.
-- `/api/resend/webhook` verifies Svix/Resend signatures over the raw body, rejects unsigned live payloads, and records delivery/bounce/complaint/suppression events idempotently by provider event ID.
-- Settings includes an admin-only internal delivery test. It is labeled as a test, only allows the configured operator/admin recipient, records activity, and does not mark a lead contacted or mutate prospect funnel metrics.
-- No prospect email, campaign, Stripe call, paid AI call, deployment, DNS change, or autonomous send is part of M9.5C.
-- M9.5B manual public-prospect import and Auditor calibration are locked. M9.5D first controlled prospect campaign and M10 remain not started.
+M9.5C is locked complete: Resend is configured server-side, `mail.andresbotia.com` was verified externally in Resend, the live-email gate was exercised for one operator-only internal test email, and that test delivered successfully without mutating lead/prospect/customer funnel state. No prospect email was sent during M9.5C.
+
+M9.5D prospect sends require all of the following:
+
+- Operator manually selects the prospect and uses only reliable public business contact information.
+- Deterministic Auditor and Builder results are reviewed before Sales drafting.
+- The tracked public preview is approved, active, public, not revoked, not expired, and linked to the same lead and generated website.
+- Sales draft content is deterministic; no paid AI writes official email copy.
+- A human approval binds the exact recipient, subject, body, preview deployment, content version, and attribution token hash.
+- Backend send execution revalidates approval, content fingerprint, recipient, provider readiness, live-email gate, duplicate state, suppression/DNC history, and unsubscribe/opt-out language.
+- The final send button identifies when a real external email will be sent.
+
+`outreach.campaign_id = m9.5d-first-controlled-campaign` identifies the first experiment. New Sales drafts are capped at five distinct leads for that campaign. No migration is needed because `campaign_id` already exists on `outreach` and `preview_deployments`.
 
 Milestone 9 adds **Stripe Checkout + customer conversion**: manual commercial offers, approval-bound mock checkout creation, Stripe webhook ingestion, and idempotent lead-to-customer conversion. The migration has been applied to hosted Supabase and validated with mock Stripe checkout only.
 
@@ -345,13 +351,13 @@ Live xAI inference cannot occur merely because `XAI_API_KEY` exists. A paid AI r
 
 Stripe checkout defaults to the mock provider. The live Stripe provider still fails closed in this milestone and does not create live checkout sessions. Email sending defaults to the mock provider; a Resend key alone does not enable delivery.
 
-To prepare M9.5C real email without sending prospects:
+M9.5C real email setup, now validated by the operator-only test, requires:
 
 1. Configure and verify the sending domain in Resend outside agent context.
 2. Add the Resend key and email settings only to server-side local/Vercel environment variables.
-3. Keep `SITEFORGE_ALLOW_LIVE_EMAIL=false` until approving an exact internal test or future prospect send.
+3. Treat `SITEFORGE_ALLOW_LIVE_EMAIL=true` as necessary but insufficient for live sends.
 4. Configure the Resend webhook endpoint `/api/resend/webhook` with the signing secret, then verify delivery events with live gate controls still in place.
-5. Do not send prospect email until M9.5D explicitly starts.
+5. Do not send prospect email until one M9.5D prospect has been manually selected, reviewed, approved, and explicitly sent.
 
 ### Vercel and future deployment automation
 

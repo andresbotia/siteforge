@@ -1,4 +1,5 @@
 ﻿import type { Json } from "@/types/database";
+import { M95D_FIRST_CAMPAIGN_ID } from "./campaign";
 import type { SalesPipelineResult } from "./types";
 
 export type OutreachInsert = {
@@ -18,6 +19,7 @@ export type OutreachInsert = {
   attribution_token_hash: string;
   attribution_token_hint: string;
   attribution_token_created_at?: string;
+  campaign_id: string;
   status: "draft";
   provider: string;
   metadata: Json;
@@ -45,10 +47,12 @@ export function buildOutreachInsert(input: {
     content_version: result.version,
     attribution_token_hash: result.draft.attributionTokenHash,
     attribution_token_hint: result.draft.attributionTokenHint,
+    campaign_id: M95D_FIRST_CAMPAIGN_ID,
     status: "draft",
     provider: "mock",
     metadata: {
       version: result.version,
+      campaign_id: M95D_FIRST_CAMPAIGN_ID,
       evidence: result.draft.evidence as unknown as Json,
       paid_ai: "not_required",
       cost_usd: 0,

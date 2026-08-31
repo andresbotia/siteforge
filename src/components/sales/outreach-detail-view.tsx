@@ -43,11 +43,16 @@ export function OutreachDetailView({
   const isApproved = outreach.status === "approved";
   const isDraft = outreach.status === "draft";
   const isSendable = Boolean(recipientEmail && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail.trim()));
+  const previewExpired = Boolean(
+    outreach.previewDeployment?.expires_at &&
+      new Date(outreach.previewDeployment.expires_at) <= new Date(),
+  );
 
   const previewActive =
     outreach.previewDeployment &&
     outreach.previewDeployment.status === "active" &&
-    !outreach.previewDeployment.revoked_at;
+    !outreach.previewDeployment.revoked_at &&
+    !previewExpired;
 
   return (
     <div className="grid gap-6">
@@ -61,6 +66,7 @@ export function OutreachDetailView({
           <p className="mt-1 text-xs text-muted">
             Created: {formatDateTime(outreach.createdAt)}
             {outreach.sentAt ? ` - Sent: ${formatDateTime(outreach.sentAt)}` : ""}
+            {outreach.campaignId ? ` - Campaign: ${outreach.campaignId}` : ""}
             {outreach.lead ? (
               <>
                 {" - "}
@@ -75,7 +81,7 @@ export function OutreachDetailView({
         <div className="flex items-center gap-2">
           {outreach.previewDeployment ? (
             <Badge tone={previewActive ? "accent" : "danger"}>
-              Preview: {previewActive ? "Active" : "Revoked/Inactive"} (ending {outreach.tokenHint})
+              Preview: {previewActive ? "Active" : "Invalid"} (ending {outreach.tokenHint})
             </Badge>
           ) : (
             <Badge tone="warning">No Preview Linked</Badge>
@@ -231,13 +237,17 @@ export function OutreachDetailView({
                     </div>
                     <form action={sendAction}>
                       <input type="hidden" name="outreachId" value={outreach.id} />
-                      <Button type="submit" variant="primary" disabled={sending}>
-                        {sending ? "Sending..." : "Send Approved Email"}
+                      <Button type="submit" variant="primary" disabled={sending || !outreach.sendReadiness.ready}>
+                        {sending
+                          ? "Sending..."
+                          : outreach.sendReadiness.realExternalSend
+                            ? "Send REAL External Email"
+                            : "Send Approved Email"}
                       </Button>
                     </form>
                   </div>
                   <div className="mt-3 rounded border border-emerald-500/20 bg-emerald-950/40 p-2.5 text-xs text-emerald-200/70">
-                    Backend execution revalidates approval, content hash, live-email gate, provider configuration, and suppression status.
+                    Backend execution revalidates approval, content hash, preview validity, live-email gate, provider configuration, duplicate sends, and suppression status.
                   </div>
                   {sendState?.error ? (
                     <p className="mt-2 text-xs text-danger">{sendState.error}</p>
@@ -267,6 +277,73 @@ export function OutreachDetailView({
 
         {/* Right Column: Evidence, Preview Link & Analytics, Timeline */}
         <div className="space-y-6">
+          <Card>
+            <CardHeader
+              title="M9.5D Send Readiness"
+              description="Deterministic checks before any real prospect email leaves SiteForge."
+            />
+            <CardBody className="space-y-3">
+              <div className="grid gap-2 text-xs sm:grid-cols-2">
+                <ReadinessMetric label="Provider" value={outreach.sendReadiness.provider} />
+                <ReadinessMetric
+                  label="Live gate"
+                  value={outreach.sendReadiness.liveEmailGateEnabled ? "Enabled" : "Disabled"}
+                />
+                <ReadinessMetric
+                  label="Prospect send"
+                  value={outreach.sendReadiness.ready ? "Ready" : "Blocked"}
+                />
+                <ReadinessMetric
+                  label="Website"
+                  value={outreach.website ? outreach.website.status : "Missing"}
+                />
+              </div>
+              <ul className="space-y-2">
+                {outreach.sendReadiness.items.map((item) => (
+                  <li
+                    key={item.id}
+                    className="rounded border border-border-subtle bg-surface-subtle/40 p-2.5 text-xs"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="font-medium text-foreground">{item.label}</span>
+                      <Badge tone={item.ok ? "accent" : "warning"}>{item.ok ? "Pass" : "Blocked"}</Badge>
+                    </div>
+                    <p className="mt-1 text-muted">{item.detail}</p>
+                  </li>
+                ))}
+              </ul>
+              <p className="text-[11px] text-muted">
+                Live gate alone is insufficient. Exact-content approval and every eligibility check must pass.
+              </p>
+            </CardBody>
+          </Card>
+
+          <Card>
+            <CardHeader title="Prospect & Build" />
+            <CardBody className="space-y-3 text-sm">
+              <DetailRow label="Business" value={outreach.businessName} />
+              <DetailRow label="Recipient" value={outreach.recipient || "Missing"} />
+              <DetailRow
+                label="Audit"
+                value={
+                  outreach.auditSummary
+                    ? `Health ${outreach.auditSummary.overallScore}; opportunity ${outreach.auditSummary.redesignOpportunityScore ?? "n/a"}`
+                    : "Missing"
+                }
+              />
+              <DetailRow
+                label="Generated website"
+                value={outreach.generatedWebsiteId ? "Available" : "Missing"}
+                href={outreach.generatedWebsiteId ? `/websites/${outreach.generatedWebsiteId}` : undefined}
+              />
+              <DetailRow
+                label="Approval"
+                value={outreach.approval ? outreach.approval.status : "Missing"}
+                href={outreach.approvalId ? "/approvals" : undefined}
+              />
+            </CardBody>
+          </Card>
+
           {/* Sourced Evidence Panel */}
           <Card>
             <CardHeader
@@ -351,6 +428,30 @@ export function OutreachDetailView({
           </Card>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ReadinessMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-border-subtle p-2">
+      <p className="text-[10px] uppercase text-muted">{label}</p>
+      <p className="mt-1 font-medium text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function DetailRow({ label, value, href }: { label: string; value: string; href?: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-border-subtle pb-2 last:border-0 last:pb-0">
+      <span className="text-xs text-muted">{label}</span>
+      {href ? (
+        <Link href={href} className="text-right text-xs text-accent hover:underline">
+          {value}
+        </Link>
+      ) : (
+        <span className="text-right text-xs text-foreground">{value}</span>
+      )}
     </div>
   );
 }

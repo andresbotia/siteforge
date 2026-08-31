@@ -8,6 +8,7 @@ import {
   updateOutreachDraft,
 } from "@/data/outreach";
 import { startSalesDraftRun } from "@/data/sales";
+import { requireAdminSession } from "@/lib/auth/guard";
 
 export type SalesActionState = { ok: boolean; error?: string; outreachId?: string } | null;
 
@@ -15,6 +16,7 @@ export async function startSalesDraftAction(
   _prev: SalesActionState,
   formData: FormData,
 ): Promise<SalesActionState> {
+  await requireAdminSession();
   const leadId = String(formData.get("leadId") ?? "");
   const recipientEmailOverride = String(formData.get("recipientEmail") ?? "").trim() || undefined;
 
@@ -37,6 +39,7 @@ export async function updateOutreachDraftAction(
   _prev: SalesActionState,
   formData: FormData,
 ): Promise<SalesActionState> {
+  await requireAdminSession();
   const id = String(formData.get("outreachId") ?? "");
   const subject = String(formData.get("subject") ?? "");
   const body = String(formData.get("body") ?? "");
@@ -64,6 +67,7 @@ export async function requestOutreachSendApprovalAction(
   _prev: SalesActionState,
   formData: FormData,
 ): Promise<SalesActionState> {
+  await requireAdminSession();
   const outreachId = String(formData.get("outreachId") ?? "");
   if (!outreachId) return { ok: false, error: "Missing outreach ID." };
 
@@ -80,6 +84,7 @@ export async function sendApprovedOutreachAction(
   _prev: SalesActionState,
   formData: FormData,
 ): Promise<SalesActionState> {
+  await requireAdminSession();
   const outreachId = String(formData.get("outreachId") ?? "");
   if (!outreachId) return { ok: false, error: "Missing outreach ID." };
 

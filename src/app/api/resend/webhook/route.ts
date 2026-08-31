@@ -75,7 +75,12 @@ function statusFromEvent(
   type: string,
   outreach: Pick<OutreachRow, "status">,
 ): OutreachRow["status"] | null {
-  if (type === "email.bounced" || type === "email.complained" || type === "email.suppressed") {
+  if (
+    type === "email.bounced" ||
+    type === "email.complained" ||
+    type === "email.suppressed" ||
+    type === "email.failed"
+  ) {
     return "failed";
   }
   if (type === "email.delivered" && outreach.status === "sent") return "sent";

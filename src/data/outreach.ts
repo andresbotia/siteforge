@@ -1,6 +1,7 @@
 import "server-only";
 
 import { recordActivityEvent } from "@/data/activity";
+import { getLatestAuditForLead } from "@/data/leads";
 import { getAuthConfig } from "@/lib/auth/config";
 import { validateWebsiteSpec } from "@/lib/builder/validate";
 import { getEmailConfig, getEmailProviderStatus } from "@/lib/email/config";
@@ -8,6 +9,7 @@ import {
   hasUnsubscribeLanguage,
   isRecipientSuppressed,
   liveEmailAllowed,
+  validateProspectSendPreview,
   verifyApprovedOutreachContent,
 } from "@/lib/email/delivery-policy";
 import { getEmailProvider, isValidEmail } from "@/lib/email/provider";
@@ -31,7 +33,7 @@ import {
 } from "@/lib/previews/events";
 import { resolveMonotonicLeadStatus } from "@/lib/scout/status";
 import { createServerSupabaseClient, mutateTable, readTable } from "@/lib/supabase/server";
-import type { Outreach, OutreachStatus } from "@/types";
+import type { EmailProviderStatus, Outreach, OutreachStatus, WebsiteAudit } from "@/types";
 import type {
   ApprovalRow,
   LeadRow,
@@ -150,9 +152,20 @@ export type OutreachDetail = Outreach & {
   website: WebsiteRow | null;
   previewDeployment: PreviewDeploymentRow | null;
   approval: ApprovalRow | null;
+  auditSummary: Pick<WebsiteAudit, "id" | "overallScore" | "redesignOpportunityScore" | "summary"> | null;
+  sendReadiness: ProspectSendReadiness;
   events: OutreachEventRow[];
   attributedPreviewEvents: PreviewEventRow[];
   evidence: Array<{ type: string; text: string; source?: string }>;
+};
+
+export type ProspectSendReadiness = {
+  ready: boolean;
+  provider: "mock" | "resend";
+  liveEmailGateEnabled: boolean;
+  readyForProspectSend: boolean;
+  realExternalSend: boolean;
+  items: Array<{ id: string; label: string; ok: boolean; detail: string }>;
 };
 
 export async function getOutreachById(id: string): Promise<OutreachDetail | null> {
@@ -161,7 +174,7 @@ export async function getOutreachById(id: string): Promise<OutreachDetail | null
   );
   if (!row) return null;
 
-  const [lead, website, preview, approval, events, attributedPreviewEvents] = await Promise.all([
+  const [lead, website, preview, approval, events, attributedPreviewEvents, latestAudit] = await Promise.all([
     readTable<LeadRow | null>((client) =>
       client.from("leads").select("*").eq("id", row.lead_id).maybeSingle(),
     ),
@@ -197,6 +210,7 @@ export async function getOutreachById(id: string): Promise<OutreachDetail | null
             .limit(100),
         )
       : null,
+    getLatestAuditForLead(row.lead_id),
   ]);
 
   const relatedEvents = events ?? [];
@@ -206,6 +220,14 @@ export async function getOutreachById(id: string): Promise<OutreachDetail | null
     : [];
 
   const hint = preview?.token_hint ?? null;
+  const recipientEvents = await getRecipientSuppressionEvents(row);
+  const sendReadiness = buildProspectSendReadiness({
+    outreach: row,
+    preview,
+    approval,
+    recipientEvents,
+    emailStatus: getEmailProviderStatus(),
+  });
 
   return {
     id: row.id,
@@ -242,9 +264,114 @@ export async function getOutreachById(id: string): Promise<OutreachDetail | null
     website,
     previewDeployment: preview,
     approval,
+    auditSummary: latestAudit
+      ? {
+          id: latestAudit.id,
+          overallScore: latestAudit.overallScore,
+          redesignOpportunityScore: latestAudit.redesignOpportunityScore,
+          summary: latestAudit.summary,
+        }
+      : null,
+    sendReadiness,
     events: relatedEvents,
     attributedPreviewEvents: attributedPreviewEvents ?? [],
     evidence,
+  };
+}
+
+async function getRecipientSuppressionEvents(
+  outreach: Pick<OutreachRow, "recipient_email">,
+): Promise<OutreachEventRow[]> {
+  if (!outreach.recipient_email || !isValidEmail(outreach.recipient_email)) return [];
+  const matchingRecipientRows = await readTable<Pick<OutreachRow, "id">[]>((client) =>
+    client
+      .from("outreach")
+      .select("id")
+      .eq("recipient_email", outreach.recipient_email!),
+  );
+  const matchingIds = new Set((matchingRecipientRows ?? []).map((item) => item.id));
+  if (matchingIds.size === 0) return [];
+  const priorEvents = await readTable<OutreachEventRow[]>((client) =>
+    client.from("outreach_events").select("*"),
+  );
+  return (priorEvents ?? []).filter((event) => matchingIds.has(event.outreach_id));
+}
+
+function buildProspectSendReadiness(input: {
+  outreach: OutreachRow;
+  preview: PreviewDeploymentRow | null;
+  approval: ApprovalRow | null;
+  recipientEvents: OutreachEventRow[];
+  emailStatus: EmailProviderStatus;
+}): ProspectSendReadiness {
+  const { outreach, preview, approval, recipientEvents, emailStatus } = input;
+  const recipientValid = Boolean(outreach.recipient_email && isValidEmail(outreach.recipient_email));
+  const previewEligibility = validateProspectSendPreview(outreach, preview);
+  const approvalCheck = verifyApprovedOutreachContent(outreach, approval);
+  const suppressed = outreach.recipient_email
+    ? isRecipientSuppressed(outreach.recipient_email, recipientEvents)
+    : true;
+  const duplicateBlocked = outreach.status !== "sent";
+  const liveAllowed = liveEmailAllowed({
+    allowLiveEmail: emailStatus.liveEmailGateEnabled,
+    providerKeyPresent: emailStatus.providerKeyPresent,
+    fromConfigured: emailStatus.fromConfigured,
+    replyToConfigured: emailStatus.replyToConfigured,
+  });
+  const unsubscribeOk = hasUnsubscribeLanguage(outreach.body);
+
+  const items = [
+    {
+      id: "recipient",
+      label: "Recipient",
+      ok: recipientValid,
+      detail: recipientValid ? outreach.recipient_email ?? "" : "Missing or invalid recipient email",
+    },
+    {
+      id: "preview",
+      label: "Tracked preview",
+      ok: previewEligibility.ok,
+      detail: previewEligibility.ok ? `Active public preview ending ${preview?.token_hint ?? ""}` : previewEligibility.error,
+    },
+    {
+      id: "approval",
+      label: "Exact-content approval",
+      ok: approvalCheck.ok,
+      detail: approvalCheck.ok ? "Approval matches recipient, content, version, preview, and attribution" : approvalCheck.error,
+    },
+    {
+      id: "duplicate",
+      label: "Duplicate send",
+      ok: duplicateBlocked,
+      detail: duplicateBlocked ? "No completed send recorded for this outreach" : "This outreach has already been sent",
+    },
+    {
+      id: "suppression",
+      label: "Suppression",
+      ok: !suppressed,
+      detail: !suppressed ? "No bounce, complaint, suppression, or unsubscribe event found" : "Recipient is suppressed or invalid",
+    },
+    {
+      id: "provider",
+      label: "Provider readiness",
+      ok: liveAllowed.ok,
+      detail: liveAllowed.ok ? "Resend provider and live-email gate are ready" : liveAllowed.error,
+    },
+    {
+      id: "unsubscribe",
+      label: "Opt-out language",
+      ok: unsubscribeOk,
+      detail: unsubscribeOk ? "Approved body includes unsubscribe or opt-out language" : "Real email requires unsubscribe or opt-out language",
+    },
+  ];
+
+  return {
+    ready: items.every((item) => item.ok),
+    provider: emailStatus.liveEmailGateEnabled ? "resend" : "mock",
+    liveEmailGateEnabled: emailStatus.liveEmailGateEnabled,
+    readyForProspectSend: emailStatus.readyForProspectSend,
+    realExternalSend: emailStatus.liveEmailGateEnabled,
+    items,
   };
 }
 
@@ -334,19 +461,18 @@ export async function requestOutreachSendApproval(
     return { ok: false, error: "A valid recipient email address is required before requesting send approval." };
   }
 
-  if (!outreach.preview_deployment_id) {
-    return { ok: false, error: "Outreach is missing an associated preview deployment." };
-  }
   if (!outreach.attribution_token_hash) {
     return { ok: false, error: "Outreach is missing a valid attribution link." };
   }
 
-  const preview = await readTable<PreviewDeploymentRow | null>((client) =>
-    client.from("preview_deployments").select("*").eq("id", outreach.preview_deployment_id!).maybeSingle(),
-  );
-  if (!preview || preview.status !== "active" || preview.revoked_at) {
-    return { ok: false, error: "The associated preview deployment is no longer active. Approvals require an active preview." };
-  }
+  const preview = outreach.preview_deployment_id
+    ? await readTable<PreviewDeploymentRow | null>((client) =>
+        client.from("preview_deployments").select("*").eq("id", outreach.preview_deployment_id!).maybeSingle(),
+      )
+    : null;
+  const previewEligibility = validateProspectSendPreview(outreach, preview);
+  if (!previewEligibility.ok) return { ok: false, error: `${previewEligibility.error} Approvals require an active public preview.` };
+  if (!preview) return { ok: false, error: "The associated preview deployment was not found." };
 
   const lead = await readTable<Pick<LeadRow, "business_name"> | null>((client) =>
     client.from("leads").select("business_name").eq("id", outreach.lead_id).maybeSingle(),
@@ -532,18 +658,18 @@ export async function sendApprovedOutreach(
   }
   const recipientEmail = outreach.recipient_email;
 
-  if (!outreach.preview_deployment_id) {
-    return { ok: false, error: "Outreach is missing an associated preview deployment." };
-  }
   if (!outreach.attribution_token_hash || !outreach.attribution_token_created_at) {
     return { ok: false, error: "Outreach is missing a valid attribution link." };
   }
 
-  const preview = await readTable<PreviewDeploymentRow | null>((client) =>
-    client.from("preview_deployments").select("*").eq("id", outreach.preview_deployment_id!).maybeSingle(),
-  );
-  if (!preview || preview.status !== "active" || preview.revoked_at) {
-    return { ok: false, error: "The associated preview deployment is revoked or inactive. Cannot send outreach with invalid preview." };
+  const preview = outreach.preview_deployment_id
+    ? await readTable<PreviewDeploymentRow | null>((client) =>
+        client.from("preview_deployments").select("*").eq("id", outreach.preview_deployment_id!).maybeSingle(),
+      )
+    : null;
+  const previewEligibility = validateProspectSendPreview(outreach, preview);
+  if (!previewEligibility.ok) {
+    return { ok: false, error: `${previewEligibility.error} Cannot send outreach with invalid preview.` };
   }
 
   if (!outreach.approval_id) return { ok: false, error: "Send approval is required before sending." };
@@ -624,7 +750,7 @@ export async function sendApprovedOutreach(
     metadata: {
       outreach_id: outreach.id,
       lead_id: outreach.lead_id,
-      preview_deployment_id: outreach.preview_deployment_id,
+      preview_deployment_id: outreach.preview_deployment_id ?? "",
       idempotency_key: `outreach/${outreach.id}/${approvalCheck.contentHash.slice(0, 16)}`,
     },
   });

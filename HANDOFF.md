@@ -1,6 +1,6 @@
 # SiteForge Handoff
 
-For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5A Roadmap Persistence + Production/Security Readiness is COMPLETE / VALIDATED after the launch-readiness pass. M9.5B real-prospect preparation and Auditor calibration are locked, with the M9.5B Auditor Calibration lock at `1358caad47c46b9832f875ec1e62d5834043906b`. M9.5C guarded real email infrastructure is implemented as a Resend-backed, fail-closed provider path plus internal/operator test workflow. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live email/payment use, or broader production operation. This is NOT M10.
+For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5B real-prospect preparation and Auditor calibration are locked, with the M9.5B Auditor Calibration lock at `1358caad47c46b9832f875ec1e62d5834043906b`. M9.5C guarded real email integration/internal send is complete: Resend is configured server-side, the sending domain was verified externally, the live-email gate was exercised for one operator-only test, and the test delivered without prospect/customer funnel mutation. M9.5D first controlled prospect campaign preparation is current. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live payment use, or broader production operation. This is NOT M10.
 
 ## M9.5 Roadmap
 
@@ -79,12 +79,12 @@ M9.5B.1 Auditor Opportunity Differentiation follow-up: commit `d7f85679bc846b49a
 M9.5C:
 
 - Resend/provider integrated behind backend boundary
-- Sending domain authentication remains an operator Resend/DNS setup task; SiteForge does not modify DNS.
+- Sending domain authentication completed externally in Resend for `mail.andresbotia.com`; SiteForge did not modify DNS.
 - Unsubscribe/suppression safeguards
 - Explicit live-email gate
 - Human approval still mandatory
-- Internal/operator test path is implemented and allowlisted; run only after operator config and approval.
-- No prospect email yet
+- Internal/operator test path implemented, allowlisted, and successfully exercised once
+- No prospect email sent
 
 M9.5C guarded email integration:
 
@@ -95,17 +95,33 @@ M9.5C guarded email integration:
 - Prospect sends continue to require approval bound to exact recipient, subject, body, preview deployment, content version, and attribution token hash. Edited or stale content fails closed.
 - Live prospect sends additionally require provider readiness, duplicate-send blocking, suppression/DNC checks, and unsubscribe/opt-out language in the approved body.
 - `/api/resend/webhook` verifies Resend/Svix signatures against the raw body, rejects unsigned or invalid payloads, and stores supported delivery/bounce/complaint/suppression events idempotently by provider event ID.
-- No prospect email has been sent. No controlled prospect campaign has started. M9.5D is not started. M10 is not started.
+- Production evidence: provider configured, sending domain verified externally, live gate enabled for the controlled test phase, one operator-only internal email delivered through SiteForge -> Resend -> Gmail inbox, no private email body or credential value recorded in git, and no lead/prospect/customer funnel state mutated by the test.
+- No prospect email has been sent. No controlled prospect campaign has started. M10 is not started.
 
 M9.5D:
 
 - Small manually selected real prospect cohort
+- Maximum 5 distinct prospects in `m9.5d-first-controlled-campaign`
 - Each site manually reviewed
 - Each email individually approved
 - Conservative rate limits
 - Real sends tracked
 - Opt-outs respected
 - Campaign results measurable
+
+M9.5D first controlled campaign preparation:
+
+- Reuse existing `outreach.campaign_id` and `preview_deployments.campaign_id`; no new campaign table is needed yet.
+- New Sales drafts are tagged with `m9.5d-first-controlled-campaign` and blocked after five distinct selected leads.
+- Sales server actions explicitly require an admin session before draft edits, approval requests, or send execution.
+- The outreach detail view now shows business/prospect, recipient, latest audit health/redesign opportunity, generated website, preview state, exact subject/body, approval state, suppression/eligibility checks, provider readiness, and live-gate status.
+- The final send button says `Send REAL External Email` whenever the live-email gate selects Resend.
+- Live gate alone cannot send a prospect email. The backend also requires exact-content external-email approval, valid recipient, active unexpired preview tied to the same lead/website, matching attribution token, no duplicate send, no suppression/bounce/complaint history, valid provider config, and unsubscribe/opt-out language in the approved body.
+- Resend webhooks are public at the proxy layer only for `/api/resend/webhook`, then must pass signature verification in the route handler.
+- The webhook parser accepts the configured production event set: `email.sent`, `email.delivered`, `email.bounced`, `email.complained`, `email.delivery_delayed`, and `email.failed`. Unknown events are ignored.
+- Bounce, complaint, suppression, and failed events move the intended outreach to `failed` where appropriate. Bounce/complaint/suppression events are treated as suppression signals for future sends.
+- Email opens are not a primary engagement signal. Tracked SiteForge preview activity remains the stronger engagement signal.
+- Do not automatically choose Signature Air Conditioning or Joe & Joe Air Conditioning. The operator should manually select a prospect with a meaningfully poor/outdated website and credible redesign opportunity.
 
 ## Credential Rotation Before Sensitive Data
 
@@ -136,7 +152,7 @@ M9 smoke conversion used mock Stripe IDs and must not be treated as real payment
 
 M9.5B manual prospect import is limited to public business facts supplied by the admin. It does not discover businesses in bulk, send outreach, process payments, call paid AI, or deploy customer production websites.
 
-M9.5C guarded email setup adds real Resend infrastructure but does not start prospect outreach. Configure Resend sender/domain, server-only environment variables, and webhook signing outside agent context. Keep live email disabled until approving an exact internal/operator test or a later M9.5D prospect send.
+M9.5C guarded email setup added real Resend infrastructure but did not start prospect outreach. Resend sender/domain, server-only environment variables, and webhook signing were configured outside agent context. `SITEFORGE_ALLOW_LIVE_EMAIL=true` is now configured for the controlled test/campaign phase, but live gate alone is never enough to send a prospect email.
 
 First production import failure diagnosis: Vercel had `NEXT_PUBLIC_SUPABASE_SECRET_KEY` configured but not server-only `SUPABASE_SECRET_KEY`, so the server Supabase client could not initialize. The public-prefixed value must be removed/replaced with the correct server-only Vercel variable before retrying the manual import.
 
@@ -359,4 +375,4 @@ Validation:
 
 ## Next Milestone
 
-Continue with M9.5C operator setup/internal test only if explicitly approved, or start M9.5D only when the operator explicitly requests the first controlled prospect campaign. Do not start M10.
+Continue with M9.5D by having the human operator manually select one real prospect for review. Do not send the first prospect email until the exact draft, preview, approval, and readiness checklist have been reviewed. Do not start M10.

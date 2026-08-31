@@ -77,6 +77,41 @@ export function hasUnsubscribeLanguage(body: string | null | undefined): boolean
   return /\b(unsubscribe|opt[-\s]?out|do not contact)\b/i.test(body ?? "");
 }
 
+export function validateProspectSendPreview(
+  outreach: Pick<OutreachRow, "lead_id" | "generated_website_id" | "preview_deployment_id">,
+  preview: {
+    id: string;
+    lead_id: string;
+    generated_website_id: string;
+    status: string;
+    revoked_at: string | null;
+    expires_at: string | null;
+  } | null,
+): { ok: true } | { ok: false; error: string } {
+  if (!outreach.preview_deployment_id) {
+    return { ok: false, error: "Outreach is missing an associated preview deployment." };
+  }
+  if (!preview) {
+    return { ok: false, error: "The associated preview deployment was not found." };
+  }
+  if (preview.id !== outreach.preview_deployment_id) {
+    return { ok: false, error: "Preview deployment does not match this outreach." };
+  }
+  if (
+    preview.lead_id !== outreach.lead_id ||
+    preview.generated_website_id !== outreach.generated_website_id
+  ) {
+    return { ok: false, error: "Preview deployment is not associated with this lead and website." };
+  }
+  if (preview.status !== "active" || preview.revoked_at) {
+    return { ok: false, error: "The associated preview deployment is revoked or inactive." };
+  }
+  if (preview.expires_at && new Date(preview.expires_at) <= new Date()) {
+    return { ok: false, error: "The associated preview deployment is expired." };
+  }
+  return { ok: true };
+}
+
 export function liveEmailAllowed(input: {
   allowLiveEmail: boolean;
   providerKeyPresent: boolean;

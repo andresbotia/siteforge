@@ -7,6 +7,7 @@ import {
   SESSION_COOKIE_NAME,
 } from "@/lib/auth/config";
 import { timingSafeEqual, verifySessionToken } from "@/lib/auth/session";
+import { isPublicResendWebhookPath } from "@/lib/email/routes";
 import {
   isPreviewEventPath,
   isPublicOutreachPreviewPath,
@@ -38,6 +39,7 @@ export async function proxy(request: NextRequest) {
     isPublicPreviewPath(pathname) ||
     isPublicOutreachPreviewPath(pathname) ||
     isPreviewEventPath(pathname) ||
+    isPublicResendWebhookPath(pathname) ||
     isPublicStripeWebhookPath(pathname)
   ) {
     return NextResponse.next();

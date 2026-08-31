@@ -11,10 +11,12 @@ import {
   hasUnsubscribeLanguage,
   isRecipientSuppressed,
   liveEmailAllowed,
+  validateProspectSendPreview,
   verifyApprovedOutreachContent,
 } from "./delivery-policy";
 import { MockEmailProvider } from "./mock";
 import { createResendEmailProvider } from "./resend";
+import { isPublicResendWebhookPath } from "./routes";
 import { parseResendWebhookEvent, verifyResendWebhookSignature } from "./webhook";
 import { computeOutreachContentHash } from "@/lib/sales/content-hash";
 
@@ -186,6 +188,51 @@ describe("email delivery policy", () => {
     assert.equal(edited.ok, false);
   });
 
+  test("wrong recipient invalidates send approval", () => {
+    const result = verifyApprovedOutreachContent({ ...outreach, recipient_email: "other@example.com" }, {
+      status: "executed",
+      approval_type: "external_email",
+      payload: {
+        action: "send_outreach_email",
+        content_hash: contentHash,
+        attribution_token_hash: "hash-1",
+        preview_deployment_id: "preview-1",
+        content_version: "v1",
+      },
+    });
+
+    assert.equal(result.ok, false);
+    assert.match(result.error, /no longer matches/);
+  });
+
+  test("missing, revoked, expired, or mismatched preview blocks prospect sends", () => {
+    const preview = {
+      id: "preview-1",
+      lead_id: "lead-1",
+      generated_website_id: "website-1",
+      status: "active",
+      revoked_at: null,
+      expires_at: null,
+    };
+    const linkedOutreach = {
+      lead_id: "lead-1",
+      generated_website_id: "website-1",
+      preview_deployment_id: "preview-1",
+    };
+
+    assert.equal(validateProspectSendPreview(linkedOutreach, preview).ok, true);
+    assert.equal(validateProspectSendPreview(linkedOutreach, null).ok, false);
+    assert.equal(validateProspectSendPreview(linkedOutreach, { ...preview, status: "revoked" }).ok, false);
+    assert.equal(
+      validateProspectSendPreview(linkedOutreach, {
+        ...preview,
+        expires_at: "2020-01-01T00:00:00.000Z",
+      }).ok,
+      false,
+    );
+    assert.equal(validateProspectSendPreview(linkedOutreach, { ...preview, lead_id: "other" }).ok, false);
+  });
+
   test("suppressed recipient is blocked", () => {
     assert.equal(
       isRecipientSuppressed("owner@example.com", [
@@ -268,6 +315,11 @@ describe("email providers", () => {
 });
 
 describe("Resend webhook verification", () => {
+  test("Resend webhook path is public so provider callbacks reach signature verification", () => {
+    assert.equal(isPublicResendWebhookPath("/api/resend/webhook"), true);
+    assert.equal(isPublicResendWebhookPath("/api/resend/webhook/extra"), false);
+  });
+
   test("verifies Svix-style webhook signatures and rejects tampering", () => {
     const secret = `whsec_${Buffer.from("test-secret").toString("base64")}`;
     const payload = JSON.stringify({ id: "evt_1", type: "email.delivered", data: { id: "email_1" } });
@@ -304,8 +356,8 @@ describe("Resend webhook verification", () => {
     );
   });
 
-  test("parses supported delivery, bounce, complaint, and suppression events", () => {
-    for (const type of ["email.delivered", "email.bounced", "email.complained", "email.suppressed"]) {
+  test("parses supported delivery, bounce, complaint, failed, and suppression events", () => {
+    for (const type of ["email.delivered", "email.bounced", "email.complained", "email.failed", "email.suppressed"]) {
       const event = parseResendWebhookEvent({
         id: `evt_${type}`,
         type,
