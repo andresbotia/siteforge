@@ -101,6 +101,24 @@ describe("external generated site import validation", () => {
     );
   });
 
+  it("accepts static Vite React source with a Bun lockfile", () => {
+    const result = validateExternalSiteSource({
+      provider: "lovable",
+      controlledPreviewUrl: null,
+      providerPreviewUrl: "https://preview.lovable.app/projects/sample",
+      manifest: {
+        files: [...fixtureManifest.files, { path: "bun.lock", content: "" }],
+        packageJson: fixtureManifest.packageJson,
+      },
+    });
+
+    assert.equal(result.validation.ok, true);
+    assert.equal(result.validation.packageSummary.framework, "vite-react");
+    assert.equal(result.validation.packageSummary.packageManager, "bun");
+    assert.equal(result.build.ok, true);
+    assert.equal(result.build.command, "bun install --frozen-lockfile --ignore-scripts && bun run build");
+  });
+
   it("accepts Lovable-like Vite TanStack Start source with a Bun lockfile", () => {
     const result = validateExternalSiteSource({
       provider: "lovable",
@@ -245,6 +263,36 @@ describe("external generated site import validation", () => {
       assert.equal(result.validation.ok, false, path);
       assert.equal(result.validation.findings.some((finding) => finding.code === "provider_editor_leak"), true, path);
     }
+  });
+
+  it("allows React bundled javascript URL safety sentinels but blocks real javascript URLs", () => {
+    const safeReactBundleText = [
+      "javascript:throw new Error('React has blocked a javascript: URL as a security precaution.')",
+      "javascript:throw new Error('A React form was unexpectedly submitted.",
+    ].join("\n");
+    const safe = validateExternalSiteSource({
+      provider: "manual",
+      controlledPreviewUrl: "https://safe-preview.vercel.app",
+      providerPreviewUrl: null,
+      manifest: {
+        ...fixtureManifest,
+        files: [...fixtureManifest.files, { path: "dist/assets/index.js", content: safeReactBundleText }],
+      },
+    });
+    assert.equal(safe.validation.ok, true);
+    assert.equal(safe.validation.findings.some((finding) => finding.code === "javascript_url"), false);
+
+    const unsafe = validateExternalSiteSource({
+      provider: "manual",
+      controlledPreviewUrl: "https://safe-preview.vercel.app",
+      providerPreviewUrl: null,
+      manifest: {
+        ...fixtureManifest,
+        files: [...fixtureManifest.files, { path: "src/App.tsx", content: '<a href="javascript:alert(1)">Bad</a>' }],
+      },
+    });
+    assert.equal(unsafe.validation.ok, false);
+    assert.equal(unsafe.validation.findings.some((finding) => finding.code === "javascript_url"), true);
   });
 
   it("blocks arbitrary lifecycle and non-allowlisted build scripts", () => {

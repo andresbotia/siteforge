@@ -151,6 +151,10 @@ const URL_REFERENCE = /\bhttps?:\/\/[^\s"'<>`\\)]+/gi;
 const HOST_PORT_REFERENCE =
   /(?<![\w.])(?:localhost|metadata\.google\.internal|(?:\d{1,3}\.){3}\d{1,3}|\[[0-9a-f:.]+\]|::1):\d{1,5}\b/gi;
 const CIDR_REFERENCE = /(?<![\w.])((?:\d{1,3}\.){3}\d{1,3})\/(\d{1,2})\b/g;
+const REACT_JAVASCRIPT_URL_SENTINELS = [
+  "javascript:throw new Error('React has blocked a javascript: URL as a security precaution.')",
+  "javascript:throw new Error('A React form was unexpectedly submitted.",
+] as const;
 const EXACT_REPOSITORY_METADATA_FILES = new Set([".gitignore", ".prettierignore", ".prettierrc", ".prettierrc.json"]);
 const PACKAGE_METADATA_FILES = new Set(["package.json", "package-lock.json", "bun.lock", "bun.lockb"]);
 
@@ -517,6 +521,19 @@ function buildResultFor(
       reason: "Supported Vite React source with fixed SiteForge build commands; install lifecycle scripts are disabled.",
     };
   }
+  if (
+    summary.framework === "vite-react" &&
+    summary.packageManager === "bun" &&
+    summary.scripts.build === "vite build" &&
+    summary.lockfiles.includes("bun.lock")
+  ) {
+    return {
+      ok: true,
+      status: "passed",
+      command: "bun install --frozen-lockfile --ignore-scripts && bun run build",
+      reason: "Supported static Vite React source with Bun lockfile and fixed SiteForge build commands; install lifecycle scripts are disabled.",
+    };
+  }
   if (summary.framework === "vite-tanstack-start" && summary.packageManager === "bun" && summary.scripts.build === "vite build") {
     return {
       ok: true,
@@ -567,7 +584,7 @@ function inspectFile(path: string, content: string, findings: ExternalSiteFindin
   if (/<script\b(?![^>]*\btype=["']module["'][^>]*\bsrc=)[\s\S]*?>[\s\S]*?<\/script>/i.test(content)) {
     findings.push({ code: "dangerous_inline_script", severity: "severe", message: "Inline script blocks are not allowed in imported external source.", path });
   }
-  if (/javascript:/i.test(content)) {
+  if (hasUnsafeJavascriptUrlReference(content)) {
     findings.push({ code: "javascript_url", severity: "severe", message: "javascript: URLs are forbidden.", path });
   }
   if (hasPrivateNetworkReference(content)) {
@@ -585,6 +602,14 @@ function inspectFile(path: string, content: string, findings: ExternalSiteFindin
   if (/<script[^>]+src=["']https?:\/\//i.test(content)) {
     findings.push({ code: "external_script_reference", severity: "warning", message: "External scripts require manual operator review.", path });
   }
+}
+
+function hasUnsafeJavascriptUrlReference(content: string): boolean {
+  let remaining = content;
+  for (const sentinel of REACT_JAVASCRIPT_URL_SENTINELS) {
+    remaining = remaining.split(sentinel).join("");
+  }
+  return /javascript:/i.test(remaining);
 }
 
 function classifyExternalSourceFile(path: string): ExternalSourceFileCategory {
