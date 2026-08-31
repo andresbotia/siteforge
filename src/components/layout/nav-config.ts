@@ -4,6 +4,7 @@ import {
   Bot,
   Globe,
   LayoutDashboard,
+  LayoutTemplate,
   Mail,
   ReceiptText,
   Settings,
@@ -42,6 +43,7 @@ export const navSections: NavSection[] = [
     items: [
       { href: "/approvals", label: "Approvals", icon: ShieldCheck },
       { href: "/agents", label: "Agents", icon: Bot },
+      { href: "/templates", label: "Templates", icon: LayoutTemplate },
     ],
   },
   {

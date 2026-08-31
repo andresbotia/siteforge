@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import { buildDesignBrief, designBriefRequestFromLead } from "./design-brief";
 import { runTemplateQa } from "./qa";
 import { runBuilderPipeline } from "./run";
+import { VISUAL_QA_VARIANTS, visualQaSpec } from "./visual-qa-fixtures";
 import type { BuilderAuditInput, BuilderLeadInput, WebsiteSpec } from "./types";
 
 function lead(overrides: Partial<BuilderLeadInput> = {}): BuilderLeadInput {
@@ -127,6 +128,17 @@ describe("template QA", () => {
     const report = runTemplateQa(spec);
     assert.equal(report.passed, false);
     assert.equal(report.findings[0].code, "unknown_template");
+  });
+
+  it("passes every visual QA variant, including sparse-fact cases", () => {
+    for (const variant of VISUAL_QA_VARIANTS) {
+      const report = runTemplateQa(visualQaSpec(variant));
+      assert.equal(
+        report.blockers,
+        0,
+        `${variant}: ${JSON.stringify(report.findings.filter((f) => f.severity === "blocker"), null, 2)}`,
+      );
+    }
   });
 
   it("notes a missing hero image without blocking the draft", () => {

@@ -5,6 +5,7 @@ import { notFound } from "next/navigation";
 import { Badge } from "@/components/shared/badge";
 import { Button } from "@/components/shared/button";
 import { RequestExternalPreviewDeploymentForm } from "@/components/builder/external-site-import-form";
+import { TemplateQaCard } from "@/components/builder/template-qa-card";
 import { PreviewManagementCard } from "@/components/previews/preview-management-card";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
@@ -81,6 +82,10 @@ export default async function WebsiteDetailPage({ params }: WebsitePageProps) {
           <Detail label="Internal preview" value={site.previewUrl || "—"} />
         </CardBody>
       </Card>
+
+      {site.spec && site.generationSource !== "external_generated" ? (
+        <TemplateQaCard spec={site.spec} />
+      ) : null}
 
       {site.externalGeneratedSite ? (
         <Card className="mt-4">
