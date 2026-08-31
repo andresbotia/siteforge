@@ -83,6 +83,55 @@ const BY_INDUSTRY: Record<string, ServiceItem[]> = {
   ],
 };
 
+/**
+ * Keyword aliases so real-world industry labels ("Air Conditioning & Heating")
+ * reach the right capability list instead of silently falling back to generic
+ * professional copy. Longest keyword wins. These describe what a trade of this
+ * kind is generally set up to do; they never claim a specific business offers a
+ * service, states a price, or holds a credential.
+ */
+const KEYWORD_ALIASES: Array<[keyword: string, industry: string]> = [
+  ["air condition", "HVAC"],
+  ["heating", "HVAC"],
+  ["cooling", "HVAC"],
+  ["hvac", "HVAC"],
+  ["plumb", "Plumbing"],
+  ["septic", "Plumbing"],
+  ["drain", "Plumbing"],
+  ["electric", "Electrical"],
+  ["roof", "Roofing"],
+  ["gutter", "Roofing"],
+  ["landscap", "Landscaping"],
+  ["lawn", "Landscaping"],
+  ["tree service", "Landscaping"],
+  ["irrigation", "Landscaping"],
+  ["pest", "Pest Control"],
+  ["pool", "Pool Services"],
+  ["contractor", "General Contractor"],
+  ["contracting", "General Contractor"],
+  ["remodel", "General Contractor"],
+  ["pressure wash", "Pressure Washing"],
+  ["auto repair", "Auto Repair"],
+  ["detail", "Detailing"],
+  ["salon", "Salon"],
+  ["barber", "Salon"],
+  ["spa", "Spa"],
+  ["clean", "Cleaning"],
+  ["dental", "Dentistry"],
+  ["dentist", "Dentistry"],
+];
+
 export function derivedServices(industry: string): ServiceItem[] {
-  return BY_INDUSTRY[industry] ?? BY_INDUSTRY["Professional Services"];
+  const exact = BY_INDUSTRY[industry];
+  if (exact) return exact;
+
+  const normalized = industry.trim().toLowerCase();
+  let best: [string, string] | null = null;
+  for (const entry of KEYWORD_ALIASES) {
+    if (!normalized.includes(entry[0])) continue;
+    if (!best || entry[0].length > best[0].length) best = entry;
+  }
+  if (best) return BY_INDUSTRY[best[1]];
+
+  return BY_INDUSTRY["Professional Services"];
 }

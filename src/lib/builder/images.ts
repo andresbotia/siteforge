@@ -9,8 +9,21 @@ const IMAGE_SOURCE_TYPES = new Set<ImageSourceType>([
   "business_owned",
   "licensed_stock",
   "approved_public_asset",
+  "template_illustrative",
   "third_party_reference",
 ]);
+
+/**
+ * Locally bundled template artwork families. Only paths under
+ * `public/fixtures/<family>/` are renderable; nothing is fetched or rehosted
+ * from a remote host, a listing site, or a social platform.
+ */
+export const TEMPLATE_IMAGE_FAMILIES = ["restaurant", "home-services", "professional"] as const;
+
+const FIXTURE_PATH = new RegExp(
+  `^/fixtures/(${TEMPLATE_IMAGE_FAMILIES.join("|")})/[a-z0-9-]+\\.svg$`,
+  "i",
+);
 
 export function readApprovedImages(summary: unknown): WebsiteImageAsset[] {
   const root = asRecord(summary);
@@ -35,7 +48,31 @@ export function isRenderableImageUrl(value: string): boolean {
   if (/[\s<>"'`]|javascript:|data:|file:|onerror\s*=|onload\s*=/i.test(value)) {
     return false;
   }
-  return /^\/fixtures\/restaurant\/[a-z0-9-]+\.svg$/i.test(value);
+  return FIXTURE_PATH.test(value);
+}
+
+/**
+ * Human-facing provenance label. Template artwork must stay visibly
+ * illustrative wherever provenance is surfaced to an operator or reviewer.
+ */
+export function imageProvenanceLabel(image: WebsiteImageAsset): string {
+  switch (image.sourceType) {
+    case "template_illustrative":
+      return "Template illustration (not a photo of this business)";
+    case "business_owned":
+      return "Supplied by the business";
+    case "operator_uploaded":
+    case "manual_upload":
+      return "Operator supplied";
+    case "managed_asset":
+      return "Managed SiteForge asset";
+    case "licensed_stock":
+      return "Licensed stock";
+    case "approved_public_asset":
+      return "Approved public asset";
+    default:
+      return "Third-party reference (not renderable)";
+  }
 }
 
 function parseImageAsset(value: unknown): WebsiteImageAsset | null {

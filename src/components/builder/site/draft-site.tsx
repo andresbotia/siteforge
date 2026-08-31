@@ -2,9 +2,11 @@ import { PALETTE_STYLES } from "@/lib/builder/palettes";
 import type { PageId } from "@/lib/builder/limits";
 import { isPageId } from "@/lib/builder/validate";
 import { validateWebsiteSpec } from "@/lib/builder/validate";
+import { templateDefinition, templatePreset } from "@/lib/builder/registry";
 import type { Section, SiteCta, SpecPage, WebsiteSpec } from "@/lib/builder/types";
 import { TrackedCtaLink } from "@/components/builder/site/tracked-cta-link";
 import { RestaurantModernV2Site } from "@/components/builder/site/restaurant-modern-v2";
+import { LocalBusinessV2Site } from "@/components/builder/site/local-business-v2";
 import type { PreviewEventType } from "@/types";
 
 export function DraftSite({
@@ -33,11 +35,28 @@ export function DraftSite({
   const page = website.pages.find((item) => item.id === current) ?? website.pages[0];
   const theme = PALETTE_STYLES[website.palette];
 
-  if (website.template === "restaurant-modern") {
+  const definition = templateDefinition(website.template);
+
+  if (definition.renderer === "restaurant-modern-v2") {
     return (
       <RestaurantModernV2Site
         spec={website}
         pageId={current}
+        basePath={basePath}
+        trackingToken={trackingToken}
+        outreachTrackingToken={outreachTrackingToken}
+      />
+    );
+  }
+
+  if (definition.renderer === "local-business-v2") {
+    return (
+      <LocalBusinessV2Site
+        spec={website}
+        page={page}
+        pageId={current}
+        preset={templatePreset(website.template)}
+        definition={definition}
         basePath={basePath}
         trackingToken={trackingToken}
         outreachTrackingToken={outreachTrackingToken}

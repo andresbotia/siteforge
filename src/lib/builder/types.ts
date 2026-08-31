@@ -49,6 +49,12 @@ export type ImageSourceType =
   | "business_owned"
   | "licensed_stock"
   | "approved_public_asset"
+  /**
+   * Rights-safe artwork bundled with a SiteForge template. Illustrative of the
+   * category only. It must never be presented as a photograph of this
+   * business's food, staff, premises, or completed work.
+   */
+  | "template_illustrative"
   | "third_party_reference";
 export type ImageRightsStatus = "approved" | "pending" | "unknown" | "rejected";
 export type ImageApprovalStatus = "approved" | "pending" | "rejected";
