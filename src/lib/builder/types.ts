@@ -40,6 +40,27 @@ export type ServiceItem = {
   summary: string;
 };
 
+export type ImageRole = "hero" | "gallery" | "service" | "team" | "project";
+export type ImageSourceType =
+  | "manual_upload"
+  | "managed_asset"
+  | "business_owned"
+  | "licensed_stock"
+  | "third_party_reference";
+export type ImageRightsStatus = "approved" | "pending" | "unknown" | "rejected";
+export type ImageApprovalStatus = "approved" | "pending" | "rejected";
+
+export type WebsiteImageAsset = {
+  url: string;
+  alt: string;
+  role: ImageRole;
+  sourceType: ImageSourceType;
+  sourceUrl: string | null;
+  rightsStatus: ImageRightsStatus;
+  approvalStatus: ImageApprovalStatus;
+  attribution: string | null;
+};
+
 export type Section =
   | {
       type: "announcement";
@@ -128,6 +149,7 @@ export type WebsiteSpec = {
     industry: string;
     city: string | null;
     region: string | null;
+    address: string | null;
     phone: string | null;
     email: string | null;
     websiteUrl: string | null;
@@ -140,6 +162,12 @@ export type WebsiteSpec = {
     menuUrl: string | null;
     orderUrl: string | null;
     reservationUrl: string | null;
+    ratingSource: "google" | "public" | null;
+    shortName: string | null;
+    highlights: string[];
+  };
+  assets?: {
+    images: WebsiteImageAsset[];
   };
   navigation: NavItem[];
   pages: SpecPage[];

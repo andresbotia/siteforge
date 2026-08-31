@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" role="img" aria-labelledby="title desc">
+  <title id="title">Restaurant table with colorful plates</title>
+  <desc id="desc">A warm abstract restaurant table scene with plates and woven patterns.</desc>
+  <rect width="1200" height="900" fill="#2f4738"/>
+  <rect x="0" y="560" width="1200" height="340" fill="#8f3f28"/>
+  <circle cx="350" cy="470" r="190" fill="#f8e8c0"/>
+  <circle cx="350" cy="470" r="112" fill="#d85a36"/>
+  <circle cx="820" cy="360" r="170" fill="#f7d66f"/>
+  <circle cx="820" cy="360" r="95" fill="#244735"/>
+  <path d="M0 650h1200v48H0z" fill="#f8e8c0" opacity=".72"/>
+  <path d="M0 742h1200v32H0z" fill="#211f1b" opacity=".5"/>
+  <g fill="none" stroke="#f8e8c0" stroke-width="18" opacity=".45">
+    <path d="M120 610c80 54 160 54 240 0s160-54 240 0 160 54 240 0 160-54 240 0"/>
+    <path d="M120 718c80 54 160 54 240 0s160-54 240 0 160 54 240 0 160-54 240 0"/>
+  </g>
+</svg>

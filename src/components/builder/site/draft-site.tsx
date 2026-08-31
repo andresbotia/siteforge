@@ -4,6 +4,7 @@ import { isPageId } from "@/lib/builder/validate";
 import { validateWebsiteSpec } from "@/lib/builder/validate";
 import type { Section, SiteCta, SpecPage, WebsiteSpec } from "@/lib/builder/types";
 import { TrackedCtaLink } from "@/components/builder/site/tracked-cta-link";
+import { RestaurantModernV2Site } from "@/components/builder/site/restaurant-modern-v2";
 import type { PreviewEventType } from "@/types";
 
 export function DraftSite({
@@ -31,6 +32,18 @@ export function DraftSite({
   const current: PageId = isPageId(pageId) ? pageId : "home";
   const page = website.pages.find((item) => item.id === current) ?? website.pages[0];
   const theme = PALETTE_STYLES[website.palette];
+
+  if (website.template === "restaurant-modern") {
+    return (
+      <RestaurantModernV2Site
+        spec={website}
+        pageId={current}
+        basePath={basePath}
+        trackingToken={trackingToken}
+        outreachTrackingToken={outreachTrackingToken}
+      />
+    );
+  }
 
   return (
     <div className={`sf-draft min-h-full ${theme.wrap}`} style={{ colorScheme: "light" }}>

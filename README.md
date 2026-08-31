@@ -149,6 +149,8 @@ Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek,
 | Payments | M9 mock checkout workflow implemented and hosted-validated; live Stripe disabled |
 | Website generation and deploy | Internal drafts only; no customer production deploy |
 
+Restaurant Builder drafts use Restaurant Modern V2 behind the existing `restaurant-modern` template key. V2 renders a richer one-page restaurant composition from `WebsiteSpec` data: sourced cuisine/category, bounded public summary, public rating/review count, public hours, location, approved image assets, and a designed no-image fallback. Image assets must carry URL/reference, alt text, source type, source URL, rights status, attribution, operator approval status, and role. The renderer only accepts approved, rights-approved, allowlisted local restaurant assets; it does not ingest arbitrary remote images or render third-party reference media.
+
 ## Paid AI cost controls
 
 ### Estimated vs approved vs actual

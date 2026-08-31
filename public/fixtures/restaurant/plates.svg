@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="800" viewBox="0 0 1100 800" role="img" aria-labelledby="title desc">
+  <title id="title">Assorted restaurant plates</title>
+  <desc id="desc">An abstract spread of round plates with colorful ingredients.</desc>
+  <rect width="1100" height="800" fill="#faf7f0"/>
+  <circle cx="290" cy="395" r="230" fill="#2f4738"/>
+  <circle cx="290" cy="395" r="166" fill="#f8e8c0"/>
+  <circle cx="790" cy="355" r="210" fill="#a6492d"/>
+  <circle cx="790" cy="355" r="150" fill="#f3c96b"/>
+  <g fill="#211f1b" opacity=".72">
+    <circle cx="250" cy="350" r="34"/>
+    <circle cx="345" cy="420" r="28"/>
+    <circle cx="735" cy="330" r="32"/>
+    <circle cx="845" cy="390" r="26"/>
+  </g>
+  <path d="M130 690h840" stroke="#233c2f" stroke-width="28" stroke-linecap="round" opacity=".32"/>
+</svg>

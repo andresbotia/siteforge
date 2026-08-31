@@ -1,0 +1,115 @@
+import type { WebsiteSpec } from "./types";
+
+export const restaurantModernV2FixtureSpec: WebsiteSpec = {
+  version: "builder.v1",
+  template: "restaurant-modern",
+  palette: "ink-cream",
+  business: {
+    name: "Mariposa Comedor",
+    industry: "Restaurant",
+    city: "Coconut Creek",
+    region: "Coconut Creek, FL",
+    address: "123 Sample Road, Coconut Creek, FL",
+    phone: "(954) 555-0195",
+    email: null,
+    websiteUrl: null,
+    rating: 4.5,
+    reviewCount: 295,
+    description:
+      "Salvadoran restaurant with pupusas, breakfast plates, soups, seafood, and casual counter-service dining.",
+    cuisine: "Salvadoran restaurant",
+    hours: "Monday-Saturday 10 AM - 8 PM; Sunday 10 AM - 6 PM",
+    socialUrl: "https://social.example.test/mariposa-comedor",
+    menuUrl: "https://public.example.test/mariposa-comedor-menu",
+    orderUrl: null,
+    reservationUrl: null,
+    ratingSource: "public",
+    shortName: "Mariposa Comedor",
+    highlights: ["Salvadoran restaurant", "Pupusas", "Soups", "Seafood"],
+  },
+  assets: {
+    images: [
+      {
+        url: "/fixtures/restaurant/market-table.svg",
+        alt: "Colorful restaurant table with plates",
+        role: "hero",
+        sourceType: "managed_asset",
+        sourceUrl: null,
+        rightsStatus: "approved",
+        approvalStatus: "approved",
+        attribution: null,
+      },
+      {
+        url: "/fixtures/restaurant/griddle.svg",
+        alt: "Round masa cakes on a cooktop",
+        role: "gallery",
+        sourceType: "managed_asset",
+        sourceUrl: null,
+        rightsStatus: "approved",
+        approvalStatus: "approved",
+        attribution: null,
+      },
+      {
+        url: "/fixtures/restaurant/dining-room.svg",
+        alt: "Warm small dining room",
+        role: "gallery",
+        sourceType: "managed_asset",
+        sourceUrl: null,
+        rightsStatus: "approved",
+        approvalStatus: "approved",
+        attribution: null,
+      },
+      {
+        url: "/fixtures/restaurant/plates.svg",
+        alt: "Assorted colorful restaurant plates",
+        role: "gallery",
+        sourceType: "managed_asset",
+        sourceUrl: null,
+        rightsStatus: "approved",
+        approvalStatus: "approved",
+        attribution: null,
+      },
+    ],
+  },
+  navigation: [
+    { id: "home", label: "Home" },
+    { id: "menu", label: "Menu" },
+    { id: "about", label: "About" },
+    { id: "contact", label: "Visit" },
+  ],
+  pages: [
+    {
+      id: "home",
+      path: "/",
+      title: "Mariposa Comedor | Salvadoran restaurant in Coconut Creek",
+      description: "Salvadoran restaurant in Coconut Creek, FL.",
+      sections: [
+        {
+          type: "hero",
+          eyebrow: "Salvadoran restaurant - Coconut Creek",
+          headline: "Mariposa Comedor",
+          lede:
+            "Salvadoran restaurant with pupusas, breakfast plates, soups, seafood, and casual counter-service dining.",
+          ctas: [
+            { kind: "phone", label: "Call (954) 555-0195", href: "tel:9545550195" },
+            { kind: "menu", label: "View menu", href: "https://public.example.test/mariposa-comedor-menu" },
+          ],
+        },
+      ],
+    },
+  ],
+  seo: {
+    title: "Mariposa Comedor | Salvadoran restaurant in Coconut Creek",
+    description: "Salvadoran restaurant in Coconut Creek, FL.",
+  },
+  auditFixes: [{ findingCode: "new_website_opportunity", addressed: true, builderAction: "create_internal_draft" }],
+  provenance: [
+    { field: "websiteStatus", provenance: "sourced", source: "lead.inspection_summary.no_standalone_website" },
+    { field: "images", provenance: "sourced", source: "lead.inspection_summary.approved_images" },
+    {
+      field: "restaurantHighlights",
+      provenance: "derived",
+      source: "verified_public_facts.description+cuisine",
+    },
+  ],
+};

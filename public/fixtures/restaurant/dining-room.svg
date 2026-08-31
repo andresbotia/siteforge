@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="900" viewBox="0 0 1000 900" role="img" aria-labelledby="title desc">
+  <title id="title">Small dining room with tables</title>
+  <desc id="desc">A stylized warm dining room with pendant lights and simple tables.</desc>
+  <rect width="1000" height="900" fill="#efe6d5"/>
+  <rect y="0" width="1000" height="420" fill="#233c2f"/>
+  <g fill="#f3c96b">
+    <circle cx="240" cy="210" r="52"/>
+    <circle cx="500" cy="180" r="58"/>
+    <circle cx="760" cy="220" r="48"/>
+  </g>
+  <g stroke="#211f1b" stroke-width="16" stroke-linecap="round">
+    <path d="M240 0v154"/>
+    <path d="M500 0v122"/>
+    <path d="M760 0v166"/>
+  </g>
+  <g fill="#a6492d">
+    <rect x="115" y="560" width="260" height="52" rx="12"/>
+    <rect x="620" y="560" width="260" height="52" rx="12"/>
+  </g>
+  <g stroke="#211f1b" stroke-width="18" stroke-linecap="round">
+    <path d="M160 615v120M330 615v120M665 615v120M835 615v120"/>
+  </g>
+</svg>

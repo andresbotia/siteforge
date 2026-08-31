@@ -12,6 +12,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (
     pathname === "/login" ||
+    pathname === "/visual-qa/restaurant-v2" ||
     /^\/websites\/[^/]+\/preview$/.test(pathname) ||
     /^\/p\/[^/]+$/.test(pathname) ||
     /^\/o\/[^/]+$/.test(pathname)

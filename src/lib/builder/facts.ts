@@ -1,4 +1,6 @@
 import type { BuilderAuditInput, BuilderLeadInput, ProvenanceRecord } from "./types";
+import type { WebsiteImageAsset } from "./types";
+import { readApprovedImages } from "./images";
 import { isNoStandaloneWebsiteLead } from "@/lib/prospects/no-website";
 import { readVerifiedPublicFacts } from "@/lib/prospects/verified-public-facts";
 
@@ -41,6 +43,10 @@ export type BuilderFacts = {
   reservationUrl: string | null;
   orderUrl: string | null;
   socialUrl: string | null;
+  ratingSource: "google" | "public" | null;
+  shortName: string | null;
+  highlights: string[];
+  images: WebsiteImageAsset[];
   reservationsOffered: boolean;
   orderingOffered: boolean;
   emergencyOffered: boolean;
@@ -83,6 +89,15 @@ export function extractFacts(
     reservationUrlRaw && isHttpUrl(reservationUrlRaw) ? reservationUrlRaw : null;
   const orderUrl = orderUrlRaw && isHttpUrl(orderUrlRaw) ? orderUrlRaw : null;
   const socialUrl = socialUrlRaw && isHttpUrl(socialUrlRaw) ? socialUrlRaw : null;
+  const ratingSourceRaw = summaryString(lead.inspectionSummary, "rating_source");
+  const ratingSource = rating || reviewCount
+    ? ratingSourceRaw === "google"
+      ? "google"
+      : "public"
+    : null;
+  const images = readApprovedImages(lead.inspectionSummary);
+  const shortName = deriveShortName(lead.businessName);
+  const highlights = deriveRestaurantHighlights([cuisine, description].filter(Boolean).join(" "));
 
   const reservationsOffered =
     Boolean(reservationUrl) ||
@@ -117,6 +132,9 @@ export function extractFacts(
   record("reservationUrl", reservationUrl ? "sourced" : "omitted", reservationUrl ? (verifiedFacts?.reservationUrl === reservationUrl ? verifiedSource("reservationUrl") : "lead.inspection_summary.reservation_link") : null);
   record("orderUrl", orderUrl ? "sourced" : "omitted", orderUrl ? (verifiedFacts?.orderUrl === orderUrl ? verifiedSource("orderUrl") : "lead.inspection_summary.order_link") : null);
   record("socialUrl", socialUrl ? "sourced" : "omitted", socialUrl ? (verifiedFacts?.socialUrl === socialUrl ? verifiedSource("socialUrl") : "lead.inspection_summary.social_url") : null);
+  record("ratingSource", ratingSource ? "sourced" : "omitted", ratingSource ? (ratingSourceRaw ? "lead.inspection_summary.rating_source" : "manual_public_verification") : null);
+  record("images", images.length > 0 ? "sourced" : "omitted", images.length > 0 ? "manual_public_verification:lead.inspection_summary.approved_images" : null);
+  record("restaurantHighlights", highlights.length > 0 ? "derived" : "omitted", highlights.length > 0 ? "verified_public_facts.description+cuisine" : null);
   record("reservationsOffered", reservationsOffered ? "sourced" : "omitted", reservationsOffered ? "inspection_or_audit" : null);
   record("orderingOffered", orderingOffered ? "sourced" : "omitted", orderingOffered ? "inspection_or_audit" : null);
   record("emergencyOffered", emergencyOffered ? "sourced" : "omitted", emergencyOffered ? "audit.findings" : null);
@@ -142,11 +160,40 @@ export function extractFacts(
     reservationUrl,
     orderUrl,
     socialUrl,
+    ratingSource,
+    shortName,
+    highlights,
+    images,
     reservationsOffered,
     orderingOffered,
     emergencyOffered,
     provenance,
   };
+}
+
+function deriveShortName(name: string): string | null {
+  const cleaned = name
+    .replace(/\b(restaurant|cafe|coffee|grill|bar|kitchen|llc|inc)\b/gi, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return cleaned && cleaned.length >= 2 && cleaned.length < name.trim().length
+    ? cleaned
+    : null;
+}
+
+function deriveRestaurantHighlights(source: string): string[] {
+  const lower = source.toLowerCase();
+  const supported = [
+    ["Salvadoran restaurant", /\bsalvadoran\b/],
+    ["Pupusas", /\bpupusas?\b/],
+    ["Soups", /\bsoups?\b/],
+    ["Seafood", /\bseafood\b/],
+    ["Traditional dishes", /\btraditional\b/],
+  ] as const;
+  return supported
+    .filter(([, pattern]) => pattern.test(lower))
+    .map(([label]) => label)
+    .slice(0, 4);
 }
 
 export function telHref(phone: string): string {
