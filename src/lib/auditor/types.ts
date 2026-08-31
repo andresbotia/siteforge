@@ -100,6 +100,7 @@ export type AuditorLeadInput = {
   phone: string | null;
   websiteUrl: string | null;
   status: string;
+  inspectionSummary?: Record<string, unknown> | null;
 };
 
 export type AuditorPipelineResult = {

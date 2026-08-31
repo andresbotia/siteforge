@@ -34,9 +34,20 @@ export function composeSalesDraft(
     },
   ];
 
-  // 1. Determine key audit observation
+  const newWebsiteOpportunity =
+    lead.websiteStatus === "no_standalone_website" ||
+    audit.opportunityType === "new_website";
+
+  // 1. Determine key audit or website-status observation
   let observation = "";
-  if (audit.findings && audit.findings.length > 0) {
+  if (newWebsiteOpportunity) {
+    observation = "I noticed there does not appear to be a standalone website for your business";
+    evidence.push({
+      type: "website_status",
+      text: "Operator-verified no standalone business website",
+      source: "lead.inspection_summary",
+    });
+  } else if (audit.findings && audit.findings.length > 0) {
     const finding = audit.findings[0];
     observation = `I noticed ${finding.title.toLowerCase()}`;
     evidence.push({
@@ -70,11 +81,13 @@ export function composeSalesDraft(
       : "improves mobile navigation and primary call-to-action layout";
     evidence.push({
       type: "builder_fix",
-      text: `Redesign fix: ${fix.builderAction || fix.findingCode}`,
+      text: `${newWebsiteOpportunity ? "New website step" : "Redesign fix"}: ${fix.builderAction || fix.findingCode}`,
       source: "builder_spec",
     });
   } else {
-    improvement = "features a modern mobile-first layout, prominent contact actions, and clean service pages";
+    improvement = newWebsiteOpportunity
+      ? "creates a standalone mobile-first web presence with clear contact paths"
+      : "features a modern mobile-first layout, prominent contact actions, and clean service pages";
     evidence.push({
       type: "builder_fix",
       text: `Template: ${website.template}`,
@@ -93,9 +106,13 @@ export function composeSalesDraft(
   const body = [
     `Hi ${businessName} team,`,
     "",
-    `I was researching ${lead.industry.toLowerCase()} businesses in ${lead.city} and came across ${businessName}. While inspecting your current website, ${observation}.`,
+    newWebsiteOpportunity
+      ? `I was researching ${lead.industry.toLowerCase()} businesses in ${lead.city} and came across ${businessName}. ${observation}.`
+      : `I was researching ${lead.industry.toLowerCase()} businesses in ${lead.city} and came across ${businessName}. While inspecting your current website, ${observation}.`,
     "",
-    `To show what an updated version could look like, we drafted a clean replacement that ${improvement}.`,
+    newWebsiteOpportunity
+      ? `To show what a standalone site could look like, we drafted a clean concept that ${improvement}.`
+      : `To show what an updated version could look like, we drafted a clean replacement that ${improvement}.`,
     "",
     `You can view the live interactive preview here:`,
     "{{OUTREACH_PREVIEW_LINK}}",

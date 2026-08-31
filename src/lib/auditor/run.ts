@@ -1,6 +1,7 @@
 import type { SafeHttpClient } from "@/lib/http/fetch";
 import type { DnsLookup } from "@/lib/http/ssrf";
 import { resolveMonotonicLeadStatus } from "@/lib/scout/status";
+import { isNoStandaloneWebsiteLead } from "@/lib/prospects/no-website";
 import { crawlWebsite } from "./crawl";
 import { collectFindings } from "./findings";
 import { AUDITOR_VERSION } from "./limits";
@@ -15,6 +16,9 @@ export async function runAuditorPipeline(
   assertNoAuditorSideEffects();
   if (auditorPaidAiPath() !== "not_required") {
     throw new Error("auditor_paid_ai_not_required");
+  }
+  if (isNoStandaloneWebsiteLead(lead)) {
+    throw new Error("no_standalone_website_not_auditable");
   }
 
   const crawl = await crawlWebsite(lead.websiteUrl, deps.http, deps.lookup);

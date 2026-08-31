@@ -30,7 +30,7 @@ export default async function BuilderPage() {
         <Card>
           <CardHeader
             title="Start a website draft"
-            description="Choose an audited lead. The draft stays inside SiteForge until Milestone 7 preview hosting."
+            description="Choose an audited lead or an explicitly verified no-website prospect. The draft stays inside SiteForge until preview approval."
           />
           <CardBody>
             <BuilderRunForm leads={leads} />
@@ -74,7 +74,7 @@ export default async function BuilderPage() {
       <Card className="mt-4">
         <CardHeader
           title="Eligible leads"
-          description="Audited leads first. Rebuilds keep history."
+          description="Audited leads first, plus explicit no-website prospects. Rebuilds keep history."
         />
         {leads.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted">No audited leads yet.</p>

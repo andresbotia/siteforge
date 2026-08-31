@@ -1,4 +1,5 @@
 import type { BuilderAuditInput, BuilderLeadInput, ProvenanceRecord } from "./types";
+import { isNoStandaloneWebsiteLead } from "@/lib/prospects/no-website";
 
 function blankToNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? "";
@@ -50,6 +51,7 @@ export function extractFacts(
   const phone = blankToNull(lead.phone);
   const email = blankToNull(lead.email);
   const websiteUrl = blankToNull(lead.websiteUrl);
+  const noStandaloneWebsite = isNoStandaloneWebsiteLead(lead);
   const region = [city, state].filter(Boolean).join(", ") || null;
   const rating = lead.rating && lead.rating > 0 ? lead.rating : null;
   const reviewCount = lead.reviewCount > 0 ? lead.reviewCount : null;
@@ -80,6 +82,10 @@ export function extractFacts(
   record("phone", phone ? "sourced" : "omitted", phone ? "lead.phone" : null);
   record("email", email ? "sourced" : "omitted", email ? "lead.email" : null);
   record("address", address ? "sourced" : "omitted", address ? "lead.address" : null);
+  record("websiteUrl", websiteUrl ? "sourced" : noStandaloneWebsite ? "omitted" : "omitted", websiteUrl ? "lead.website_url" : null);
+  if (noStandaloneWebsite) {
+    record("websiteStatus", "sourced", "lead.inspection_summary.no_standalone_website");
+  }
   record("rating", rating ? "sourced" : "omitted", rating ? "lead.google_rating" : null);
   record("reviewCount", reviewCount ? "sourced" : "omitted", reviewCount ? "lead.review_count" : null);
   record("hours", "omitted", null);

@@ -12,6 +12,7 @@ import {
 import { buildAuditorToolCalls, buildWebsiteAuditInsert } from "@/lib/auditor/persist";
 import { runAuditorPipeline } from "@/lib/auditor/run";
 import { mutateTable, readTable } from "@/lib/supabase/server";
+import { asRecord } from "@/lib/json";
 import type { Json } from "@/types/database";
 import type { AgentRow, AgentRunRow, AuditRow, LeadRow } from "@/types/database";
 import type { Lead } from "@/types";
@@ -107,6 +108,9 @@ export async function startAuditorRun(input: {
         phone: lead.phone,
         websiteUrl: lead.website_url,
         status: lead.status,
+        inspectionSummary: Object.keys(asRecord(lead.inspection_summary)).length
+          ? asRecord(lead.inspection_summary)
+          : null,
       },
       { http: createAuditorHttpClient() },
     );

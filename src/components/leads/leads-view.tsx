@@ -11,6 +11,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import {
   LeadSourceBadge,
   LeadStatusBadge,
+  LeadWebsiteStatusBadge,
   QualificationBadge,
 } from "@/components/shared/status-badge";
 import { cities, industries, leadStatuses } from "@/lib/constants";
@@ -181,6 +182,7 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
             <Th>Rating</Th>
             <Th>Reviews</Th>
             <Th>Website Score</Th>
+            <Th>Website Status</Th>
             <Th>Lead Score</Th>
             <Th>Opportunity</Th>
             <Th>Qualification</Th>
@@ -193,7 +195,7 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
           {filtered.length === 0 ? (
             <tr>
               <td
-                colSpan={12}
+                colSpan={13}
                 className="border-t border-border-subtle px-3 py-6 text-sm text-muted"
               >
                 No leads yet.
@@ -214,7 +216,12 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
               <Td className="text-muted">{lead.location}</Td>
               <Td className="tabular-nums">{lead.rating.toFixed(1)}</Td>
               <Td className="tabular-nums">{lead.reviewCount}</Td>
-              <Td className="tabular-nums">{lead.websiteScore}</Td>
+              <Td className="tabular-nums">
+                {lead.websiteStatus === "no_standalone_website" ? "N/A" : lead.websiteScore}
+              </Td>
+              <Td>
+                <LeadWebsiteStatusBadge status={lead.websiteStatus} />
+              </Td>
               <Td className="tabular-nums font-medium">{lead.leadScore}</Td>
               <Td className="tabular-nums">
                 {lead.websiteOpportunityScore ?? "—"}

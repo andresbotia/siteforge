@@ -22,7 +22,10 @@ export function runBuilderPipeline(
   if (!validated.ok) throw new Error(validated.error);
 
   const nextStatus = resolveMonotonicLeadStatus(lead.status, "website_built");
-  const summary = `Deterministic ${BUILDER_VERSION} draft using ${templateLabel(template)}. ${spec.auditFixes.filter((item) => item.addressed).length} audit fixes addressed.`;
+  const summary =
+    audit.opportunityType === "new_website"
+      ? `Deterministic ${BUILDER_VERSION} standalone website draft using ${templateLabel(template)}. No crawled audit was used.`
+      : `Deterministic ${BUILDER_VERSION} draft using ${templateLabel(template)}. ${spec.auditFixes.filter((item) => item.addressed).length} audit fixes addressed.`;
 
   return {
     version: BUILDER_VERSION,

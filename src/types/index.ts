@@ -46,6 +46,7 @@ export interface Lead {
   phone: string;
   email: string;
   website: string;
+  websiteStatus: "has_website" | "no_standalone_website" | "unknown";
   rating: number;
   reviewCount: number;
   websiteScore: number;

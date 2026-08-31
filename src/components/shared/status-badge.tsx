@@ -107,6 +107,12 @@ const paymentEnvironmentTone = {
   unknown: "neutral",
 } as const;
 
+const leadWebsiteTone = {
+  has_website: "success",
+  no_standalone_website: "warning",
+  unknown: "neutral",
+} as const;
+
 const qualificationTone = {
   reject: "danger",
   review: "warning",
@@ -127,6 +133,20 @@ export function LeadSourceBadge({ source }: { source: string | null }) {
     return <Badge tone="accent">Scout</Badge>;
   }
   return <Badge tone="neutral">Seed / fixture</Badge>;
+}
+
+export function LeadWebsiteStatusBadge({
+  status,
+}: {
+  status: keyof typeof leadWebsiteTone;
+}) {
+  const label =
+    status === "no_standalone_website"
+      ? "No standalone website"
+      : status === "has_website"
+        ? "Website"
+        : "Website unknown";
+  return <Badge tone={leadWebsiteTone[status]}>{label}</Badge>;
 }
 
 export function QualificationBadge({ tier }: { tier: QualificationTier }) {

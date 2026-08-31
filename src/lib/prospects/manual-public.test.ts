@@ -6,6 +6,10 @@ import { describe, it } from "node:test";
 import { isLeadEligibleForAudit } from "../auditor/eligibility";
 import { isLeadEligibleForBuild } from "../builder/eligibility";
 import {
+  isNoStandaloneWebsiteLead,
+  noStandaloneWebsiteSummary,
+} from "./no-website";
+import {
   buildManualPublicProspectFailureState,
   readManualPublicProspectFormValues,
 } from "./form-state";
@@ -76,6 +80,93 @@ describe("manual public prospect import validation", () => {
     if (!result.ok) return;
     assert.equal(result.draft.business.city, "Coconut Creek");
     assert.equal(result.draft.business.state, "FL");
+  });
+
+  it("normal website prospect still requires a valid website URL", async () => {
+    const result = await validateManualPublicProspect(
+      {
+        businessName: "Coconut Creek Electric",
+        websiteUrl: "",
+        location: "Coconut Creek, FL",
+        industry: "Electrical",
+      },
+      [],
+    );
+
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.field, "websiteUrl");
+  });
+
+  it("explicit no-website prospect can omit website URL without persisting a fake URL", async () => {
+    const result = await validateManualPublicProspect(
+      {
+        businessName: "No Website Restaurant",
+        websiteUrl: "",
+        location: "Margate, FL",
+        industry: "Restaurant",
+        phone: "(954) 555-0177",
+        noStandaloneWebsite: true,
+      },
+      [],
+    );
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.draft.noStandaloneWebsite, true);
+    assert.equal(result.draft.business.websiteUrl, null);
+    assert.equal(result.draft.business.normalizedDomain, null);
+    assert.equal(result.draft.business.normalizedPhone, "9545550177");
+  });
+
+  it("explicit no-website prospect rejects a filled website URL", async () => {
+    const result = await validateManualPublicProspect(
+      {
+        businessName: "Conflicting No Website Business",
+        websiteUrl: "conflicting.example.test",
+        location: "Margate, FL",
+        industry: "Restaurant",
+        phone: "(954) 555-0177",
+        noStandaloneWebsite: true,
+      },
+      [],
+    );
+
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.field, "websiteUrl");
+  });
+
+  it("no-website state cannot be inferred from a missing or malformed URL", async () => {
+    for (const websiteUrl of ["", "not a url"]) {
+      const result = await validateManualPublicProspect(
+        {
+          businessName: "Implicit No Website Business",
+          websiteUrl,
+          location: "Margate, FL",
+          industry: "Restaurant",
+          phone: "(954) 555-0178",
+        },
+        [],
+      );
+
+      assert.equal(result.ok, false);
+      if (!result.ok) assert.equal(result.field, "websiteUrl");
+    }
+  });
+
+  it("explicit no-website prospects require dedupe-strength identifying data", async () => {
+    const result = await validateManualPublicProspect(
+      {
+        businessName: "Thin No Website Business",
+        websiteUrl: "",
+        location: "Margate, FL",
+        industry: "Restaurant",
+        noStandaloneWebsite: true,
+      },
+      [],
+    );
+
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.equal(result.field, "phone");
   });
 
   it("preserves entered form values when location validation fails", async () => {
@@ -231,5 +322,35 @@ describe("manual public prospect import validation", () => {
     assert.equal(isLeadEligibleForAudit({ status: "discovered" }), true);
     assert.equal(isLeadEligibleForBuild({ status: "discovered" }), false);
     assert.equal(isLeadEligibleForBuild({ status: "audited" }), true);
+  });
+
+  it("routes explicit no-website prospects to Builder without Auditor", async () => {
+    const result = await validateManualPublicProspect(
+      {
+        businessName: "No Website Cafe",
+        websiteUrl: "",
+        location: "Margate, FL",
+        industry: "Cafe",
+        address: "100 Public Rd",
+        noStandaloneWebsite: true,
+      },
+      [],
+    );
+
+    assert.equal(result.ok, true);
+    assert.equal(
+      isNoStandaloneWebsiteLead({
+        websiteUrl: null,
+        inspectionSummary: noStandaloneWebsiteSummary(),
+      }),
+      true,
+    );
+    const lead = {
+      status: "qualified",
+      websiteUrl: null,
+      inspectionSummary: noStandaloneWebsiteSummary(),
+    };
+    assert.equal(isLeadEligibleForAudit(lead), false);
+    assert.equal(isLeadEligibleForBuild(lead), true);
   });
 });

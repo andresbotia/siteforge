@@ -16,6 +16,7 @@ export function readManualPublicProspectFormValues(formData: FormData): ManualPu
     websiteUrl: String(formData.get("websiteUrl") ?? ""),
     location: String(formData.get("location") ?? ""),
     industry: String(formData.get("industry") ?? ""),
+    noStandaloneWebsite: formData.get("noStandaloneWebsite") === "on",
     phone: String(formData.get("phone") ?? ""),
     address: String(formData.get("address") ?? ""),
     sourceNote: String(formData.get("sourceNote") ?? ""),

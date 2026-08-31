@@ -8,6 +8,17 @@ export function mapAuditFixes(
   facts: BuilderFacts,
   template: TemplateKey,
 ): AuditFix[] {
+  if (audit.opportunityType === "new_website") {
+    return [
+      {
+        findingCode: "new_website_opportunity",
+        addressed: true,
+        builderAction:
+          "Draft creates a standalone web presence from verified public business facts.",
+      },
+    ];
+  }
+
   const codes = new Set(audit.findings.map((item) => item.code));
   const fixes: AuditFix[] = [
     {

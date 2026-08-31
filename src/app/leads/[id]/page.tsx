@@ -18,6 +18,7 @@ import {
   CommercialOfferStatusBadge,
   LeadSourceBadge,
   LeadStatusBadge,
+  LeadWebsiteStatusBadge,
   QualificationBadge,
 } from "@/components/shared/status-badge";
 import { formatDateTime, formatNumber } from "@/lib/format";
@@ -55,6 +56,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
   const isManualPublicProspect = isManualPublicProspectSource(
     lead.discoverySource,
   );
+  const isNoStandaloneWebsite = lead.websiteStatus === "no_standalone_website";
 
   return (
     <>
@@ -72,6 +74,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <LeadStatusBadge status={lead.status} />
         <LeadSourceBadge source={lead.discoverySource} />
+        <LeadWebsiteStatusBadge status={lead.websiteStatus} />
         {lead.qualificationTier ? (
           <QualificationBadge tier={lead.qualificationTier} />
         ) : null}
@@ -84,9 +87,9 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         <Card className="mb-4">
           <CardBody>
             <p className="text-sm text-muted">
-              M9.5B public-data-only prospect. Auditor and Builder may use the
-              existing deterministic public website flow, but no outreach,
-              payment, paid AI, or customer production deployment has been run.
+              {isNoStandaloneWebsite
+                ? "M9.5D public-data-only prospect with operator-verified no standalone website. Auditor is not applicable; Builder may create a standalone website draft from verified lead facts only."
+                : "M9.5B public-data-only prospect. Auditor and Builder may use the existing deterministic public website flow, but no outreach, payment, paid AI, or customer production deployment has been run."}
             </p>
           </CardBody>
         </Card>
@@ -100,10 +103,23 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
             <Detail label="Email" value={lead.email} />
             <Detail label="Website" value={lead.website} />
             <Detail
+              label="Website status"
+              value={
+                isNoStandaloneWebsite
+                  ? "No standalone website"
+                  : lead.website
+                    ? "Standalone website present"
+                    : "Unknown"
+              }
+            />
+            <Detail
               label="Rating"
               value={`${lead.rating.toFixed(1)} · ${formatNumber(lead.reviewCount)} reviews`}
             />
-            <Detail label="Website score" value={String(lead.websiteScore)} />
+            <Detail
+              label="Website score"
+              value={isNoStandaloneWebsite ? "Not applicable" : String(lead.websiteScore)}
+            />
             <Detail label="Lead score" value={String(lead.leadScore)} />
           </CardBody>
         </Card>
@@ -139,7 +155,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
             value={lead.businessStrengthScore === null ? "—" : String(lead.businessStrengthScore)}
           />
           <Detail
-            label="Website opportunity"
+            label={isNoStandaloneWebsite ? "New website opportunity" : "Website opportunity"}
             value={
               lead.websiteOpportunityScore === null
                 ? "—"
@@ -244,7 +260,9 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         <Card className="mt-4">
           <CardBody>
             <p className="text-sm text-muted">
-              Not audited. {canAudit ? "Run a website audit from this page." : "This lead is not eligible for Auditor."}
+              {isNoStandaloneWebsite
+                ? "Website audit not applicable. Operator verified there is no standalone site, so SiteForge records a new website opportunity instead of fabricating a crawled audit."
+                : `Not audited. ${canAudit ? "Run a website audit from this page." : "This lead is not eligible for Auditor."}`}
             </p>
           </CardBody>
         </Card>

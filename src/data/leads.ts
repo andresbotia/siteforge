@@ -8,6 +8,10 @@ import {
   validateManualPublicProspect,
   type ManualPublicProspectInput,
 } from "@/lib/prospects/manual-public";
+import {
+  isNoStandaloneWebsiteSummary,
+  noStandaloneWebsiteSummary,
+} from "@/lib/prospects/no-website";
 import { getSupabaseServerConfigIssue } from "@/lib/supabase/config";
 import type {
   AuditFinding,
@@ -49,6 +53,7 @@ const qualificationTiers = new Set<QualificationTier>([
 function mapLead(row: LeadRow, websiteScore = 0): Lead {
   const city = row.city ?? "";
   const state = row.state ?? "";
+  const noStandaloneWebsite = isNoStandaloneWebsiteSummary(row.inspection_summary);
   const opportunity = row.website_opportunity_score;
   const derivedWebsiteScore =
     opportunity === null || opportunity === undefined
@@ -64,6 +69,11 @@ function mapLead(row: LeadRow, websiteScore = 0): Lead {
     phone: row.phone ?? "",
     email: row.email ?? "",
     website: row.website_url ?? "",
+    websiteStatus: noStandaloneWebsite
+      ? "no_standalone_website"
+      : row.website_url
+        ? "has_website"
+        : "unknown",
     rating: Number(row.google_rating ?? 0),
     reviewCount: row.review_count,
     websiteScore: derivedWebsiteScore,
@@ -257,7 +267,7 @@ export async function createManualPublicProspect(
   );
   if (!validation.ok) return validation;
 
-  const { business, duplicateId, sourceNote } = validation.draft;
+  const { business, duplicateId, sourceNote, noStandaloneWebsite } = validation.draft;
   if (duplicateId) {
     return { ok: true, leadId: duplicateId, duplicate: true };
   }
@@ -275,25 +285,36 @@ export async function createManualPublicProspect(
         website_url: business.websiteUrl ?? null,
         google_rating: null,
         review_count: 0,
-        status: "discovered",
-        lead_score: null,
+        status: noStandaloneWebsite ? "qualified" : "discovered",
+        lead_score: noStandaloneWebsite ? 100 : null,
         source: MANUAL_PUBLIC_PROSPECT_SOURCE,
         notes: sourceNote,
         normalized_domain: business.normalizedDomain,
         normalized_phone: business.normalizedPhone,
-        qualification_tier: "review",
+        qualification_tier: noStandaloneWebsite ? "high_priority" : "review",
         business_strength_score: null,
-        website_opportunity_score: null,
-        overall_qualification_score: null,
-        qualification_reasons: [
-          "Manual public prospect imported for M9.5B validation",
-          "No outreach, payment, paid AI, or production deployment executed",
-        ],
-        inspection_summary: {
-          source: MANUAL_PUBLIC_PROSPECT_SOURCE,
-          public_data_only: true,
-          website_inspection: "pending_auditor",
-        },
+        website_opportunity_score: noStandaloneWebsite ? 100 : null,
+        overall_qualification_score: noStandaloneWebsite ? 100 : null,
+        qualification_reasons: noStandaloneWebsite
+          ? [
+              "Operator manually verified no standalone business website",
+              "Explicit new website opportunity; not a crawled redesign audit",
+              "No outreach, payment, paid AI, or production deployment executed",
+            ]
+          : [
+              "Manual public prospect imported for M9.5B validation",
+              "No outreach, payment, paid AI, or production deployment executed",
+            ],
+        inspection_summary: noStandaloneWebsite
+          ? {
+              source: MANUAL_PUBLIC_PROSPECT_SOURCE,
+              ...noStandaloneWebsiteSummary(),
+            }
+          : {
+              source: MANUAL_PUBLIC_PROSPECT_SOURCE,
+              public_data_only: true,
+              website_inspection: "pending_auditor",
+            },
         discovered_at: new Date().toISOString(),
         last_scout_run_id: null,
       })
@@ -310,13 +331,16 @@ export async function createManualPublicProspect(
     eventType: "manual_public_prospect_imported",
     title: "Manual public prospect imported",
     description:
-      "M9.5B public-data-only prospect created. No outreach, payment, paid AI, or production deployment ran.",
+      noStandaloneWebsite
+        ? "M9.5D public-data-only no-website prospect created. No outreach, payment, paid AI, or production deployment ran."
+        : "M9.5B public-data-only prospect created. No outreach, payment, paid AI, or production deployment ran.",
     actorType: "admin",
     leadId: row.id,
     metadata: {
       source: MANUAL_PUBLIC_PROSPECT_SOURCE,
       normalized_domain: business.normalizedDomain ?? "",
       public_data_only: true,
+      no_standalone_website: noStandaloneWebsite,
     },
   });
 

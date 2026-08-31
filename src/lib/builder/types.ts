@@ -157,6 +157,7 @@ export type BuilderAuditInput = {
   overallScore: number | null;
   redesignOpportunityScore: number | null;
   findings: Array<{ code: string; title: string }>;
+  opportunityType?: "redesign" | "new_website";
 };
 
 export type BuilderPipelineResult = {

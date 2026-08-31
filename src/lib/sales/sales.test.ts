@@ -176,6 +176,43 @@ describe("Sales Agent: deterministic $0 drafting & factual integrity", () => {
     assert.equal(draft.recipientEmail, "");
     assert.ok(draft.body.length > 0);
   });
+
+  test("frames no-website prospects as standalone web presence, not redesign audit", () => {
+    const draft = composeSalesDraft(
+      {
+        ...mockLead,
+        websiteUrl: null,
+        websiteStatus: "no_standalone_website",
+      },
+      {
+        id: null,
+        overallScore: null,
+        redesignOpportunityScore: null,
+        findings: [],
+        issues: [],
+        opportunityType: "new_website",
+      },
+      {
+        ...mockWebsite,
+        auditFixes: [
+          {
+            findingCode: "new_website_opportunity",
+            addressed: true,
+            builderAction: "Creates a standalone mobile-first web presence",
+          },
+        ],
+      },
+      mockPreview,
+    );
+
+    assert.match(draft.body, /standalone website/i);
+    assert.match(draft.body, /standalone site/i);
+    assert.doesNotMatch(draft.body, /inspecting your current website/i);
+    assert.doesNotMatch(draft.body, /audited your website/i);
+    assert.doesNotMatch(draft.body, /current website is bad/i);
+    assert.doesNotMatch(draft.body, /redesign/i);
+    assert.ok(draft.evidence.some((item) => item.type === "website_status"));
+  });
 });
 
 describe("Sales Agent: content-hash & approval binding", () => {

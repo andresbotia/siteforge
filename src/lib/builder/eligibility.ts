@@ -1,3 +1,5 @@
+import { isNoStandaloneWebsiteLead } from "@/lib/prospects/no-website";
+
 const BUILDABLE_STATUSES = new Set<string>([
   "audited",
   "website_built",
@@ -7,8 +9,17 @@ const BUILDABLE_STATUSES = new Set<string>([
   "customer",
 ]);
 
-export function isLeadEligibleForBuild(lead: { status: string }): boolean {
+export function isLeadEligibleForBuild(lead: {
+  status: string;
+  websiteUrl?: string | null;
+  website_url?: string | null;
+  inspectionSummary?: unknown;
+  inspection_summary?: unknown;
+}): boolean {
   if (lead.status === "rejected") return false;
+  if (isNoStandaloneWebsiteLead(lead)) {
+    return lead.status === "qualified" || BUILDABLE_STATUSES.has(lead.status);
+  }
   return BUILDABLE_STATUSES.has(lead.status);
 }
 

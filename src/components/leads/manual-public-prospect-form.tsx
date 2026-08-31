@@ -19,6 +19,7 @@ export function ManualPublicProspectForm() {
   );
   const values = state.values;
   const errors = state.fieldErrors ?? {};
+  const noStandaloneWebsite = values?.noStandaloneWebsite === true;
 
   return (
     <Card className="mb-4">
@@ -51,12 +52,11 @@ export function ManualPublicProspectForm() {
             <Field
               label="Website"
               htmlFor="manual-website-url"
-              hint="Public http/https only."
+              hint="Public http/https only unless no standalone website is manually verified."
             >
               <TextInput
                 id="manual-website-url"
                 name="websiteUrl"
-                required
                 placeholder="example.com"
                 defaultValue={values?.websiteUrl ?? ""}
                 aria-invalid={Boolean(errors.websiteUrl)}
@@ -68,6 +68,25 @@ export function ManualPublicProspectForm() {
                 </p>
               ) : null}
             </Field>
+          </div>
+          <div className="lg:col-span-2">
+            <label className="flex items-start gap-2 rounded-md border border-border-subtle p-3 text-sm">
+              <input
+                type="checkbox"
+                name="noStandaloneWebsite"
+                className="mt-0.5 size-4 accent-accent"
+                defaultChecked={noStandaloneWebsite}
+              />
+              <span>
+                <span className="block font-medium text-foreground">
+                  No standalone website
+                </span>
+                <span className="mt-1 block text-xs text-muted">
+                  Use only after manual public verification. Website URL stays
+                  blank and no Auditor crawl runs.
+                </span>
+              </span>
+            </label>
           </div>
           <div>
             <Field label="Location" htmlFor="manual-location" hint="Example: Coconut Creek, FL">

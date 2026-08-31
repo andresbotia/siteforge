@@ -19,6 +19,7 @@ export type ManualPublicProspectInput = {
   websiteUrl: string;
   location: string;
   industry: string;
+  noStandaloneWebsite?: boolean;
   phone?: string | null;
   address?: string | null;
   sourceNote?: string | null;
@@ -29,6 +30,7 @@ export type ManualPublicProspectDraft = {
   duplicateId: string | null;
   source: typeof MANUAL_PUBLIC_PROSPECT_SOURCE;
   sourceNote: string | null;
+  noStandaloneWebsite: boolean;
 };
 
 export type ManualPublicProspectValidation =
@@ -60,14 +62,6 @@ export async function validateManualPublicProspect(
     return { ok: false, error: "Enter a public business name.", field: "businessName" };
   }
 
-  const websiteUrl = withDefaultScheme(cleanText(input.websiteUrl, 220));
-  let safeUrl: URL;
-  try {
-    safeUrl = await assertSafeHttpUrl(websiteUrl, lookup);
-  } catch {
-    return { ok: false, error: "Enter a public http or https website URL.", field: "websiteUrl" };
-  }
-
   const location = parseLocation(input.location);
   if (!location.city || !/^[A-Z]{2}$/.test(location.state)) {
     return { ok: false, error: "Enter city and state, for example Coconut Creek, FL.", field: "location" };
@@ -83,9 +77,38 @@ export async function validateManualPublicProspect(
     return { ok: false, error: "Enter a valid public phone number or leave it blank.", field: "phone" };
   }
 
-  const normalizedDomain = normalizeDomain(safeUrl.toString());
-  if (!normalizedDomain) {
-    return { ok: false, error: "Enter a public business website URL.", field: "websiteUrl" };
+  const address = cleanText(input.address) || null;
+  const noStandaloneWebsite = input.noStandaloneWebsite === true;
+  let safeUrl: URL | null = null;
+  let normalizedDomain: string | null = null;
+
+  if (noStandaloneWebsite) {
+    if (cleanText(input.websiteUrl, 220)) {
+      return {
+        ok: false,
+        error: "Leave website URL blank when marking no standalone website.",
+        field: "websiteUrl",
+      };
+    }
+    if (!normalizedPhone && !address) {
+      return {
+        ok: false,
+        error: "Enter a public phone number or address for no-website deduplication.",
+        field: "phone",
+      };
+    }
+  } else {
+    const websiteUrl = withDefaultScheme(cleanText(input.websiteUrl, 220));
+    try {
+      safeUrl = await assertSafeHttpUrl(websiteUrl, lookup);
+    } catch {
+      return { ok: false, error: "Enter a public http or https website URL.", field: "websiteUrl" };
+    }
+
+    normalizedDomain = normalizeDomain(safeUrl.toString());
+    if (!normalizedDomain) {
+      return { ok: false, error: "Enter a public business website URL.", field: "websiteUrl" };
+    }
   }
 
   const business: NormalizedBusiness = {
@@ -94,8 +117,8 @@ export async function validateManualPublicProspect(
     industry,
     city: location.city,
     state: location.state,
-    address: cleanText(input.address) || null,
-    websiteUrl: safeUrl.toString(),
+    address,
+    websiteUrl: safeUrl?.toString() ?? null,
     phone: cleanText(input.phone) || null,
     rating: null,
     reviewCount: 0,
@@ -114,6 +137,7 @@ export async function validateManualPublicProspect(
       duplicateId: duplicate?.id ?? null,
       source: MANUAL_PUBLIC_PROSPECT_SOURCE,
       sourceNote: cleanText(input.sourceNote, MAX_NOTE_LENGTH) || null,
+      noStandaloneWebsite,
     },
   };
 }

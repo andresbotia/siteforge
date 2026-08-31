@@ -56,6 +56,7 @@ M9.5D prospect sends require all of the following:
 
 - Operator manually selects the prospect and uses only reliable public business contact information.
 - Deterministic Auditor and Builder results are reviewed before Sales drafting.
+- If the operator has explicitly verified that a prospect has no standalone business website, SiteForge stores that as a new-website opportunity instead of inventing a URL or audit score. Auditor is skipped; Builder uses only sourced lead facts.
 - The tracked public preview is approved, active, public, not revoked, not expired, and linked to the same lead and generated website.
 - Sales draft content is deterministic; no paid AI writes official email copy.
 - A human approval binds the exact recipient, subject, body, preview deployment, content version, and attribution token hash.
@@ -63,6 +64,8 @@ M9.5D prospect sends require all of the following:
 - The final send button identifies when a real external email will be sent.
 
 `outreach.campaign_id = m9.5d-first-controlled-campaign` identifies the first experiment. New Sales drafts are capped at five distinct leads for that campaign. No migration is needed because `campaign_id` already exists on `outreach` and `preview_deployments`.
+
+No-website prospects are represented without a schema change: `leads.website_url` and `leads.normalized_domain` stay null, while `leads.inspection_summary.website_status = verified_no_standalone_website` and `no_standalone_website = true` record the operator verification. Missing or malformed URLs do not create this state automatically.
 
 Milestone 9 adds **Stripe Checkout + customer conversion**: manual commercial offers, approval-bound mock checkout creation, Stripe webhook ingestion, and idempotent lead-to-customer conversion. The migration has been applied to hosted Supabase and validated with mock Stripe checkout only.
 
@@ -130,10 +133,10 @@ Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek,
 | Paid-AI Approve/Reject | Persisted server-side after `requireAdminSession()` |
 | Other approval types Approve/Reject | Persisted status only; side effects still not executed |
 | Scout | Manual $0 catalog discovery + bounded inspection |
-| Manual public prospect import | Admin-only public-data import with normalization, dedupe, SSRF URL validation, and manual provenance |
-| Auditor | Manual $0 deterministic website audit |
-| Builder | Manual $0 deterministic template draft |
-| Sales | Manual $0 deterministic outreach drafting, approval binding, mock send, and guarded live-send boundary |
+| Manual public prospect import | Admin-only public-data import with normalization, dedupe, SSRF URL validation when a website exists, explicit no-website marking, and manual provenance |
+| Auditor | Manual $0 deterministic website audit; explicit no-website prospects are excluded |
+| Builder | Manual $0 deterministic template draft; explicit no-website prospects may build from sourced lead facts without a crawled audit |
+| Sales | Manual $0 deterministic outreach drafting, approval binding, mock send, guarded live-send boundary, and no-website-safe copy |
 | Preview deployments | Approval-gated tokenized public previews; not production hosting |
 | Other agents | Disabled |
 | xAI provider layer | Implemented, mock-tested, live calls gated off |

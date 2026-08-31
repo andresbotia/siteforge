@@ -17,6 +17,7 @@ import type { Json } from "@/types/database";
 import type { AgentRow, AgentRunRow, LeadRow, WebsiteRow } from "@/types/database";
 import type { Lead, WebsiteAudit } from "@/types";
 import { asRecord } from "@/lib/json";
+import { isNoStandaloneWebsiteLead } from "@/lib/prospects/no-website";
 import { randomUUID } from "node:crypto";
 
 const BUILDER_AGENT_SLUG = "builder";
@@ -67,7 +68,9 @@ export async function listEligibleLeadsForBuild(): Promise<BuilderCandidate[]> {
     withMeta.push({
       ...lead,
       latestOverall: audit?.overallScore ?? null,
-      latestOpportunity: audit?.redesignOpportunityScore ?? null,
+      latestOpportunity:
+        audit?.redesignOpportunityScore ??
+        (isNoStandaloneWebsiteLead(lead) ? lead.websiteOpportunityScore : null),
       recommendedTemplate: templateLabel(key),
       recommendedTemplateKey: key,
       latestWebsiteId: latestSite.get(lead.id) ?? null,
@@ -100,6 +103,10 @@ export async function startBuilderRun(input: {
   if (!agent) return { ok: false, error: "Builder agent record was not found." };
 
   const audit = await getLatestAuditForLead(lead.id);
+  const noStandaloneWebsite = isNoStandaloneWebsiteLead(lead);
+  if (!audit && !noStandaloneWebsite) {
+    return { ok: false, error: "This lead is not eligible for a Builder draft. Audit it first." };
+  }
 
   const run = await mutateTable<AgentRunRow | null>((client) =>
     client
@@ -115,6 +122,7 @@ export async function startBuilderRun(input: {
         input: {
           lead_id: lead.id,
           audit_id: audit?.id ?? null,
+          no_standalone_website: noStandaloneWebsite,
           build_cost_usd: BUILDER_COST_USD,
           paid_ai: "not_required",
           version: BUILDER_VERSION,
@@ -235,14 +243,24 @@ export async function startBuilderRun(input: {
 }
 
 function toBuilderAudit(audit: WebsiteAudit | null) {
+  if (!audit) {
+    return {
+      id: null,
+      overallScore: null,
+      redesignOpportunityScore: null,
+      findings: [],
+      opportunityType: "new_website" as const,
+    };
+  }
   return {
-    id: audit?.id ?? null,
-    overallScore: audit?.overallScore ?? null,
-    redesignOpportunityScore: audit?.redesignOpportunityScore ?? null,
-    findings: (audit?.findings ?? []).map((item) => ({
+    id: audit.id,
+    overallScore: audit.overallScore,
+    redesignOpportunityScore: audit.redesignOpportunityScore,
+    findings: audit.findings.map((item) => ({
       code: item.code,
       title: item.title,
     })),
+    opportunityType: "redesign" as const,
   };
 }
 

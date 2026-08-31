@@ -1,4 +1,5 @@
 import type { LeadStatus, QualificationTier } from "@/types";
+import { isNoStandaloneWebsiteLead } from "@/lib/prospects/no-website";
 
 const AUDITABLE_STATUSES = new Set<string>([
   "discovered",
@@ -15,8 +16,13 @@ const PRIORITY_TIERS = new Set<string>(["review", "qualified", "high_priority"])
 
 export function isLeadEligibleForAudit(lead: {
   status: string;
+  websiteUrl?: string | null;
+  website_url?: string | null;
+  inspectionSummary?: unknown;
+  inspection_summary?: unknown;
 }): boolean {
   if (lead.status === "rejected") return false;
+  if (isNoStandaloneWebsiteLead(lead)) return false;
   return AUDITABLE_STATUSES.has(lead.status);
 }
 

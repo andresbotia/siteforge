@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { recordActivityEvent } from "@/data/activity";
 import { getLatestAuditForLead, listLeads } from "@/data/leads";
 import { asRecord } from "@/lib/json";
+import { isNoStandaloneWebsiteLead } from "@/lib/prospects/no-website";
 import { getAuthConfig } from "@/lib/auth/config";
 import { createOutreachAttributionToken } from "@/lib/sales/attribution";
 import {
@@ -186,6 +187,7 @@ export async function startSalesDraftRun(input: {
   }
 
   const audit = await getLatestAuditForLead(lead.id);
+  const noStandaloneWebsite = isNoStandaloneWebsiteLead(lead);
 
   const run = await mutateTable<AgentRunRow | null>((client) =>
     client
@@ -244,9 +246,10 @@ export async function startSalesDraftRun(input: {
         email: lead.email,
         phone: lead.phone,
         websiteUrl: lead.website_url,
+        websiteStatus: noStandaloneWebsite ? "no_standalone_website" : lead.website_url ? "has_website" : "unknown",
         status: lead.status as Lead["status"],
       },
-      toSalesAudit(audit),
+      toSalesAudit(audit, noStandaloneWebsite),
       {
         id: website.id,
         template: website.template ?? "",
@@ -367,7 +370,17 @@ export async function startSalesDraftRun(input: {
   }
 }
 
-function toSalesAudit(audit: WebsiteAudit | null) {
+function toSalesAudit(audit: WebsiteAudit | null, noStandaloneWebsite = false) {
+  if (!audit && noStandaloneWebsite) {
+    return {
+      id: null,
+      overallScore: null,
+      redesignOpportunityScore: null,
+      findings: [],
+      issues: [],
+      opportunityType: "new_website" as const,
+    };
+  }
   return {
     id: audit?.id ?? null,
     overallScore: audit?.overallScore ?? null,
@@ -378,6 +391,7 @@ function toSalesAudit(audit: WebsiteAudit | null) {
       category: item.category,
     })),
     issues: audit?.issues ?? [],
+    opportunityType: "redesign" as const,
   };
 }
 

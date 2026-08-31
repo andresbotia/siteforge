@@ -113,6 +113,11 @@ M9.5D first controlled campaign preparation:
 
 - Reuse existing `outreach.campaign_id` and `preview_deployments.campaign_id`; no new campaign table is needed yet.
 - New Sales drafts are tagged with `m9.5d-first-controlled-campaign` and blocked after five distinct selected leads.
+- Manual public prospect import now supports an explicit operator-controlled no-standalone-website path. Representation is `leads.website_url = null`, `leads.normalized_domain = null`, `leads.qualification_tier = 'high_priority'`, `leads.website_opportunity_score = 100`, and `leads.inspection_summary.website_status = 'verified_no_standalone_website'` with `no_standalone_website = true`. This is a new website opportunity, not a redesign audit.
+- No-website state is never inferred from a missing or malformed URL. The operator must check the no-standalone-website option, and the import requires public phone or address data for safer dedupe.
+- Auditor excludes explicit no-website prospects and `runAuditorPipeline` fails closed before crawl. No fake website audit, inspected URL, or technical/SEO/UX/content score is persisted for these leads.
+- Builder may run for an explicitly verified no-website qualified lead without a crawled audit. It uses only sourced lead facts and existing provenance rules, including omitted menu, hours, testimonials, awards, emails, and links when not sourced.
+- Sales copy distinguishes no-website prospects and frames the offer around creating a standalone web presence. It must not claim a website audit, current-site deficiency, or redesign for a business without a standalone site.
 - Sales server actions explicitly require an admin session before draft edits, approval requests, or send execution.
 - The outreach detail view now shows business/prospect, recipient, latest audit health/redesign opportunity, generated website, preview state, exact subject/body, approval state, suppression/eligibility checks, provider readiness, and live-gate status.
 - The final send button says `Send REAL External Email` whenever the live-email gate selects Resend.

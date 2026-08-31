@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { resolveMonotonicLeadStatus } from "../scout/status";
+import { noStandaloneWebsiteSummary } from "../prospects/no-website";
 import { BUILDER_SIDE_EFFECTS, builderPaidAiPath, denyDirectPaidAi } from "./policy";
 import { buildBuilderToolCalls, buildGeneratedWebsiteInsert } from "./persist";
 import { runBuilderPipeline } from "./run";
@@ -34,6 +35,16 @@ function audit(codes: string[] = ["missing_viewport", "missing_cta", "home_servi
     overallScore: 38,
     redesignOpportunityScore: 80,
     findings: codes.map((code) => ({ code, title: code })),
+  };
+}
+
+function noWebsiteAudit(): BuilderAuditInput {
+  return {
+    id: null,
+    overallScore: null,
+    redesignOpportunityScore: null,
+    findings: [],
+    opportunityType: "new_website",
   };
 }
 
@@ -150,6 +161,69 @@ describe("factual integrity", () => {
       false,
     );
     assert.equal(result.spec.provenance.some((item) => item.field === "testimonials" && item.provenance === "omitted"), true);
+  });
+
+  it("builds an explicit no-website prospect without fake audit scores or URL", () => {
+    const result = runBuilderPipeline(
+      lead({
+        businessName: "No Website Pupuseria",
+        industry: "Restaurant",
+        websiteUrl: null,
+        status: "qualified",
+        email: null,
+        rating: null,
+        reviewCount: 0,
+        inspectionSummary: noStandaloneWebsiteSummary(),
+      }),
+      noWebsiteAudit(),
+    );
+    const insert = buildGeneratedWebsiteInsert({
+      result,
+      websiteId: "web-no-site",
+      auditId: null,
+      runId: "run-no-site",
+      beforeScore: null,
+    });
+
+    assert.equal(result.template, "restaurant-modern");
+    assert.equal(result.spec.business.websiteUrl, null);
+    assert.equal(insert.source_audit_id, null);
+    assert.equal((insert.metadata as Record<string, unknown>).before_score, null);
+    assert.ok(
+      result.spec.provenance.some(
+        (item) =>
+          item.field === "websiteStatus" &&
+          item.provenance === "sourced" &&
+          item.source === "lead.inspection_summary.no_standalone_website",
+      ),
+    );
+    assert.ok(
+      result.spec.auditFixes.some(
+        (item) => item.findingCode === "new_website_opportunity" && item.addressed,
+      ),
+    );
+  });
+
+  it("keeps no-website restaurant drafts within sourced and omitted facts", () => {
+    const result = runBuilderPipeline(
+      lead({
+        businessName: "No Website Pupuseria",
+        industry: "Restaurant",
+        websiteUrl: null,
+        phone: "(954) 555-0188",
+        email: null,
+        rating: null,
+        reviewCount: 0,
+        inspectionSummary: noStandaloneWebsiteSummary(),
+      }),
+      noWebsiteAudit(),
+    );
+    const blob = JSON.stringify(result.spec);
+
+    assert.equal(/\$\d+|pupusa revuelta|award|since 19|Reserve a table|order online/i.test(blob), false);
+    assert.ok(result.spec.provenance.some((item) => item.field === "hours" && item.provenance === "omitted"));
+    assert.ok(result.spec.provenance.some((item) => item.field === "menuLink" && item.provenance === "omitted"));
+    assert.ok(result.spec.provenance.some((item) => item.field === "email" && item.provenance === "omitted"));
   });
 });
 

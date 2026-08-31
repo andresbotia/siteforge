@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { createMockHttpClient, SafeFetchError } from "../http/fetch";
 import { resolveMonotonicLeadStatus } from "../scout/status";
+import { noStandaloneWebsiteSummary } from "../prospects/no-website";
 import {
   AUDITOR_AI_ENRICHMENT,
   AUDITOR_SIDE_EFFECTS,
@@ -461,6 +462,29 @@ describe("core findings", () => {
     });
     assert.ok(result.findings.some((item) => item.code === "no_website"));
     assert.equal(result.scores.overallAuditScore, AUDIT_SCORING.unscoredCap);
+  });
+
+  it("does not run normal Auditor crawl for explicit no-website prospects", async () => {
+    let fetches = 0;
+    await assert.rejects(
+      () =>
+        runAuditorPipeline(
+          lead({
+            websiteUrl: null,
+            inspectionSummary: noStandaloneWebsiteSummary(),
+          }),
+          {
+            http: {
+              async fetch() {
+                fetches += 1;
+                throw new Error("should_not_fetch");
+              },
+            },
+          },
+        ),
+      /no_standalone_website_not_auditable/,
+    );
+    assert.equal(fetches, 0);
   });
 
   it("detects missing viewport", async () => {

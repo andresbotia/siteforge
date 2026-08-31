@@ -27,7 +27,7 @@ export function BuilderRunForm({
       <Field
         label="Lead"
         htmlFor="builder-lead"
-        hint="Audited leads can receive a $0 template draft. Later-stage leads can be rebuilt without moving backward."
+        hint="Audited leads and explicit no-website prospects can receive a $0 template draft. Later-stage leads can be rebuilt without moving backward."
       >
         <SelectInput
           id="builder-lead"

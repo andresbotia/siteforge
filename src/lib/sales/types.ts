@@ -9,6 +9,7 @@ export type SalesLeadInput = {
   email?: string | null;
   phone?: string | null;
   websiteUrl?: string | null;
+  websiteStatus?: "has_website" | "no_standalone_website" | "unknown";
   status: LeadStatus;
 };
 
@@ -18,6 +19,7 @@ export type SalesAuditInput = {
   redesignOpportunityScore: number | null;
   findings: Array<{ code: string; title: string; category?: string }>;
   issues?: string[];
+  opportunityType?: "redesign" | "new_website";
 };
 
 export type SalesWebsiteInput = {
@@ -38,7 +40,7 @@ export type SalesPreviewInput = {
 };
 
 export type SalesEvidenceItem = {
-  type: "audit_finding" | "builder_fix" | "preview_link" | "business_fact";
+  type: "audit_finding" | "builder_fix" | "preview_link" | "business_fact" | "website_status";
   text: string;
   source?: string;
 };
