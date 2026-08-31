@@ -21,6 +21,11 @@ export default async function WebsitesPage() {
       <PageHeader
         title="Websites"
         description="Generated website drafts. Internal previews are authenticated and not customer-facing."
+        actions={
+          <Link href="/websites/import-external">
+            <Button variant="primary">Import External Site</Button>
+          </Link>
+        }
       />
       <DataTable>
         <THead>

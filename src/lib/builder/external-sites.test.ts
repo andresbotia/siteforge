@@ -93,7 +93,7 @@ describe("external generated site import validation", () => {
     });
     assert.equal(result.validation.ok, true);
     assert.equal(result.build.ok, true);
-    assert.equal(result.build.command, "npm ci --ignore-scripts && npm run build");
+    assert.equal(result.build.command, "npm ci --ignore-scripts && node node_modules/vite/bin/vite.js build");
     assert.equal(result.validation.packageSummary.framework, "vite-react");
     assert.equal(
       result.validation.findings.some((finding) => finding.code === "provider_preview_not_controlled"),
@@ -188,8 +188,8 @@ describe("external generated site import validation", () => {
       validation: checked.validation,
       build: checked.build,
     });
-    assert.deepEqual(canApproveExternalGeneratedSite(metadata), { ok: true });
-    assert.equal(getExternalPreviewTarget(metadata), "https://mariposa-siteforge-preview.vercel.app");
+    assert.equal(canApproveExternalGeneratedSite(metadata).ok, false);
+    assert.equal(getExternalPreviewTarget(metadata), null);
 
     const failed = { ...metadata, controlledPreviewUrl: "https://preview.lovable.app" };
     assert.equal(canApproveExternalGeneratedSite(failed).ok, false);

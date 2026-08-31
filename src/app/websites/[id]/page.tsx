@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Badge } from "@/components/shared/badge";
 import { Button } from "@/components/shared/button";
+import { RequestExternalPreviewDeploymentForm } from "@/components/builder/external-site-import-form";
 import { PreviewManagementCard } from "@/components/previews/preview-management-card";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
@@ -85,7 +86,7 @@ export default async function WebsiteDetailPage({ params }: WebsitePageProps) {
         <Card className="mt-4">
           <CardHeader
             title="External generated review"
-            description="Provider metadata is admin-only. Preview approval remains blocked unless validation and build checks pass."
+            description="Provider metadata is admin-only. Public preview approval remains blocked until the immutable artifact is deployed to SiteForge-controlled Vercel preview hosting."
             action={
               <Badge tone={site.externalGeneratedSite.validation.ok ? "success" : "danger"}>
                 {site.externalGeneratedSite.lifecycleStatus}
@@ -99,10 +100,35 @@ export default async function WebsiteDetailPage({ params }: WebsitePageProps) {
               <Detail label="Commit SHA" value={site.externalGeneratedSite.providerCommitSha ?? "none"} />
               <Detail label="Provider preview" value={site.externalGeneratedSite.providerPreviewUrl ?? "none"} />
               <Detail label="SiteForge target" value={site.externalGeneratedSite.controlledPreviewUrl ?? "missing"} />
+              <Detail label="Artifact ID" value={site.externalGeneratedSite.artifactId ?? "missing"} />
+              <Detail label="Artifact fingerprint" value={site.externalGeneratedSite.sourceManifestFingerprint ?? "missing"} />
               <Detail label="Fact fingerprint" value={site.externalGeneratedSite.verifiedFactFingerprint || "none"} />
               <Detail label="Validation" value={site.externalGeneratedSite.validation.status} />
               <Detail label="Build" value={`${site.externalGeneratedSite.build.status} - ${site.externalGeneratedSite.build.reason}`} />
+              <Detail label="Deployment" value={site.externalGeneratedSite.deploymentStatus} />
+              <Detail label="Deployment ID" value={site.externalGeneratedSite.deploymentId ?? "none"} />
+              <Detail label="Deployment URL" value={site.externalGeneratedSite.deploymentUrl ?? "none"} />
             </div>
+            {site.externalGeneratedSite.deploymentFailureSummary ? (
+              <div className="rounded-md border border-danger/30 bg-danger-muted p-3 text-sm text-danger">
+                {site.externalGeneratedSite.deploymentFailureSummary}
+              </div>
+            ) : null}
+            {site.externalGeneratedSite.deploymentStatus === "deployed" ? (
+              <p className="text-sm text-muted">
+                External preview deployment is ready. Public preview still requires the normal M7 approval.
+              </p>
+            ) : (
+              <RequestExternalPreviewDeploymentForm
+                websiteId={site.id}
+                disabled={
+                  !site.externalGeneratedSite.validation.ok ||
+                  !site.externalGeneratedSite.build.ok ||
+                  site.externalGeneratedSite.deploymentStatus === "pending_approval" ||
+                  site.externalGeneratedSite.deploymentStatus === "deploying"
+                }
+              />
+            )}
             {site.externalGeneratedSite.staleFactWarnings.length ? (
               <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-900">
                 <p className="font-medium">Website was generated from an older verified-facts snapshot.</p>

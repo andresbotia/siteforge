@@ -137,6 +137,12 @@ export interface ExternalGeneratedSite {
   providerCommitSha: string | null;
   providerPreviewUrl: string | null;
   controlledPreviewUrl: string | null;
+  artifactId: string | null;
+  sourceManifestFingerprint: string | null;
+  deploymentStatus: "not_requested" | "pending_approval" | "deploying" | "deployed" | "failed";
+  deploymentId: string | null;
+  deploymentUrl: string | null;
+  deploymentFailureSummary: string | null;
   lifecycleStatus:
     | "imported"
     | "validating"
@@ -171,7 +177,7 @@ export interface ExternalGeneratedSite {
   };
   build: {
     ok: boolean;
-    status: "passed" | "blocked" | "unsupported";
+    status: "pending" | "passed" | "blocked" | "failed" | "unsupported";
     command: string;
     reason: string;
   };

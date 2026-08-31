@@ -74,8 +74,10 @@ export type ExternalSiteValidationResult = {
 
 export type ExternalSiteBuildResult = {
   ok: boolean;
-  status: "passed" | "blocked" | "unsupported";
-  command: "npm ci --ignore-scripts && npm run build" | "static source inspection only";
+  status: "pending" | "passed" | "blocked" | "failed" | "unsupported";
+  command:
+    | "npm ci --ignore-scripts && node node_modules/vite/bin/vite.js build"
+    | "static source inspection only";
   reason: string;
 };
 
@@ -86,6 +88,12 @@ export type ExternalGeneratedSiteMetadata = {
   providerCommitSha: string | null;
   providerPreviewUrl: string | null;
   controlledPreviewUrl: string | null;
+  artifactId: string | null;
+  sourceManifestFingerprint: string | null;
+  deploymentStatus: "not_requested" | "pending_approval" | "deploying" | "deployed" | "failed";
+  deploymentId: string | null;
+  deploymentUrl: string | null;
+  deploymentFailureSummary: string | null;
   importedAt: string;
   importedBy: "admin";
   provenance: "operator_imported_external_generated_site";
@@ -102,6 +110,8 @@ export type ExternalGeneratedSiteMetadata = {
 
 type ExternalApprovalMetadata = {
   controlledPreviewUrl: string | null;
+  deploymentStatus?: string | null;
+  deploymentUrl?: string | null;
   lifecycleStatus: ExternalSiteLifecycleStatus;
   validation: { ok: boolean };
   build: { ok: boolean };
@@ -152,6 +162,18 @@ export function parseExternalGeneratedSiteMetadata(value: unknown): ExternalGene
     providerCommitSha: stringOrNull(raw.providerCommitSha),
     providerPreviewUrl: stringOrNull(raw.providerPreviewUrl),
     controlledPreviewUrl: stringOrNull(raw.controlledPreviewUrl),
+    artifactId: stringOrNull(raw.artifactId),
+    sourceManifestFingerprint: stringOrNull(raw.sourceManifestFingerprint),
+    deploymentStatus:
+      raw.deploymentStatus === "pending_approval" ||
+      raw.deploymentStatus === "deploying" ||
+      raw.deploymentStatus === "deployed" ||
+      raw.deploymentStatus === "failed"
+        ? raw.deploymentStatus
+        : "not_requested",
+    deploymentId: stringOrNull(raw.deploymentId),
+    deploymentUrl: stringOrNull(raw.deploymentUrl),
+    deploymentFailureSummary: stringOrNull(raw.deploymentFailureSummary),
     importedAt: String(raw.importedAt ?? ""),
     importedBy: "admin",
     provenance: "operator_imported_external_generated_site",
@@ -175,12 +197,16 @@ export function parseExternalGeneratedSiteMetadata(value: unknown): ExternalGene
     build: {
       ok: build.ok === true,
       status:
-        build.status === "passed" || build.status === "blocked" || build.status === "unsupported"
+        build.status === "passed" ||
+        build.status === "blocked" ||
+        build.status === "unsupported" ||
+        build.status === "pending" ||
+        build.status === "failed"
           ? build.status
           : "blocked",
       command:
-        build.command === "npm ci --ignore-scripts && npm run build"
-          ? "npm ci --ignore-scripts && npm run build"
+        build.command === "npm ci --ignore-scripts && node node_modules/vite/bin/vite.js build"
+          ? "npm ci --ignore-scripts && node node_modules/vite/bin/vite.js build"
           : "static source inspection only",
       reason: String(build.reason ?? ""),
     },
@@ -189,6 +215,53 @@ export function parseExternalGeneratedSiteMetadata(value: unknown): ExternalGene
 
 export function generationSourceFromMetadata(metadata: unknown): GenerationSource {
   return parseExternalGeneratedSiteMetadata(metadata) ? "external_generated" : "deterministic_builder";
+}
+
+export function mergeExternalArtifactMetadata(
+  metadata: ExternalGeneratedSiteMetadata | null,
+  artifact: {
+    id: string;
+    source_manifest_fingerprint: string;
+    build_status: string;
+    deployment_status: string;
+    deployment_id: string | null;
+    deployment_url: string | null;
+    failure_summary: string | null;
+  } | null,
+): ExternalGeneratedSiteMetadata | null {
+  if (!metadata || !artifact) return metadata;
+  const deploymentStatus =
+    artifact.deployment_status === "pending_approval" ||
+    artifact.deployment_status === "deploying" ||
+    artifact.deployment_status === "deployed" ||
+    artifact.deployment_status === "failed"
+      ? artifact.deployment_status
+      : "not_requested";
+  const buildStatus =
+    artifact.build_status === "passed" ||
+    artifact.build_status === "blocked" ||
+    artifact.build_status === "unsupported" ||
+    artifact.build_status === "pending" ||
+    artifact.build_status === "failed"
+      ? artifact.build_status
+      : metadata.build.status;
+  const deploymentUrl = stringOrNull(artifact.deployment_url);
+  return {
+    ...metadata,
+    artifactId: artifact.id,
+    sourceManifestFingerprint: artifact.source_manifest_fingerprint,
+    controlledPreviewUrl: deploymentUrl ?? metadata.controlledPreviewUrl,
+    deploymentStatus,
+    deploymentId: stringOrNull(artifact.deployment_id),
+    deploymentUrl,
+    deploymentFailureSummary: stringOrNull(artifact.failure_summary),
+    lifecycleStatus: deploymentStatus === "deployed" ? "preview_deployed" : metadata.lifecycleStatus,
+    build: {
+      ...metadata.build,
+      ok: buildStatus === "passed",
+      status: buildStatus,
+    },
+  };
 }
 
 export function createVerifiedFactSnapshot(lead: Pick<LeadRow, "business_name" | "industry" | "address" | "phone" | "website_url" | "google_rating" | "review_count" | "inspection_summary">): VerifiedFactSnapshot {
@@ -300,7 +373,10 @@ export function canApproveExternalGeneratedSite(metadata: ExternalApprovalMetada
     return { ok: false, error: "External generated site build validation has not passed." };
   }
   if (!metadata.controlledPreviewUrl || !isControlledPreviewUrl(metadata.controlledPreviewUrl)) {
-    return { ok: false, error: "External generated site needs a Vercel-controlled preview URL before approval." };
+    return { ok: false, error: "External generated site needs an approved SiteForge-controlled Vercel preview deployment before public preview approval." };
+  }
+  if (metadata.deploymentStatus && metadata.deploymentStatus !== "deployed") {
+    return { ok: false, error: "External generated site preview deployment has not completed." };
   }
   return { ok: true };
 }
@@ -309,6 +385,7 @@ export function getExternalPreviewTarget(metadata: ExternalApprovalMetadata | nu
   if (!metadata) return null;
   if (!metadata.controlledPreviewUrl || !isControlledPreviewUrl(metadata.controlledPreviewUrl)) return null;
   if (!metadata.validation.ok || !metadata.build.ok) return null;
+  if (metadata.deploymentStatus && metadata.deploymentStatus !== "deployed") return null;
   return metadata.controlledPreviewUrl;
 }
 
@@ -322,6 +399,12 @@ export function buildExternalSiteMetadata(input: {
   generationCostCredits?: number | null;
   generationCostUsdEstimate?: number | null;
   providerCostNotes?: string | null;
+  artifactId?: string | null;
+  sourceManifestFingerprint?: string | null;
+  deploymentStatus?: ExternalGeneratedSiteMetadata["deploymentStatus"];
+  deploymentId?: string | null;
+  deploymentUrl?: string | null;
+  deploymentFailureSummary?: string | null;
   snapshot: VerifiedFactSnapshot;
   currentSnapshot: VerifiedFactSnapshot;
   validation: ExternalSiteValidationResult;
@@ -334,7 +417,13 @@ export function buildExternalSiteMetadata(input: {
     providerProjectId: cleanOptional(input.providerProjectId, 120),
     providerCommitSha: cleanOptional(input.providerCommitSha, 80),
     providerPreviewUrl: cleanOptional(input.providerPreviewUrl, 300),
-    controlledPreviewUrl: cleanOptional(input.controlledPreviewUrl, 300),
+    controlledPreviewUrl: cleanOptional(input.deploymentUrl ?? input.controlledPreviewUrl, 300),
+    artifactId: cleanOptional(input.artifactId, 80),
+    sourceManifestFingerprint: cleanOptional(input.sourceManifestFingerprint, 80),
+    deploymentStatus: input.deploymentStatus ?? "not_requested",
+    deploymentId: cleanOptional(input.deploymentId, 120),
+    deploymentUrl: cleanOptional(input.deploymentUrl, 300),
+    deploymentFailureSummary: cleanOptional(input.deploymentFailureSummary, 300),
     importedAt: input.importedAt,
     importedBy: "admin",
     provenance: "operator_imported_external_generated_site",
@@ -372,7 +461,7 @@ function buildResultFor(
     return {
       ok: false,
       status: "blocked",
-      command: summary.packageManager === "npm" ? "npm ci --ignore-scripts && npm run build" : "static source inspection only",
+      command: summary.packageManager === "npm" ? "npm ci --ignore-scripts && node node_modules/vite/bin/vite.js build" : "static source inspection only",
       reason: "Severe validation findings block build approval.",
     };
   }
@@ -380,8 +469,8 @@ function buildResultFor(
     return {
       ok: true,
       status: "passed",
-      command: "npm ci --ignore-scripts && npm run build",
-      reason: "Supported Vite React source with allowlisted build command; install lifecycle scripts are disabled.",
+      command: "npm ci --ignore-scripts && node node_modules/vite/bin/vite.js build",
+      reason: "Supported Vite React source with fixed SiteForge build commands; install lifecycle scripts are disabled.",
     };
   }
   if (summary.framework === "static") {

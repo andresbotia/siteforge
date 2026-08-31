@@ -4,11 +4,19 @@ import { randomUUID } from "node:crypto";
 import { recordActivityEvent } from "@/data/activity";
 import { getLatestAuditForLead } from "@/data/leads";
 import {
+  buildExternalSourceArtifact,
+  createExternalSourceArtifact,
+  createVercelPreviewDeploymentProvider,
+  removeExternalBuildDirectory,
+  validateExternalSourceArtifact,
+  type ExternalSourceArtifact,
+  type PreviewDeploymentProvider,
+} from "@/lib/builder/external-artifacts";
+import {
   buildExternalReviewSpec,
   buildExternalSiteMetadata,
   createVerifiedFactSnapshot,
   parseExternalProvider,
-  validateExternalSiteSource,
   type ExternalProvider,
   type ExternalSiteImportManifest,
 } from "@/lib/builder/external-sites";
@@ -17,10 +25,12 @@ import { runBuilderPipeline } from "@/lib/builder/run";
 import { asRecord } from "@/lib/json";
 import { isNoStandaloneWebsiteLead } from "@/lib/prospects/no-website";
 import { mutateTable, readTable } from "@/lib/supabase/server";
-import type { AgentRow, AgentRunRow, Json, LeadRow, WebsiteRow } from "@/types/database";
+import type { AgentRow, AgentRunRow, ApprovalRow, ExternalSiteArtifactRow, Json, LeadRow, WebsiteRow } from "@/types/database";
 
 const BUILDER_AGENT_SLUG = "builder";
 const EXTERNAL_PROVIDER_ID = "external_generated_site";
+const EXTERNAL_DEPLOYMENT_APPROVAL_ACTION = "external_generated_preview_deployment";
+const PREVIEW_DEPLOYMENT_TYPE = "website_deployment";
 
 export type ExternalSiteImportResult =
   | { ok: true; websiteId: string; runId: string; validationStatus: "passed" | "failed" }
@@ -49,6 +59,9 @@ export async function importExternalGeneratedSite(
   if (input.manifest.leadId && input.manifest.leadId !== leadId) {
     return { ok: false, error: "Import manifest lead association does not match the selected lead.", field: "manifest" };
   }
+  if (!(await isExternalArtifactStoreAvailable())) {
+    return { ok: false, error: "External source artifact storage is not available. Apply the external_site_artifacts migration before importing external generated source." };
+  }
 
   const [lead, agent] = await Promise.all([
     readTable<LeadRow | null>((client) =>
@@ -73,7 +86,7 @@ export async function importExternalGeneratedSite(
   const now = new Date().toISOString();
   const snapshot = createVerifiedFactSnapshot(lead);
   const currentSnapshot = createVerifiedFactSnapshot(lead);
-  const checked = validateExternalSiteSource({
+  const checked = validateExternalSourceArtifact({
     provider,
     controlledPreviewUrl: normalizeOptionalUrl(input.controlledPreviewUrl),
     providerPreviewUrl: normalizeOptionalUrl(input.providerPreviewUrl),
@@ -169,13 +182,31 @@ export async function importExternalGeneratedSite(
   });
 
   const websiteId = randomUUID();
+  const artifactId = randomUUID();
+  const artifact = createExternalSourceArtifact({
+    id: artifactId,
+    generatedWebsiteId: websiteId,
+    leadId: lead.id,
+    provider,
+    providerProjectId: input.providerProjectId,
+    providerCommitSha: input.providerCommitSha,
+    manifest: input.manifest,
+    importedAt: now,
+    validation: checked.validation,
+    build: checked.build,
+  });
   const metadata: Json = {
     before_score: audit?.overallScore ?? null,
     after_score: null,
     paid_ai: "not_required",
     cost_usd: 0,
     generation_source: "external_generated",
-    external_generated_site: externalMetadata as unknown as Json,
+    external_generated_site: {
+      ...externalMetadata,
+      artifactId: artifact.id,
+      sourceManifestFingerprint: artifact.sourceManifestFingerprint,
+      deploymentStatus: artifact.deploymentStatus,
+    } as unknown as Json,
   };
   const site = await mutateTable<WebsiteRow | null>((client) =>
     client
@@ -210,6 +241,32 @@ export async function importExternalGeneratedSite(
   );
   if (!site) return { ok: false, error: "Could not persist the external generated website." };
 
+  const artifactRow = await mutateTable<ExternalSiteArtifactRow | null>((client) =>
+    client
+      .from("external_site_artifacts")
+      .insert({
+        id: artifact.id,
+        generated_website_id: site.id,
+        lead_id: lead.id,
+        provider: artifact.provider,
+        provider_project_id: artifact.providerProjectId,
+        provider_commit_sha: artifact.providerCommitSha,
+        source_manifest_fingerprint: artifact.sourceManifestFingerprint,
+        source_manifest: artifact.manifest as unknown as Json,
+        created_by: artifact.createdBy,
+        validation_status: artifact.validationStatus,
+        build_status: artifact.buildStatus,
+        deployment_status: artifact.deploymentStatus,
+        deployment_id: null,
+        deployment_url: null,
+        failure_summary: null,
+        artifact_metadata: artifact.metadata as unknown as Json,
+      })
+      .select("*")
+      .maybeSingle(),
+  );
+  if (!artifactRow) return { ok: false, error: "Could not persist the immutable external source artifact." };
+
   await recordActivityEvent({
     eventType: externalMetadata.validation.ok ? "external_site_validation_passed" : "external_site_validation_failed",
     title: externalMetadata.validation.ok ? "External site validation passed" : "External site validation failed",
@@ -219,6 +276,8 @@ export async function importExternalGeneratedSite(
     metadata: {
       provider,
       generated_website_id: site.id,
+      artifact_id: artifact.id,
+      source_manifest_fingerprint: artifact.sourceManifestFingerprint,
       severe_findings: externalMetadata.validation.findings.filter((finding) => finding.severity === "severe").length,
       build_status: externalMetadata.build.status,
     },
@@ -232,6 +291,7 @@ export async function importExternalGeneratedSite(
     metadata: {
       provider,
       generated_website_id: site.id,
+      artifact_id: artifact.id,
       lifecycle_status: externalMetadata.lifecycleStatus,
     },
   });
@@ -242,6 +302,259 @@ export async function importExternalGeneratedSite(
     runId: run.id,
     validationStatus: externalMetadata.validation.status,
   };
+}
+
+export async function requestExternalPreviewDeployment(
+  websiteId: string,
+): Promise<{ ok: boolean; error?: string; approvalId?: string }> {
+  const artifact = await getLatestArtifactForWebsite(websiteId);
+  if (!artifact) return { ok: false, error: "External source artifact was not found." };
+  const allowed = canRequestExternalPreviewDeployment(artifact);
+  if (!allowed.ok) return allowed;
+
+  const pending = await readTable<Pick<ApprovalRow, "id"> | null>((client) =>
+    client
+      .from("approvals")
+      .select("id")
+      .eq("approval_type", PREVIEW_DEPLOYMENT_TYPE)
+      .eq("status", "pending")
+      .contains("payload", {
+        action: EXTERNAL_DEPLOYMENT_APPROVAL_ACTION,
+        generated_website_id: websiteId,
+      })
+      .maybeSingle(),
+  );
+  if (pending) return { ok: true, approvalId: pending.id };
+
+  const approval = await mutateTable<ApprovalRow[] | null>((client) =>
+    client
+      .from("approvals")
+      .insert({
+        lead_id: artifact.lead_id,
+        approval_type: PREVIEW_DEPLOYMENT_TYPE,
+        status: "pending",
+        title: "Deploy external generated preview",
+        description:
+          "Build the persisted external source artifact and deploy the static output to the isolated SiteForge-generated-preview Vercel project. This does not publish a customer production site, send email, call Lovable, charge Stripe, or change DNS.",
+        payload: {
+          action: EXTERNAL_DEPLOYMENT_APPROVAL_ACTION,
+          generated_website_id: artifact.generated_website_id,
+          artifact_id: artifact.id,
+          risk_level: "medium",
+          agent_slug: "builder",
+          requested_cost_ticks: "0",
+        },
+        requested_cost_ticks: "0",
+        approved_cost_limit_ticks: "0",
+      })
+      .select("*"),
+  );
+  const row = approval?.[0];
+  if (!row) return { ok: false, error: "Could not create external preview deployment approval." };
+
+  await mutateTable((client) =>
+    client
+      .from("external_site_artifacts")
+      .update({ deployment_status: "pending_approval", updated_at: new Date().toISOString() })
+      .eq("id", artifact.id)
+      .eq("deployment_status", "not_requested")
+      .select("id")
+      .maybeSingle(),
+  );
+
+  await recordActivityEvent({
+    eventType: "external_site_preview_deployment_requested",
+    title: "External preview deployment requested",
+    description: artifact.generated_website_id,
+    actorType: "admin",
+    leadId: artifact.lead_id,
+    metadata: { generated_website_id: artifact.generated_website_id, artifact_id: artifact.id, approval_id: row.id },
+  });
+
+  return { ok: true, approvalId: row.id };
+}
+
+export async function approveExternalPreviewDeploymentApproval(
+  approvalId: string,
+  provider: PreviewDeploymentProvider = createVercelPreviewDeploymentProvider(),
+): Promise<{ ok: boolean; error?: string; deploymentUrl?: string }> {
+  const approval = await readTable<ApprovalRow | null>((client) =>
+    client.from("approvals").select("*").eq("id", approvalId).maybeSingle(),
+  );
+  if (!approval || approval.status !== "pending") return { ok: false, error: "Approval is no longer pending." };
+  const payload = asRecord(approval.payload);
+  if (
+    approval.approval_type !== PREVIEW_DEPLOYMENT_TYPE ||
+    payload.action !== EXTERNAL_DEPLOYMENT_APPROVAL_ACTION ||
+    typeof payload.artifact_id !== "string"
+  ) {
+    return { ok: false, error: "This approval cannot deploy an external generated preview." };
+  }
+  const artifactId = payload.artifact_id;
+
+  const artifact = await readTable<ExternalSiteArtifactRow | null>((client) =>
+    client.from("external_site_artifacts").select("*").eq("id", artifactId).maybeSingle(),
+  );
+  if (!artifact) return { ok: false, error: "External source artifact was not found." };
+  const allowed = canRequestExternalPreviewDeployment(artifact);
+  if (!allowed.ok && artifact.deployment_status !== "pending_approval") return allowed;
+
+  await mutateTable((client) =>
+    client
+      .from("external_site_artifacts")
+      .update({ deployment_status: "deploying", failure_summary: null, updated_at: new Date().toISOString() })
+      .eq("id", artifact.id)
+      .select("id")
+      .maybeSingle(),
+  );
+
+  const mapped = mapArtifactRow(artifact);
+  const build = await buildExternalSourceArtifact({ artifact: mapped, cleanup: false });
+  if (!build.ok) {
+    const summary = build.summary.slice(0, 300);
+    await markExternalDeploymentFailure(artifact.id, approval.id, summary);
+    return { ok: false, error: summary };
+  }
+
+  const deployed = await provider.deployStaticOutput({
+    artifactId: artifact.id,
+    generatedWebsiteId: artifact.generated_website_id,
+    leadId: artifact.lead_id,
+    outputDirectory: build.outputDirectory,
+  });
+  await removeExternalBuildDirectory(build.outputDirectory);
+  if (!deployed.ok) {
+    const summary = deployed.error.slice(0, 300);
+    await markExternalDeploymentFailure(artifact.id, approval.id, summary);
+    return { ok: false, error: summary };
+  }
+
+  const now = new Date().toISOString();
+  await mutateTable((client) =>
+    client
+      .from("external_site_artifacts")
+      .update({
+        deployment_status: "deployed",
+        deployment_id: deployed.deploymentId,
+        deployment_url: deployed.deploymentUrl,
+        failure_summary: null,
+        updated_at: now,
+      })
+      .eq("id", artifact.id)
+      .select("id")
+      .maybeSingle(),
+  );
+  await mutateTable((client) =>
+    client
+      .from("approvals")
+      .update({ status: "executed", resolved_at: now, resolved_by: "admin" })
+      .eq("id", approval.id)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle(),
+  );
+  await recordActivityEvent({
+    eventType: "external_site_preview_deployed",
+    title: "External generated preview deployed",
+    description: deployed.deploymentUrl,
+    actorType: "admin",
+    leadId: artifact.lead_id,
+    metadata: { generated_website_id: artifact.generated_website_id, artifact_id: artifact.id, deployment_id: deployed.deploymentId },
+  });
+  return { ok: true, deploymentUrl: deployed.deploymentUrl };
+}
+
+export function isExternalPreviewDeploymentApprovalPayload(payload: unknown): boolean {
+  return asRecord(payload).action === EXTERNAL_DEPLOYMENT_APPROVAL_ACTION;
+}
+
+function canRequestExternalPreviewDeployment(
+  artifact: Pick<ExternalSiteArtifactRow, "validation_status" | "build_status" | "deployment_status">,
+): { ok: true } | { ok: false; error: string } {
+  if (artifact.validation_status !== "passed") return { ok: false, error: "External source artifact failed validation." };
+  if (artifact.build_status !== "passed") return { ok: false, error: "External source artifact is not build-ready." };
+  if (artifact.deployment_status === "deployed") return { ok: false, error: "External source artifact is already deployed." };
+  if (artifact.deployment_status === "deploying") return { ok: false, error: "External source artifact deployment is already running." };
+  return { ok: true };
+}
+
+function mapArtifactRow(row: ExternalSiteArtifactRow): ExternalSourceArtifact {
+  return {
+    id: row.id,
+    generatedWebsiteId: row.generated_website_id,
+    leadId: row.lead_id,
+    provider: parseExternalProvider(row.provider) ?? "other",
+    providerProjectId: row.provider_project_id,
+    providerCommitSha: row.provider_commit_sha,
+    sourceManifestFingerprint: row.source_manifest_fingerprint,
+    manifest: asRecord(row.source_manifest) as unknown as ExternalSourceArtifact["manifest"],
+    createdAt: row.created_at,
+    createdBy: "admin",
+    validationStatus: row.validation_status === "passed" ? "passed" : "failed",
+    buildStatus:
+      row.build_status === "passed" ||
+      row.build_status === "blocked" ||
+      row.build_status === "unsupported" ||
+      row.build_status === "pending" ||
+      row.build_status === "failed"
+        ? row.build_status
+        : "failed",
+    deploymentStatus:
+      row.deployment_status === "pending_approval" ||
+      row.deployment_status === "deploying" ||
+      row.deployment_status === "deployed" ||
+      row.deployment_status === "failed"
+        ? row.deployment_status
+        : "not_requested",
+    deploymentId: row.deployment_id,
+    deploymentUrl: row.deployment_url,
+    failureSummary: row.failure_summary,
+    metadata: asRecord(row.artifact_metadata) as ExternalSourceArtifact["metadata"],
+  };
+}
+
+async function getLatestArtifactForWebsite(websiteId: string): Promise<ExternalSiteArtifactRow | null> {
+  return await readTable<ExternalSiteArtifactRow | null>((client) =>
+    client
+      .from("external_site_artifacts")
+      .select("*")
+      .eq("generated_website_id", websiteId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+  );
+}
+
+async function isExternalArtifactStoreAvailable(): Promise<boolean> {
+  const rows = await readTable<Pick<ExternalSiteArtifactRow, "id">[] | null>((client) =>
+    client.from("external_site_artifacts").select("id").limit(1),
+  );
+  return Array.isArray(rows);
+}
+
+async function markExternalDeploymentFailure(
+  artifactId: string,
+  approvalId: string,
+  summary: string,
+): Promise<void> {
+  const now = new Date().toISOString();
+  await mutateTable((client) =>
+    client
+      .from("external_site_artifacts")
+      .update({ deployment_status: "failed", failure_summary: summary, updated_at: now })
+      .eq("id", artifactId)
+      .select("id")
+      .maybeSingle(),
+  );
+  await mutateTable((client) =>
+    client
+      .from("approvals")
+      .update({ status: "failed", resolved_at: now, resolved_by: "admin" })
+      .eq("id", approvalId)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle(),
+  );
 }
 
 function providerLabel(provider: ExternalProvider): string {

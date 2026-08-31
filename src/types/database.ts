@@ -180,6 +180,53 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      external_site_artifacts: {
+        Row: {
+          id: string;
+          generated_website_id: string;
+          lead_id: string;
+          provider: string;
+          provider_project_id: string | null;
+          provider_commit_sha: string | null;
+          source_manifest_fingerprint: string;
+          source_manifest: Json;
+          created_by: string;
+          validation_status: string;
+          build_status: string;
+          deployment_status: string;
+          deployment_id: string | null;
+          deployment_url: string | null;
+          failure_summary: string | null;
+          artifact_metadata: Json;
+        } & Timestamps;
+        Insert: {
+          id?: string;
+          generated_website_id: string;
+          lead_id: string;
+          provider: string;
+          provider_project_id?: string | null;
+          provider_commit_sha?: string | null;
+          source_manifest_fingerprint: string;
+          source_manifest: Json;
+          created_by?: string;
+          validation_status: string;
+          build_status: string;
+          deployment_status?: string;
+          deployment_id?: string | null;
+          deployment_url?: string | null;
+          failure_summary?: string | null;
+          artifact_metadata?: Json;
+        };
+        Update: {
+          deployment_status?: string;
+          deployment_id?: string | null;
+          deployment_url?: string | null;
+          failure_summary?: string | null;
+          artifact_metadata?: Json;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       preview_deployments: {
         Row: {
           id: string;
@@ -859,6 +906,8 @@ export type Database = {
 export type LeadRow = Database["public"]["Tables"]["leads"]["Row"];
 export type AuditRow = Database["public"]["Tables"]["website_audits"]["Row"];
 export type WebsiteRow = Database["public"]["Tables"]["generated_websites"]["Row"];
+export type ExternalSiteArtifactRow =
+  Database["public"]["Tables"]["external_site_artifacts"]["Row"];
 export type PreviewDeploymentRow =
   Database["public"]["Tables"]["preview_deployments"]["Row"];
 export type PreviewEventRow =

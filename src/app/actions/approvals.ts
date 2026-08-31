@@ -7,6 +7,7 @@ import {
   rejectApproval,
 } from "@/data/approvals";
 import { approvePreviewPublicationApproval } from "@/data/previews";
+import { approveExternalPreviewDeploymentApproval, isExternalPreviewDeploymentApprovalPayload } from "@/data/external-sites";
 import { usdToTicks } from "@/lib/ai/money";
 
 export type ApprovalActionState =
@@ -52,6 +53,15 @@ export async function approveApprovalAction(
 
   if (type === "website_deployment" && payloadAction === "public_preview_publication") {
     const result = await approvePreviewPublicationApproval(id);
+    if (result.ok) {
+      revalidatePath("/approvals");
+      revalidatePath("/websites");
+    }
+    return result;
+  }
+
+  if (type === "website_deployment" && isExternalPreviewDeploymentApprovalPayload({ action: payloadAction })) {
+    const result = await approveExternalPreviewDeploymentApproval(id);
     if (result.ok) {
       revalidatePath("/approvals");
       revalidatePath("/websites");

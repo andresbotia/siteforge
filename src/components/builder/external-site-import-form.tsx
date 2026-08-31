@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import {
   importExternalGeneratedSiteAction,
+  requestExternalPreviewDeploymentAction,
   type ExternalSiteImportActionState,
 } from "@/app/actions/external-sites";
 import { Button } from "@/components/shared/button";
@@ -70,6 +71,12 @@ export function ExternalSiteImportForm({ leads }: { leads: BuilderCandidate[] })
         <Field label="Cost notes" htmlFor="external-cost-notes">
           <TextInput id="external-cost-notes" name="providerCostNotes" placeholder="$0 fixture import" />
         </Field>
+        <Field label="Generation credits" htmlFor="external-cost-credits">
+          <TextInput id="external-cost-credits" name="generationCostCredits" inputMode="decimal" placeholder="Optional" />
+        </Field>
+        <Field label="Estimated cost USD" htmlFor="external-cost-usd">
+          <TextInput id="external-cost-usd" name="generationCostUsdEstimate" inputMode="decimal" placeholder="0" />
+        </Field>
       </div>
 
       <Field
@@ -88,7 +95,7 @@ export function ExternalSiteImportForm({ leads }: { leads: BuilderCandidate[] })
       </Field>
 
       <div className="rounded-md border border-border-subtle p-3 text-sm text-muted">
-        This import records source evidence for review. It does not call Lovable, send email, publish a preview, deploy production, call paid AI, or contact the business.
+        This import persists the bounded source manifest as an immutable artifact for review. It does not call Lovable, send email, publish a preview, deploy production, call paid AI, or contact the business.
       </div>
 
       <div className="flex justify-end">
@@ -96,6 +103,33 @@ export function ExternalSiteImportForm({ leads }: { leads: BuilderCandidate[] })
           {pending ? "Validating..." : "Import External Draft"}
         </Button>
       </div>
+      {state?.error ? (
+        <p className="text-xs text-danger" role="alert">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+export function RequestExternalPreviewDeploymentForm({
+  websiteId,
+  disabled,
+}: {
+  websiteId: string;
+  disabled?: boolean;
+}) {
+  const [state, action, pending] = useActionState<ExternalSiteImportActionState, FormData>(
+    requestExternalPreviewDeploymentAction,
+    null,
+  );
+
+  return (
+    <form action={action} className="grid gap-2">
+      <input type="hidden" name="websiteId" value={websiteId} />
+      <Button type="submit" variant="primary" disabled={pending || disabled}>
+        {pending ? "Requesting..." : "Request Preview Deployment"}
+      </Button>
       {state?.error ? (
         <p className="text-xs text-danger" role="alert">
           {state.error}

@@ -5,6 +5,7 @@ import { getWebsiteById } from "@/data/websites";
 import {
   generationSourceFromMetadata,
   getExternalPreviewTarget,
+  mergeExternalArtifactMetadata,
   parseExternalGeneratedSiteMetadata,
 } from "@/lib/builder/external-sites";
 import { createPreviewToken, hashPreviewToken, isPreviewToken } from "@/lib/previews/tokens";
@@ -32,6 +33,7 @@ import type {
 } from "@/types";
 import type {
   ApprovalRow,
+  ExternalSiteArtifactRow,
   PreviewDeploymentRow,
   PreviewEventRow,
   WebsiteRow,
@@ -96,7 +98,7 @@ function mapDeployment(row: PreviewDeploymentRow): PreviewDeployment {
   };
 }
 
-function mapWebsite(row: WebsiteRow, businessName: string): GeneratedWebsite {
+function mapWebsite(row: WebsiteRow, businessName: string, artifact?: ExternalSiteArtifactRow | null): GeneratedWebsite {
   const metadata = asRecord(row.metadata);
   const spec = asRecord(row.spec);
   const fixes = Array.isArray(row.audit_fixes) ? row.audit_fixes : [];
@@ -109,7 +111,10 @@ function mapWebsite(row: WebsiteRow, businessName: string): GeneratedWebsite {
     businessName,
     status: row.status as GeneratedWebsite["status"],
     generationSource: generationSourceFromMetadata(row.metadata),
-    externalGeneratedSite: parseExternalGeneratedSiteMetadata(row.metadata),
+    externalGeneratedSite: mergeExternalArtifactMetadata(
+      parseExternalGeneratedSiteMetadata(row.metadata),
+      artifact ?? null,
+    ),
     template: row.template ?? "",
     templateKey: row.template_key,
     beforeScore: typeof metadata.before_score === "number" ? metadata.before_score : 0,
@@ -465,13 +470,21 @@ export async function getPublicPreviewByToken(token: string): Promise<PublicPrev
     return null;
   }
 
+  const { data: artifact } = await client
+    .from("external_site_artifacts")
+    .select("*")
+    .eq("generated_website_id", deployment.generated_website_id)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
   const { data: lead } = await client
     .from("leads")
     .select("business_name")
     .eq("id", deployment.lead_id)
     .maybeSingle();
 
-  const site = mapWebsite(website, lead?.business_name ?? "Unknown business");
+  const site = mapWebsite(website, lead?.business_name ?? "Unknown business", artifact);
   if (!site.spec) return null;
 
   return { deployment: mapDeployment(deployment), site, token };

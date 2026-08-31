@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { importExternalGeneratedSite } from "@/data/external-sites";
+import { importExternalGeneratedSite, requestExternalPreviewDeployment } from "@/data/external-sites";
 import { asRecord } from "@/lib/json";
 
 export type ExternalSiteImportActionState =
@@ -64,4 +64,17 @@ export async function importExternalGeneratedSiteAction(
 
 function stringValue(value: FormDataEntryValue | null): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export async function requestExternalPreviewDeploymentAction(
+  _prev: ExternalSiteImportActionState,
+  formData: FormData,
+): Promise<ExternalSiteImportActionState> {
+  const websiteId = String(formData.get("websiteId") ?? "").trim();
+  if (!websiteId) return { ok: false, error: "Missing website." };
+  const result = await requestExternalPreviewDeployment(websiteId);
+  if (!result.ok) return result;
+  revalidatePath(`/websites/${websiteId}`);
+  revalidatePath("/approvals");
+  redirect("/approvals");
 }
