@@ -129,7 +129,7 @@ describe("external source artifacts", () => {
       ["absolute", { files: [{ path: "C:/secret.ts", content: "" }] }, "unsafe_path"],
       ["file count", { files: tooMany }, "invalid_file_count"],
       ["file size", { files: [{ path: "src/large.ts", content: "x".repeat(EXTERNAL_SOURCE_ARTIFACT_LIMITS.maxFileBytes + 1) }] }, "source_too_large"],
-      ["total size", { files: Array.from({ length: 7 }, (_, index) => ({ path: `src/big-${index}.ts`, content: "x".repeat(150_000) })) }, "source_too_large"],
+      ["total size", { files: Array.from({ length: 6 }, (_, index) => ({ path: `src/big-${index}.ts`, content: "x".repeat(4_500_000) })) }, "source_too_large"],
       ["binary", { files: [{ path: "public/logo.png", content: "\u0000PNG" }] }, "binary_image_manifest_unsupported"],
       ["script", { files: [{ path: "deploy.sh", content: "echo no" }] }, "unsupported_file_type"],
       ["archive", { files: [{ path: "source.zip", content: "zip" }] }, "unsupported_binary_or_script"],

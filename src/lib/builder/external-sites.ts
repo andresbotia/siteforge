@@ -62,11 +62,12 @@ export type ExternalSiteFinding = {
 };
 
 export type ExternalSitePackageSummary = {
-  framework: "vite-react" | "static" | "unknown";
-  packageManager: "npm" | "none";
+  framework: "vite-react" | "vite-tanstack-start" | "static" | "unknown";
+  packageManager: "npm" | "bun" | "none" | "unsupported";
   dependencies: string[];
   devDependencies: string[];
   scripts: Record<string, string>;
+  lockfiles: string[];
 };
 
 export type ExternalSiteValidationResult = {
@@ -81,6 +82,7 @@ export type ExternalSiteBuildResult = {
   status: "pending" | "passed" | "blocked" | "failed" | "unsupported";
   command:
     | "npm ci --ignore-scripts && node node_modules/vite/bin/vite.js build"
+    | "bun install --frozen-lockfile --ignore-scripts && bun run build"
     | "static source inspection only";
   reason: string;
 };
@@ -105,6 +107,15 @@ export type ExternalGeneratedSiteMetadata = {
   generationCostCredits: number | null;
   generationCostUsdEstimate: number | null;
   providerCostNotes: string | null;
+  sourceArtifact: {
+    sourceType: "json_manifest" | "zip_archive";
+    archiveFileName: string | null;
+    fileCount: number | null;
+    totalBytes: number | null;
+    assetCount: number | null;
+    detectedFramework: ExternalSitePackageSummary["framework"];
+    packageManager: ExternalSitePackageSummary["packageManager"];
+  };
   verifiedFactSnapshot: VerifiedFactSnapshot;
   verifiedFactFingerprint: string;
   staleFactWarnings: string[];
@@ -124,9 +135,9 @@ type ExternalApprovalMetadata = {
 const PROVIDER_SET = new Set<string>(EXTERNAL_PROVIDERS);
 const STATUS_SET = new Set<string>(EXTERNAL_SITE_STATUSES);
 const SAFE_FILE_PATH = /^[A-Za-z0-9._/@+-]+$/;
-const MAX_FILES = 80;
-const MAX_FILE_BYTES = 160_000;
-const MAX_TOTAL_BYTES = 900_000;
+const MAX_FILES = 160;
+const MAX_FILE_BYTES = 5_000_000;
+const MAX_TOTAL_BYTES = 25_000_000;
 const PRIVATE_HOST_PATTERNS = [
   /\blocalhost\b/i,
   /\b127\./,
@@ -185,6 +196,7 @@ export function parseExternalGeneratedSiteMetadata(value: unknown): ExternalGene
     generationCostCredits: asNumber(raw.generationCostCredits),
     generationCostUsdEstimate: asNumber(raw.generationCostUsdEstimate),
     providerCostNotes: stringOrNull(raw.providerCostNotes),
+    sourceArtifact: readSourceArtifactSummary(raw.sourceArtifact, validation.packageSummary),
     verifiedFactSnapshot: asRecord(raw.verifiedFactSnapshot) as VerifiedFactSnapshot,
     verifiedFactFingerprint: String(raw.verifiedFactFingerprint ?? ""),
     staleFactWarnings: Array.isArray(raw.staleFactWarnings)
@@ -211,6 +223,8 @@ export function parseExternalGeneratedSiteMetadata(value: unknown): ExternalGene
       command:
         build.command === "npm ci --ignore-scripts && node node_modules/vite/bin/vite.js build"
           ? "npm ci --ignore-scripts && node node_modules/vite/bin/vite.js build"
+          : build.command === "bun install --frozen-lockfile --ignore-scripts && bun run build"
+            ? "bun install --frozen-lockfile --ignore-scripts && bun run build"
           : "static source inspection only",
       reason: String(build.reason ?? ""),
     },
@@ -231,6 +245,8 @@ export function mergeExternalArtifactMetadata(
     deployment_id: string | null;
     deployment_url: string | null;
     failure_summary: string | null;
+    artifact_metadata?: unknown;
+    source_manifest?: unknown;
   } | null,
 ): ExternalGeneratedSiteMetadata | null {
   if (!metadata || !artifact) return metadata;
@@ -250,6 +266,7 @@ export function mergeExternalArtifactMetadata(
       ? artifact.build_status
       : metadata.build.status;
   const deploymentUrl = stringOrNull(artifact.deployment_url);
+  const artifactSummary = readArtifactStorageSummary(artifact.artifact_metadata, artifact.source_manifest, metadata.validation.packageSummary);
   return {
     ...metadata,
     artifactId: artifact.id,
@@ -259,6 +276,7 @@ export function mergeExternalArtifactMetadata(
     deploymentId: stringOrNull(artifact.deployment_id),
     deploymentUrl,
     deploymentFailureSummary: stringOrNull(artifact.failure_summary),
+    sourceArtifact: artifactSummary ?? metadata.sourceArtifact,
     lifecycleStatus: lifecycleStatusFor(metadata.validation.ok, buildStatus === "passed", deploymentStatus),
     build: {
       ...metadata.build,
@@ -347,7 +365,10 @@ export function validateExternalSiteSource(input: {
   if (input.controlledPreviewUrl && !isControlledPreviewUrl(input.controlledPreviewUrl)) {
     findings.push({ code: "uncontrolled_preview_target", severity: "severe", message: "External preview target must be a Vercel-controlled HTTPS URL." });
   }
-  const packageSummary = summarizePackage(input.manifest.packageJson ?? null);
+  const packageSummary = summarizePackage(input.manifest.packageJson ?? null, files.map((file) => String(file.path ?? "")));
+  if (packageSummary.lockfiles.includes("package-lock.json") && packageSummary.lockfiles.some((file) => file === "bun.lock" || file === "bun.lockb")) {
+    findings.push({ code: "mixed_lockfiles", severity: "severe", message: "Mixed npm and Bun lockfiles are not accepted for external generated sites." });
+  }
   for (const script of ["preinstall", "install", "postinstall", "prepare"]) {
     if (packageSummary.scripts[script]) {
       findings.push({ code: "arbitrary_lifecycle_script", severity: "severe", message: `Package lifecycle script ${script} is not allowed.` });
@@ -404,6 +425,7 @@ export function buildExternalSiteMetadata(input: {
   generationCostCredits?: number | null;
   generationCostUsdEstimate?: number | null;
   providerCostNotes?: string | null;
+  sourceArtifact?: ExternalGeneratedSiteMetadata["sourceArtifact"];
   artifactId?: string | null;
   sourceManifestFingerprint?: string | null;
   deploymentStatus?: ExternalGeneratedSiteMetadata["deploymentStatus"];
@@ -440,6 +462,15 @@ export function buildExternalSiteMetadata(input: {
     generationCostCredits: input.generationCostCredits ?? null,
     generationCostUsdEstimate: input.generationCostUsdEstimate ?? null,
     providerCostNotes: cleanOptional(input.providerCostNotes, 300),
+    sourceArtifact: input.sourceArtifact ?? {
+      sourceType: "json_manifest",
+      archiveFileName: null,
+      fileCount: null,
+      totalBytes: null,
+      assetCount: null,
+      detectedFramework: input.validation.packageSummary.framework,
+      packageManager: input.validation.packageSummary.packageManager,
+    },
     verifiedFactSnapshot: input.snapshot,
     verifiedFactFingerprint: fingerprintVerifiedFactSnapshot(input.snapshot),
     staleFactWarnings,
@@ -474,12 +505,20 @@ function buildResultFor(
       reason: "Severe validation findings block build approval.",
     };
   }
-  if (summary.framework === "vite-react" && summary.scripts.build === "vite build") {
+  if (summary.framework === "vite-react" && summary.packageManager === "npm" && summary.scripts.build === "vite build") {
     return {
       ok: true,
       status: "passed",
       command: "npm ci --ignore-scripts && node node_modules/vite/bin/vite.js build",
       reason: "Supported Vite React source with fixed SiteForge build commands; install lifecycle scripts are disabled.",
+    };
+  }
+  if (summary.framework === "vite-tanstack-start" && summary.packageManager === "bun" && summary.scripts.build === "vite build") {
+    return {
+      ok: true,
+      status: "passed",
+      command: "bun install --frozen-lockfile --ignore-scripts && bun run build",
+      reason: "Supported Lovable-style Vite/TanStack Start source with Bun lockfile and fixed SiteForge build commands; install lifecycle scripts are disabled.",
     };
   }
   if (summary.framework === "static") {
@@ -517,7 +556,7 @@ function inspectFile(path: string, content: string, findings: ExternalSiteFindin
   if (/(^|\/)\.env(\.|$)|\.pem$|\.key$/i.test(lowerPath)) {
     findings.push({ code: "secret_file", severity: "severe", message: "Secret-bearing files are not allowed in imported site source.", path });
   }
-  if (/lovable\.app|lovable\.dev|data-lovable|lovable editor/i.test(content)) {
+  if (/https?:\/\/[^"'\s]*lovable\.app|data-lovable|lovable editor/i.test(content)) {
     findings.push({ code: "provider_editor_leak", severity: "severe", message: "Provider editor links or metadata must not leak into imported source.", path });
   }
   if (/<script\b(?![^>]*\btype=["']module["'][^>]*\bsrc=)[\s\S]*?>[\s\S]*?<\/script>/i.test(content)) {
@@ -546,7 +585,7 @@ function inspectFile(path: string, content: string, findings: ExternalSiteFindin
   }
 }
 
-function summarizePackage(value: Record<string, unknown> | null): ExternalSitePackageSummary {
+function summarizePackage(value: Record<string, unknown> | null, paths: string[] = []): ExternalSitePackageSummary {
   const row = asRecord(value);
   const deps = sortedKeys(asRecord(row.dependencies));
   const devDeps = sortedKeys(asRecord(row.devDependencies));
@@ -555,14 +594,25 @@ function summarizePackage(value: Record<string, unknown> | null): ExternalSitePa
       typeof raw === "string" ? [[key, raw.trim()]] : [],
     ),
   );
+  const normalizedPaths = paths.map((path) => path.replace(/\\/g, "/"));
+  const lockfiles = normalizedPaths.filter((path) => path === "package-lock.json" || path === "bun.lock" || path === "bun.lockb").sort();
   const hasVite = deps.includes("vite") || devDeps.includes("vite");
   const hasReact = deps.includes("react") || devDeps.includes("react");
+  const hasTanstackStart =
+    deps.includes("@tanstack/react-start") ||
+    devDeps.includes("@tanstack/react-start") ||
+    devDeps.includes("@lovable.dev/vite-tanstack-config") ||
+    normalizedPaths.includes("src/routes/__root.tsx") ||
+    normalizedPaths.includes("src/routeTree.gen.ts");
+  const hasBunLock = lockfiles.includes("bun.lock") || lockfiles.includes("bun.lockb");
+  const hasNpmLock = lockfiles.includes("package-lock.json");
   return {
-    framework: hasVite && hasReact ? "vite-react" : value ? "unknown" : "static",
-    packageManager: value ? "npm" : "none",
+    framework: hasVite && hasReact && hasTanstackStart ? "vite-tanstack-start" : hasVite && hasReact ? "vite-react" : value ? "unknown" : "static",
+    packageManager: value ? (hasBunLock && !hasNpmLock ? "bun" : hasNpmLock || !hasBunLock ? "npm" : "unsupported") : "none",
     dependencies: deps,
     devDependencies: devDeps,
     scripts,
+    lockfiles,
   };
 }
 
@@ -570,10 +620,13 @@ function readPackageSummary(value: unknown): ExternalSitePackageSummary {
   const row = asRecord(value);
   return {
     framework:
-      row.framework === "vite-react" || row.framework === "static" || row.framework === "unknown"
+      row.framework === "vite-react" || row.framework === "vite-tanstack-start" || row.framework === "static" || row.framework === "unknown"
         ? row.framework
         : "unknown",
-    packageManager: row.packageManager === "npm" || row.packageManager === "none" ? row.packageManager : "none",
+    packageManager:
+      row.packageManager === "npm" || row.packageManager === "bun" || row.packageManager === "unsupported" || row.packageManager === "none"
+        ? row.packageManager
+        : "none",
     dependencies: Array.isArray(row.dependencies) ? row.dependencies.filter((item): item is string => typeof item === "string") : [],
     devDependencies: Array.isArray(row.devDependencies) ? row.devDependencies.filter((item): item is string => typeof item === "string") : [],
     scripts: Object.fromEntries(
@@ -581,6 +634,62 @@ function readPackageSummary(value: unknown): ExternalSitePackageSummary {
         typeof raw === "string" ? [[key, raw]] : [],
       ),
     ),
+    lockfiles: Array.isArray(row.lockfiles) ? row.lockfiles.filter((item): item is string => typeof item === "string") : [],
+  };
+}
+
+function readSourceArtifactSummary(
+  value: unknown,
+  packageSummary: unknown,
+): ExternalGeneratedSiteMetadata["sourceArtifact"] {
+  const row = asRecord(value);
+  const summary = readPackageSummary(packageSummary);
+  return {
+    sourceType: row.sourceType === "zip_archive" ? "zip_archive" : "json_manifest",
+    archiveFileName: stringOrNull(row.archiveFileName),
+    fileCount: asNumber(row.fileCount),
+    totalBytes: asNumber(row.totalBytes),
+    assetCount: asNumber(row.assetCount),
+    detectedFramework:
+      row.detectedFramework === "vite-react" ||
+      row.detectedFramework === "vite-tanstack-start" ||
+      row.detectedFramework === "static" ||
+      row.detectedFramework === "unknown"
+        ? row.detectedFramework
+        : summary.framework,
+    packageManager:
+      row.packageManager === "npm" || row.packageManager === "bun" || row.packageManager === "unsupported" || row.packageManager === "none"
+        ? row.packageManager
+        : summary.packageManager,
+  };
+}
+
+function readArtifactStorageSummary(
+  artifactMetadata: unknown,
+  sourceManifest: unknown,
+  packageSummary: ExternalSitePackageSummary,
+): ExternalGeneratedSiteMetadata["sourceArtifact"] | null {
+  const metadata = asRecord(artifactMetadata);
+  const manifest = asRecord(sourceManifest);
+  if (!Object.keys(metadata).length && !Object.keys(manifest).length) return null;
+  const archive = asRecord(manifest.archive);
+  return {
+    sourceType: manifest.sourceType === "zip_archive" || metadata.sourceType === "zip_archive" ? "zip_archive" : "json_manifest",
+    archiveFileName: stringOrNull(metadata.archiveFileName) ?? stringOrNull(archive.fileName),
+    fileCount: asNumber(metadata.fileCount) ?? asNumber(manifest.fileCount),
+    totalBytes: asNumber(metadata.totalBytes) ?? asNumber(manifest.totalBytes),
+    assetCount: asNumber(metadata.assetCount) ?? asNumber(manifest.assetCount),
+    detectedFramework:
+      metadata.detectedFramework === "vite-react" ||
+      metadata.detectedFramework === "vite-tanstack-start" ||
+      metadata.detectedFramework === "static" ||
+      metadata.detectedFramework === "unknown"
+        ? metadata.detectedFramework
+        : packageSummary.framework,
+    packageManager:
+      metadata.packageManager === "npm" || metadata.packageManager === "bun" || metadata.packageManager === "unsupported" || metadata.packageManager === "none"
+        ? metadata.packageManager
+        : packageSummary.packageManager,
   };
 }
 

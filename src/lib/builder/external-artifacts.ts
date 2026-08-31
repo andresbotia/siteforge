@@ -7,19 +7,25 @@ import { asRecord } from "@/lib/json";
 import {
   type ExternalProvider,
   type ExternalSiteBuildResult,
-  type ExternalSiteFile,
   type ExternalSiteFinding,
   type ExternalSiteImportManifest,
   type ExternalSitePackageSummary,
   type ExternalSiteValidationResult,
   validateExternalSiteSource,
 } from "./external-sites";
+import {
+  EXTERNAL_ARCHIVE_LIMITS,
+  EXTERNAL_SOURCE_ARCHIVE_BUCKET,
+  extractExternalSourceArchiveToDirectory,
+  inspectExternalSourceArchive,
+  type ExternalArchiveFile,
+} from "./external-archives";
 
 export const EXTERNAL_SOURCE_ARTIFACT_LIMITS = {
-  maxFiles: 80,
-  maxFileBytes: 160_000,
-  maxTotalBytes: 900_000,
-  maxOutputBytes: 1_500_000,
+  maxFiles: EXTERNAL_ARCHIVE_LIMITS.maxFiles,
+  maxFileBytes: EXTERNAL_ARCHIVE_LIMITS.maxFileBytes,
+  maxTotalBytes: EXTERNAL_ARCHIVE_LIMITS.maxTotalBytes,
+  maxOutputBytes: EXTERNAL_ARCHIVE_LIMITS.maxTotalBytes,
   buildTimeoutMs: 60_000,
 } as const;
 
@@ -38,6 +44,13 @@ export const ALLOWED_EXTERNAL_SOURCE_EXTENSIONS = new Set([
   ".jpg",
   ".jpeg",
   ".webp",
+  ".gif",
+  ".ico",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".toml",
+  ".lock",
 ]);
 
 const UNSUPPORTED_EXTENSIONS = /\.(exe|dll|so|dylib|sh|bat|cmd|ps1|zip|tar|gz|7z|rar)$/i;
@@ -45,13 +58,31 @@ const IMAGE_EXTENSIONS = /\.(png|jpe?g|webp)$/i;
 
 export type ExternalSourceArtifactManifest = {
   schemaVersion: 1;
+  sourceType: "json_manifest" | "zip_archive";
   leadId?: string;
-  files: ExternalSiteFile[];
+  files: ExternalSourceArtifactFile[];
+  archive?: {
+    fileName: string;
+    storageBucket: typeof EXTERNAL_SOURCE_ARCHIVE_BUCKET;
+    storagePath: string;
+    sha256: string;
+    bytes: number;
+  };
   packageJson: Record<string, unknown> | null;
   fingerprint: string;
   fileCount: number;
   totalBytes: number;
-  fileFingerprints: Array<{ path: string; sha256: string; bytes: number }>;
+  assetCount: number;
+  fileFingerprints: Array<{ path: string; sha256: string; bytes: number; binary: boolean }>;
+};
+
+export type ExternalSourceArtifactFile = {
+  path: string;
+  content?: string;
+  binary: boolean;
+  bytes: number;
+  sha256: string;
+  extension: string | null;
 };
 
 export type ExternalSourceArtifact = {
@@ -131,33 +162,127 @@ export function createExternalSourceArtifact(input: {
   };
 }
 
+export function createExternalSourceArchiveArtifact(input: {
+  id: string;
+  generatedWebsiteId: string;
+  leadId: string;
+  provider: ExternalProvider;
+  providerProjectId?: string | null;
+  providerCommitSha?: string | null;
+  archive: Buffer;
+  archiveFileName: string;
+  storagePath: string;
+  importedAt: string;
+  validation: ExternalSiteValidationResult;
+  build: ExternalSiteBuildResult;
+}): ExternalSourceArtifact {
+  const manifest = normalizeExternalSourceArchiveManifest({
+    leadId: input.leadId,
+    archive: input.archive,
+    archiveFileName: input.archiveFileName,
+    storagePath: input.storagePath,
+  });
+  return {
+    id: input.id,
+    generatedWebsiteId: input.generatedWebsiteId,
+    leadId: input.leadId,
+    provider: input.provider,
+    providerProjectId: cleanOptional(input.providerProjectId, 120),
+    providerCommitSha: cleanOptional(input.providerCommitSha, 80),
+    sourceManifestFingerprint: manifest.fingerprint,
+    manifest,
+    createdAt: input.importedAt,
+    createdBy: "admin",
+    validationStatus: input.validation.status,
+    buildStatus: input.validation.ok ? input.build.status : "blocked",
+    deploymentStatus: "not_requested",
+    deploymentId: null,
+    deploymentUrl: null,
+    failureSummary: null,
+    metadata: {
+      packageSummary: input.validation.packageSummary,
+      buildCommand: input.build.command,
+      outputDirectory: input.validation.packageSummary.framework === "static" ? "source" : "dist",
+      ctaTrackingLimitation:
+        "SiteForge tracks preview opens before redirect. Deep CTA tracking inside arbitrary external source is unavailable unless links are intentionally instrumented.",
+    },
+  };
+}
+
 export function normalizeExternalSourceManifest(
   manifest: ExternalSiteImportManifest & { leadId?: string },
 ): ExternalSourceArtifactManifest {
   const files = manifest.files
-    .map((file) => ({ path: normalizePath(file.path), content: String(file.content ?? "") }))
+    .map((file) => {
+      const content = String(file.content ?? "");
+      return {
+        path: normalizePath(file.path),
+        content,
+        binary: false,
+        bytes: Buffer.byteLength(content, "utf8"),
+        sha256: sha256(Buffer.from(content, "utf8")),
+        extension: extensionFor(file.path),
+      };
+    })
     .sort((a, b) => a.path.localeCompare(b.path));
   const packageJson = readPackageJson(manifest.packageJson, files);
-  const fileFingerprints = files.map((file) => ({
-    path: file.path,
-    sha256: sha256(file.content),
-    bytes: Buffer.byteLength(file.content, "utf8"),
-  }));
+  const fileFingerprints = files.map(({ path, sha256, bytes, binary }) => ({ path, sha256, bytes, binary }));
   const totalBytes = fileFingerprints.reduce((sum, file) => sum + file.bytes, 0);
   const stable = stableJson({
     schemaVersion: 1,
+    sourceType: "json_manifest",
     leadId: manifest.leadId,
-    files,
+    files: files.map((file) => ({ path: file.path, content: file.content })),
     packageJson,
   });
   return {
     schemaVersion: 1,
+    sourceType: "json_manifest",
     leadId: manifest.leadId,
     files,
     packageJson,
     fingerprint: sha256(stable),
     fileCount: files.length,
     totalBytes,
+    assetCount: 0,
+    fileFingerprints,
+  };
+}
+
+export function normalizeExternalSourceArchiveManifest(input: {
+  leadId?: string;
+  archive: Buffer;
+  archiveFileName: string;
+  storagePath: string;
+}): ExternalSourceArtifactManifest {
+  const inspected = inspectExternalSourceArchive(input.archive);
+  const files = inspected.files.map(archiveFileToManifestFile);
+  const fileFingerprints = files.map(({ path, sha256, bytes, binary }) => ({ path, sha256, bytes, binary }));
+  const stable = stableJson({
+    schemaVersion: 1,
+    sourceType: "zip_archive",
+    leadId: input.leadId,
+    archiveSha256: inspected.archiveSha256,
+    files: fileFingerprints,
+    packageJson: inspected.packageJson,
+  });
+  return {
+    schemaVersion: 1,
+    sourceType: "zip_archive",
+    leadId: input.leadId,
+    files,
+    archive: {
+      fileName: cleanArchiveName(input.archiveFileName),
+      storageBucket: EXTERNAL_SOURCE_ARCHIVE_BUCKET,
+      storagePath: input.storagePath,
+      sha256: inspected.archiveSha256,
+      bytes: inspected.archiveBytes,
+    },
+    packageJson: inspected.packageJson,
+    fingerprint: sha256(stable),
+    fileCount: files.length,
+    totalBytes: inspected.totalBytes,
+    assetCount: inspected.assetCount,
     fileFingerprints,
   };
 }
@@ -207,18 +332,94 @@ export function validateExternalSourceArtifact(input: {
   };
 }
 
+export function validateExternalSourceArchive(input: {
+  provider: ExternalProvider;
+  controlledPreviewUrl: string | null;
+  providerPreviewUrl: string | null;
+  archive: Buffer;
+}): { validation: ExternalSiteValidationResult; build: ExternalSiteBuildResult } {
+  const inspected = inspectExternalSourceArchive(input.archive);
+  const manifest: ExternalSiteImportManifest = {
+    files: inspected.files.flatMap((file) => (typeof file.content === "string" ? [{ path: file.path, content: file.content }] : [])),
+    packageJson: inspected.packageJson,
+  };
+  const checked = validateExternalSiteSource({
+    provider: input.provider,
+    controlledPreviewUrl: input.controlledPreviewUrl,
+    providerPreviewUrl: input.providerPreviewUrl,
+    manifest,
+  });
+  const findings = [
+    ...checked.validation.findings,
+    ...inspected.findings.map((finding) => ({
+      code: finding.code,
+      severity: finding.severity,
+      message: finding.message,
+      path: finding.path,
+    })),
+  ];
+  const severe = findings.some((finding) => finding.severity === "severe");
+  return {
+    validation: {
+      ...checked.validation,
+      ok: !severe,
+      status: severe ? "failed" : "passed",
+      findings,
+      packageSummary: checked.validation.packageSummary,
+    },
+    build: severe
+      ? {
+          ok: false,
+          status: "blocked",
+          command: checked.build.command,
+          reason: "Severe ZIP source artifact validation findings block build.",
+        }
+      : checked.build,
+  };
+}
+
 export async function buildExternalSourceArtifact(input: {
   artifact: Pick<ExternalSourceArtifact, "manifest" | "metadata">;
+  archiveBuffer?: Buffer;
   runner?: BuildCommandRunner;
   timeoutMs?: number;
   cleanup?: boolean;
 }): Promise<ExternalSourceBuildExecutionResult> {
-  const validation = validateExternalSourceArtifact({
-    provider: "manual",
-    controlledPreviewUrl: null,
-    providerPreviewUrl: null,
-    manifest: input.artifact.manifest,
-  });
+  const sourceType = input.artifact.manifest.sourceType ?? "json_manifest";
+  const validation =
+    sourceType === "zip_archive"
+      ? input.archiveBuffer
+        ? validateExternalSourceArchive({
+            provider: "manual",
+            controlledPreviewUrl: null,
+            providerPreviewUrl: null,
+            archive: input.archiveBuffer,
+          })
+        : {
+            validation: {
+              ok: false,
+              status: "failed" as const,
+              findings: [{ code: "missing_zip_archive", severity: "severe" as const, message: "ZIP source archive is not available for validation." }],
+              packageSummary: input.artifact.metadata.packageSummary,
+            },
+            build: {
+              ok: false,
+              status: "blocked" as const,
+              command: input.artifact.metadata.buildCommand,
+              reason: "ZIP source archive is not available for build.",
+            },
+          }
+      : validateExternalSourceArtifact({
+          provider: "manual",
+          controlledPreviewUrl: null,
+          providerPreviewUrl: null,
+          manifest: {
+            packageJson: input.artifact.manifest.packageJson,
+            files: input.artifact.manifest.files.flatMap((file) =>
+              typeof file.content === "string" ? [{ path: file.path, content: file.content }] : [],
+            ),
+          },
+        });
   if (!validation.validation.ok) {
     return {
       ok: false,
@@ -231,7 +432,14 @@ export async function buildExternalSourceArtifact(input: {
   const framework = input.artifact.metadata.packageSummary.framework;
   const root = await mkdtemp(join(tmpdir(), "siteforge-external-"));
   try {
-    await writeManifestFiles(root, input.artifact.manifest.files);
+    if (sourceType === "zip_archive") {
+      if (!input.archiveBuffer) {
+        return { ok: false, status: "failed", summary: "ZIP source archive is not available for build." };
+      }
+      await extractExternalSourceArchiveToDirectory(input.archiveBuffer, root);
+    } else {
+      await writeManifestFiles(root, input.artifact.manifest.files);
+    }
     if (framework === "static") {
       const indexPath = resolve(root, "index.html");
       await readFile(indexPath, "utf8");
@@ -240,35 +448,34 @@ export async function buildExternalSourceArtifact(input: {
       if (!outputCheck.ok) return outputCheck;
       return { ok: true, status: "passed", outputDirectory: root, outputBytes, summary: "Static source output is ready for deployment." };
     }
-    if (framework !== "vite-react") {
+    if (framework !== "vite-react" && framework !== "vite-tanstack-start") {
       return { ok: false, status: "unsupported", summary: "Unsupported external generated site stack." };
     }
 
     const runner = input.runner ?? defaultBuildCommandRunner;
     const env = minimalBuildEnvironment();
-    const install = await runner({
-      command: "npm",
-      args: ["ci", "--ignore-scripts"],
-      cwd: root,
-      env,
-      timeoutMs: input.timeoutMs ?? EXTERNAL_SOURCE_ARTIFACT_LIMITS.buildTimeoutMs,
-    });
+    const timeoutMs = input.timeoutMs ?? EXTERNAL_SOURCE_ARTIFACT_LIMITS.buildTimeoutMs;
+    const packageManager = input.artifact.metadata.packageSummary.packageManager;
+    const install =
+      packageManager === "bun"
+        ? await runner({ command: "bun", args: ["install", "--frozen-lockfile", "--ignore-scripts"], cwd: root, env, timeoutMs })
+        : await runner({ command: "npm", args: ["ci", "--ignore-scripts"], cwd: root, env, timeoutMs });
     if (!install.ok) return commandFailure("dependency install failed", install);
 
-    const vite = await runner({
-      command: process.execPath,
-      args: [join(root, "node_modules", "vite", "bin", "vite.js"), "build"],
-      cwd: root,
-      env,
-      timeoutMs: input.timeoutMs ?? EXTERNAL_SOURCE_ARTIFACT_LIMITS.buildTimeoutMs,
-    });
+    const vite =
+      packageManager === "bun"
+        ? await runner({ command: "bun", args: ["run", "build"], cwd: root, env, timeoutMs })
+        : await runner({ command: process.execPath, args: [join(root, "node_modules", "vite", "bin", "vite.js"), "build"], cwd: root, env, timeoutMs });
     if (!vite.ok) return commandFailure("build failed", vite);
 
-    const dist = resolve(root, "dist");
-    const outputBytes = await directoryBytes(dist);
-    const outputCheck = await validateBuildOutput(dist, outputBytes);
+    const outputDirectory = await findBuildOutputDirectory(root, framework);
+    if (!outputDirectory) {
+      return { ok: false, status: "failed", summary: "Build output is missing an index.html in a supported output directory." };
+    }
+    const outputBytes = await directoryBytes(outputDirectory);
+    const outputCheck = await validateBuildOutput(outputDirectory, outputBytes);
     if (!outputCheck.ok) return outputCheck;
-    return { ok: true, status: "passed", outputDirectory: dist, outputBytes, summary: "Vite React source built successfully with the fixed SiteForge command sequence." };
+    return { ok: true, status: "passed", outputDirectory, outputBytes, summary: "External generated source built successfully with the fixed SiteForge command sequence." };
   } catch {
     return { ok: false, status: "failed", summary: "Build failed while preparing isolated source files." };
   } finally {
@@ -371,8 +578,9 @@ export function createVercelPreviewDeploymentProvider(): PreviewDeploymentProvid
   };
 }
 
-async function writeManifestFiles(root: string, files: ExternalSiteFile[]): Promise<void> {
+async function writeManifestFiles(root: string, files: ExternalSourceArtifactFile[]): Promise<void> {
   for (const file of files) {
+    if (file.binary || typeof file.content !== "string") throw new Error("unsupported_manifest_binary");
     const relative = normalizePath(file.path);
     const target = resolve(root, relative);
     if (!target.startsWith(resolve(root) + sep)) throw new Error("unsafe_path");
@@ -414,7 +622,23 @@ async function scanOutput(root: string, current: string, findings: ExternalSiteF
     }
     if (!entry.isFile()) continue;
     const relative = full.slice(resolve(root).length + 1).replace(/\\/g, "/");
+    const extension = extensionFor(relative);
+    if (!extension || !ALLOWED_EXTERNAL_SOURCE_EXTENSIONS.has(extension) || UNSUPPORTED_EXTENSIONS.test(relative)) {
+      findings.push({ code: "unsupported_output_file_type", severity: "severe", message: "Build output file type is not allowlisted.", path: relative });
+      continue;
+    }
+    if (isBinaryAssetExtension(extension)) {
+      const bytes = await readFile(full);
+      if (!binaryFileMatchesExtension(extension, bytes)) {
+        findings.push({ code: "invalid_output_binary_signature", severity: "severe", message: "Build output binary asset does not match its file type.", path: relative });
+      }
+      continue;
+    }
     const content = await readFile(full, "utf8").catch(() => "");
+    if (hasBinaryControlCharacters(content)) {
+      findings.push({ code: "unexpected_output_binary_blob", severity: "severe", message: "Build output text file contains binary control characters.", path: relative });
+      continue;
+    }
     validateExternalSiteSource({
       provider: "manual",
       controlledPreviewUrl: null,
@@ -531,13 +755,13 @@ function commandFailure(prefix: string, result: Awaited<ReturnType<BuildCommandR
 
 function readPackageJson(
   explicit: Record<string, unknown> | null | undefined,
-  files: ExternalSiteFile[],
+  files: ExternalSourceArtifactFile[],
 ): Record<string, unknown> | null {
   if (explicit && typeof explicit === "object") return explicit;
   const packageFile = files.find((file) => file.path === "package.json");
   if (!packageFile) return null;
   try {
-    return asRecord(JSON.parse(packageFile.content));
+    return asRecord(JSON.parse(packageFile.content ?? ""));
   } catch {
     return null;
   }
@@ -556,8 +780,63 @@ function hasBinaryControlCharacters(content: string): boolean {
   return /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(content);
 }
 
-function sha256(value: string): string {
+function sha256(value: string | Buffer): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+async function findBuildOutputDirectory(root: string, framework: ExternalSitePackageSummary["framework"]): Promise<string | null> {
+  const candidates =
+    framework === "vite-tanstack-start"
+      ? [".output/public", ".vercel/output/static", "dist", "build/client"]
+      : ["dist"];
+  for (const candidate of candidates) {
+    const directory = resolve(root, candidate);
+    try {
+      await readFile(resolve(directory, "index.html"), "utf8");
+      return directory;
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+function archiveFileToManifestFile(file: ExternalArchiveFile): ExternalSourceArtifactFile {
+  return {
+    path: file.path,
+    content: file.content,
+    binary: file.binary,
+    bytes: file.bytes,
+    sha256: file.sha256,
+    extension: file.extension,
+  };
+}
+
+function isBinaryAssetExtension(extension: string): boolean {
+  return [".png", ".jpg", ".jpeg", ".webp", ".gif", ".ico", ".woff", ".woff2", ".ttf"].includes(extension);
+}
+
+function binaryFileMatchesExtension(extension: string, bytes: Buffer): boolean {
+  if (extension === ".png") return bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  if (extension === ".jpg" || extension === ".jpeg") return bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff;
+  if (extension === ".webp") return bytes.subarray(0, 4).toString("ascii") === "RIFF" && bytes.subarray(8, 12).toString("ascii") === "WEBP";
+  if (extension === ".gif") return bytes.subarray(0, 6).toString("ascii") === "GIF87a" || bytes.subarray(0, 6).toString("ascii") === "GIF89a";
+  if (extension === ".ico") return bytes.subarray(0, 4).equals(Buffer.from([0x00, 0x00, 0x01, 0x00]));
+  if (extension === ".woff") return bytes.subarray(0, 4).toString("ascii") === "wOFF";
+  if (extension === ".woff2") return bytes.subarray(0, 4).toString("ascii") === "wOF2";
+  if (extension === ".ttf") {
+    return (
+      bytes.subarray(0, 4).equals(Buffer.from([0x00, 0x01, 0x00, 0x00])) ||
+      bytes.subarray(0, 4).toString("ascii") === "true" ||
+      bytes.subarray(0, 4).toString("ascii") === "typ1"
+    );
+  }
+  return false;
+}
+
+function cleanArchiveName(value: string): string {
+  const name = normalizePath(value).split("/").pop()?.trim() ?? "source.zip";
+  return name.slice(0, 120) || "source.zip";
 }
 
 function stableJson(value: unknown): string {

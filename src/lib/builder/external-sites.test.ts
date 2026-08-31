@@ -101,6 +101,54 @@ describe("external generated site import validation", () => {
     );
   });
 
+  it("accepts Lovable-like Vite TanStack Start source with a Bun lockfile", () => {
+    const result = validateExternalSiteSource({
+      provider: "lovable",
+      controlledPreviewUrl: null,
+      providerPreviewUrl: "https://preview.lovable.app/projects/sample",
+      manifest: {
+        files: [
+          {
+            path: "package.json",
+            content: JSON.stringify({
+              scripts: { build: "vite build" },
+              dependencies: { "@tanstack/react-start": "latest", vite: "latest", react: "latest", "react-dom": "latest" },
+              devDependencies: { "@lovable.dev/vite-tanstack-config": "latest" },
+            }),
+          },
+          { path: "bun.lock", content: "" },
+          { path: "src/routes/__root.tsx", content: "export const Route = {}" },
+          { path: "src/routeTree.gen.ts", content: "export const routeTree = {}" },
+        ],
+        packageJson: {
+          scripts: { build: "vite build" },
+          dependencies: { "@tanstack/react-start": "latest", vite: "latest", react: "latest", "react-dom": "latest" },
+          devDependencies: { "@lovable.dev/vite-tanstack-config": "latest" },
+        },
+      },
+    });
+
+    assert.equal(result.validation.ok, true);
+    assert.equal(result.validation.packageSummary.framework, "vite-tanstack-start");
+    assert.equal(result.validation.packageSummary.packageManager, "bun");
+    assert.equal(result.build.command, "bun install --frozen-lockfile --ignore-scripts && bun run build");
+  });
+
+  it("blocks mixed npm and Bun lockfiles", () => {
+    const result = validateExternalSiteSource({
+      provider: "lovable",
+      controlledPreviewUrl: null,
+      providerPreviewUrl: null,
+      manifest: {
+        ...fixtureManifest,
+        files: [...fixtureManifest.files, { path: "package-lock.json", content: "{}" }, { path: "bun.lock", content: "" }],
+      },
+    });
+
+    assert.equal(result.validation.ok, false);
+    assert.equal(result.validation.findings.some((finding) => finding.code === "mixed_lockfiles"), true);
+  });
+
   it("blocks severe static safety findings", () => {
     const cases: Array<[string, string]> = [
       [".env", "RESEND_API_KEY=re_123"],

@@ -160,6 +160,15 @@ export interface ExternalGeneratedSite {
   generationCostCredits: number | null;
   generationCostUsdEstimate: number | null;
   providerCostNotes: string | null;
+  sourceArtifact: {
+    sourceType: "json_manifest" | "zip_archive";
+    archiveFileName: string | null;
+    fileCount: number | null;
+    totalBytes: number | null;
+    assetCount: number | null;
+    detectedFramework: "vite-react" | "vite-tanstack-start" | "static" | "unknown";
+    packageManager: "npm" | "bun" | "none" | "unsupported";
+  };
   verifiedFactFingerprint: string;
   staleFactWarnings: string[];
   validation: {
@@ -172,11 +181,12 @@ export interface ExternalGeneratedSite {
       path?: string;
     }>;
     packageSummary: {
-      framework: "vite-react" | "static" | "unknown";
-      packageManager: "npm" | "none";
+      framework: "vite-react" | "vite-tanstack-start" | "static" | "unknown";
+      packageManager: "npm" | "bun" | "none" | "unsupported";
       dependencies: string[];
       devDependencies: string[];
       scripts: Record<string, string>;
+      lockfiles: string[];
     };
   };
   build: {

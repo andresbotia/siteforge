@@ -6,12 +6,15 @@ import { getLatestAuditForLead } from "@/data/leads";
 import {
   buildExternalSourceArtifact,
   createExternalSourceArtifact,
+  createExternalSourceArchiveArtifact,
   createVercelPreviewDeploymentProvider,
   removeExternalBuildDirectory,
+  validateExternalSourceArchive,
   validateExternalSourceArtifact,
   type ExternalSourceArtifact,
   type PreviewDeploymentProvider,
 } from "@/lib/builder/external-artifacts";
+import { EXTERNAL_SOURCE_ARCHIVE_BUCKET } from "@/lib/builder/external-archives";
 import {
   buildExternalReviewSpec,
   buildExternalSiteMetadata,
@@ -24,7 +27,7 @@ import { BUILDER_COST_USD, BUILDER_VERSION } from "@/lib/builder/limits";
 import { runBuilderPipeline } from "@/lib/builder/run";
 import { asRecord } from "@/lib/json";
 import { isNoStandaloneWebsiteLead } from "@/lib/prospects/no-website";
-import { mutateTable, readTable } from "@/lib/supabase/server";
+import { createServerSupabaseClient, mutateTable, readTable } from "@/lib/supabase/server";
 import type { AgentRow, AgentRunRow, ApprovalRow, ExternalSiteArtifactRow, Json, LeadRow, WebsiteRow } from "@/types/database";
 
 const BUILDER_AGENT_SLUG = "builder";
@@ -45,7 +48,12 @@ export type ExternalSiteImportInput = {
   generationCostCredits?: string | null;
   generationCostUsdEstimate?: string | null;
   providerCostNotes?: string | null;
-  manifest: ExternalSiteImportManifest & { leadId?: string };
+  manifest?: ExternalSiteImportManifest & { leadId?: string };
+  archive?: {
+    fileName: string;
+    contentType: string;
+    bytes: Buffer;
+  };
 };
 
 export async function importExternalGeneratedSite(
@@ -55,7 +63,10 @@ export async function importExternalGeneratedSite(
   if (!leadId) return { ok: false, error: "A lead is required.", field: "leadId" };
   const provider = parseExternalProvider(input.provider.trim());
   if (!provider) return { ok: false, error: "Choose a supported external provider.", field: "provider" };
-  if (input.manifest.leadId && input.manifest.leadId !== leadId) {
+  if (!input.archive && !input.manifest) {
+    return { ok: false, error: "Upload a ZIP archive or paste a JSON source manifest.", field: "archive" };
+  }
+  if (input.manifest?.leadId && input.manifest.leadId !== leadId) {
     return { ok: false, error: "Import manifest lead association does not match the selected lead.", field: "manifest" };
   }
   if (!(await isExternalArtifactStoreAvailable())) {
@@ -85,12 +96,20 @@ export async function importExternalGeneratedSite(
   const now = new Date().toISOString();
   const snapshot = createVerifiedFactSnapshot(lead);
   const currentSnapshot = createVerifiedFactSnapshot(lead);
-  const checked = validateExternalSourceArtifact({
-    provider,
-    controlledPreviewUrl: null,
-    providerPreviewUrl: normalizeOptionalUrl(input.providerPreviewUrl),
-    manifest: input.manifest,
-  });
+  const providerPreviewUrl = normalizeOptionalUrl(input.providerPreviewUrl);
+  const checked = input.archive
+    ? validateExternalSourceArchive({
+        provider,
+        controlledPreviewUrl: null,
+        providerPreviewUrl,
+        archive: input.archive.bytes,
+      })
+    : validateExternalSourceArtifact({
+        provider,
+        controlledPreviewUrl: null,
+        providerPreviewUrl,
+        manifest: input.manifest!,
+      });
 
   const audit = await getLatestAuditForLead(lead.id);
   const noStandaloneWebsite = isNoStandaloneWebsiteLead(lead);
@@ -164,32 +183,57 @@ export async function importExternalGeneratedSite(
         },
   );
 
+  const websiteId = randomUUID();
+  const artifactId = randomUUID();
+  const archiveStoragePath = input.archive ? `${lead.id}/${websiteId}/${artifactId}/${safeStorageFileName(input.archive.fileName)}` : null;
+  const artifact = input.archive
+    ? createExternalSourceArchiveArtifact({
+        id: artifactId,
+        generatedWebsiteId: websiteId,
+        leadId: lead.id,
+        provider,
+        providerProjectId: input.providerProjectId,
+        providerCommitSha: input.providerCommitSha,
+        archive: input.archive.bytes,
+        archiveFileName: input.archive.fileName,
+        storagePath: archiveStoragePath!,
+        importedAt: now,
+        validation: checked.validation,
+        build: checked.build,
+      })
+    : createExternalSourceArtifact({
+        id: artifactId,
+        generatedWebsiteId: websiteId,
+        leadId: lead.id,
+        provider,
+        providerProjectId: input.providerProjectId,
+        providerCommitSha: input.providerCommitSha,
+        manifest: input.manifest!,
+        importedAt: now,
+        validation: checked.validation,
+        build: checked.build,
+      });
+  if (input.archive) {
+    const uploaded = await uploadExternalSourceArchive({
+      path: archiveStoragePath!,
+      fileName: input.archive.fileName,
+      contentType: input.archive.contentType,
+      bytes: input.archive.bytes,
+    });
+    if (!uploaded.ok) return { ok: false, error: uploaded.error, field: "archive" };
+  }
   const externalMetadata = buildExternalSiteMetadata({
     provider,
     providerProjectId: input.providerProjectId,
     providerCommitSha: input.providerCommitSha,
-    providerPreviewUrl: normalizeOptionalUrl(input.providerPreviewUrl),
+    providerPreviewUrl,
     importedAt: now,
     generationCostCredits: numericOrNull(input.generationCostCredits),
     generationCostUsdEstimate: numericOrNull(input.generationCostUsdEstimate),
     providerCostNotes: input.providerCostNotes,
+    sourceArtifact: sourceArtifactSummary(artifact),
     snapshot,
     currentSnapshot,
-    validation: checked.validation,
-    build: checked.build,
-  });
-
-  const websiteId = randomUUID();
-  const artifactId = randomUUID();
-  const artifact = createExternalSourceArtifact({
-    id: artifactId,
-    generatedWebsiteId: websiteId,
-    leadId: lead.id,
-    provider,
-    providerProjectId: input.providerProjectId,
-    providerCommitSha: input.providerCommitSha,
-    manifest: input.manifest,
-    importedAt: now,
     validation: checked.validation,
     build: checked.build,
   });
@@ -407,7 +451,13 @@ export async function approveExternalPreviewDeploymentApproval(
   );
 
   const mapped = mapArtifactRow(artifact);
-  const build = await buildExternalSourceArtifact({ artifact: mapped, cleanup: false });
+  const archiveBuffer = mapped.manifest.sourceType === "zip_archive" ? await downloadExternalSourceArchive(mapped) : null;
+  if (mapped.manifest.sourceType === "zip_archive" && !archiveBuffer) {
+    const summary = "ZIP source archive could not be downloaded from private artifact storage.";
+    await markExternalDeploymentFailure(artifact.id, approval.id, summary);
+    return { ok: false, error: summary };
+  }
+  const build = await buildExternalSourceArtifact({ artifact: mapped, archiveBuffer: archiveBuffer ?? undefined, cleanup: false });
   if (!build.ok) {
     const summary = build.summary.slice(0, 300);
     await markExternalDeploymentFailure(artifact.id, approval.id, summary);
@@ -460,6 +510,56 @@ export async function approveExternalPreviewDeploymentApproval(
     metadata: { generated_website_id: artifact.generated_website_id, artifact_id: artifact.id, deployment_id: deployed.deploymentId },
   });
   return { ok: true, deploymentUrl: deployed.deploymentUrl };
+}
+
+function sourceArtifactSummary(artifact: ExternalSourceArtifact) {
+  return {
+    sourceType: artifact.manifest.sourceType ?? "json_manifest",
+    archiveFileName: artifact.manifest.archive?.fileName ?? null,
+    fileCount: artifact.manifest.fileCount,
+    totalBytes: artifact.manifest.totalBytes,
+    assetCount: artifact.manifest.assetCount,
+    detectedFramework: artifact.metadata.packageSummary.framework,
+    packageManager: artifact.metadata.packageSummary.packageManager,
+  };
+}
+
+async function uploadExternalSourceArchive(input: {
+  path: string;
+  fileName: string;
+  contentType: string;
+  bytes: Buffer;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const client = createServerSupabaseClient();
+  if (!client) return { ok: false, error: "Supabase storage is not configured for external source archives." };
+  const contentType = input.contentType === "application/x-zip-compressed" ? input.contentType : "application/zip";
+  const { error } = await client.storage.from(EXTERNAL_SOURCE_ARCHIVE_BUCKET).upload(input.path, input.bytes, {
+    contentType,
+    upsert: false,
+  });
+  if (error) {
+    return { ok: false, error: `Could not store ZIP source archive: ${error.message}` };
+  }
+  return { ok: true };
+}
+
+async function downloadExternalSourceArchive(artifact: ExternalSourceArtifact): Promise<Buffer | null> {
+  const archive = artifact.manifest.archive;
+  if (!archive) return null;
+  const client = createServerSupabaseClient();
+  if (!client) return null;
+  const { data, error } = await client.storage.from(archive.storageBucket).download(archive.storagePath);
+  if (error || !data) {
+    console.error("External source archive download failed", error?.message ?? "missing_data");
+    return null;
+  }
+  return Buffer.from(await data.arrayBuffer());
+}
+
+function safeStorageFileName(value: string): string {
+  const name = value.replace(/\\/g, "/").split("/").pop()?.trim() ?? "source.zip";
+  const cleaned = name.replace(/[^A-Za-z0-9._+-]/g, "-").slice(0, 120);
+  return cleaned.toLowerCase().endsWith(".zip") ? cleaned : `${cleaned || "source"}.zip`;
 }
 
 export function isExternalPreviewDeploymentApprovalPayload(payload: unknown): boolean {

@@ -18,7 +18,7 @@ export default async function ImportExternalSitePage() {
     <>
       <PageHeader
         title="Import External Site"
-        description="Admin-only import for approved external generated source. Imported source is stored as an immutable artifact before deployment approval."
+        description="Admin-only import for approved external generated source. Uploaded source is stored as an immutable private artifact before deployment approval."
       />
       <p className="mb-4 text-xs text-muted">
         <Link href="/websites" className="hover:text-foreground">
@@ -32,7 +32,7 @@ export default async function ImportExternalSitePage() {
       <Card>
         <CardHeader
           title="External generated source"
-          description="Paste the bounded source manifest supplied by the operator. Deployment is a separate approval-gated step."
+          description="Upload a bounded ZIP export supplied by the operator. Deployment is a separate approval-gated step."
         />
         <CardBody>
           <ExternalSiteImportForm leads={leads} />

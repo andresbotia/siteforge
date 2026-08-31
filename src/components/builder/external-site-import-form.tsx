@@ -7,7 +7,7 @@ import {
   type ExternalSiteImportActionState,
 } from "@/app/actions/external-sites";
 import { Button } from "@/components/shared/button";
-import { Field, SelectInput, TextArea, TextInput } from "@/components/shared/field";
+import { Field, SelectInput, TextArea, TextInput, inputClassName } from "@/components/shared/field";
 import type { BuilderCandidate } from "@/data/builder";
 
 export function ExternalSiteImportForm({ leads }: { leads: BuilderCandidate[] }) {
@@ -37,8 +37,22 @@ export function ExternalSiteImportForm({ leads }: { leads: BuilderCandidate[] })
       </Field>
 
       <div className="rounded-md border border-border-subtle p-3 text-sm text-muted">
-        Import stores an immutable source artifact, then SiteForge validates and build-checks it. Preview deployment is a separate approval-gated action, and the SiteForge/Vercel URL is generated only after that deployment completes.
+        Import stores an immutable private source artifact, then SiteForge validates and build-checks it. Preview deployment is a separate approval-gated action, and the SiteForge/Vercel URL is generated only after that deployment completes.
       </div>
+
+      <Field
+        label="Source ZIP"
+        htmlFor="external-archive"
+        hint="Upload a bounded ZIP export with source files and static assets. Nested archives, scripts, secrets, and unsafe paths are rejected."
+      >
+        <input
+          id="external-archive"
+          name="archive"
+          type="file"
+          accept=".zip,application/zip,application/x-zip-compressed"
+          className={inputClassName}
+        />
+      </Field>
 
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Provider" htmlFor="external-provider">
@@ -76,23 +90,27 @@ export function ExternalSiteImportForm({ leads }: { leads: BuilderCandidate[] })
         </Field>
       </div>
 
-      <Field
-        label="Source manifest JSON"
-        htmlFor="external-manifest"
-        hint='Use {"files":[{"path":"package.json","content":"..."}],"packageJson":{"scripts":{"build":"vite build"}}}. Do not paste secrets.'
-      >
-        <TextArea
-          id="external-manifest"
-          name="manifest"
-          rows={8}
-          spellCheck={false}
-          placeholder='{"files":[{"path":"src/App.tsx","content":"export default function App(){return null}"}],"packageJson":{"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","react":"latest"},"scripts":{"build":"vite build"}}}'
-          required
-        />
-      </Field>
+      <details className="rounded-md border border-border-subtle p-3">
+        <summary className="cursor-pointer text-sm font-medium">Advanced JSON manifest fallback</summary>
+        <div className="mt-3">
+          <Field
+            label="Source manifest JSON"
+            htmlFor="external-manifest"
+            hint='Use {"files":[{"path":"package.json","content":"..."}],"packageJson":{"scripts":{"build":"vite build"}}}. Binary assets are supported by ZIP upload only.'
+          >
+            <TextArea
+              id="external-manifest"
+              name="manifest"
+              rows={8}
+              spellCheck={false}
+              placeholder='{"files":[{"path":"src/App.tsx","content":"export default function App(){return null}"}],"packageJson":{"dependencies":{"@vitejs/plugin-react":"latest","vite":"latest","react":"latest"},"scripts":{"build":"vite build"}}}'
+            />
+          </Field>
+        </div>
+      </details>
 
       <div className="rounded-md border border-border-subtle p-3 text-sm text-muted">
-        This import persists the bounded source manifest as an immutable artifact for review. It does not call Lovable, send email, publish a preview, deploy production, call paid AI, or contact the business.
+        This import persists the bounded source package as an immutable artifact for review. It does not call Lovable, send email, publish a preview, deploy production, call paid AI, or contact the business.
       </div>
 
       <div className="flex justify-end">

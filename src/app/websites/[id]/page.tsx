@@ -102,6 +102,12 @@ export default async function WebsiteDetailPage({ params }: WebsitePageProps) {
               <Detail label="Artifact ID" value={site.externalGeneratedSite.artifactId ?? "missing"} />
               <Detail label="Artifact status" value={site.externalGeneratedSite.lifecycleStatus} />
               <Detail label="Artifact fingerprint" value={site.externalGeneratedSite.sourceManifestFingerprint ?? "missing"} />
+              <Detail label="Source type" value={site.externalGeneratedSite.sourceArtifact.sourceType === "zip_archive" ? "ZIP archive" : "JSON manifest"} />
+              <Detail label="Archive file" value={site.externalGeneratedSite.sourceArtifact.archiveFileName ?? "none"} />
+              <Detail label="Source files" value={site.externalGeneratedSite.sourceArtifact.fileCount?.toString() ?? "unknown"} />
+              <Detail label="Source bytes" value={site.externalGeneratedSite.sourceArtifact.totalBytes?.toLocaleString() ?? "unknown"} />
+              <Detail label="Static assets" value={site.externalGeneratedSite.sourceArtifact.assetCount?.toString() ?? "0"} />
+              <Detail label="Detected stack" value={`${site.externalGeneratedSite.sourceArtifact.detectedFramework} / ${site.externalGeneratedSite.sourceArtifact.packageManager}`} />
               <Detail label="Fact fingerprint" value={site.externalGeneratedSite.verifiedFactFingerprint || "none"} />
               <Detail label="Validation status" value={site.externalGeneratedSite.validation.status} />
               <Detail label="Build status" value={`${site.externalGeneratedSite.build.status} - ${site.externalGeneratedSite.build.reason}`} />
