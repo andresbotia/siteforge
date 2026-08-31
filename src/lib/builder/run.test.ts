@@ -231,15 +231,20 @@ describe("factual integrity", () => {
     );
   });
 
-  it("enriches a no-website restaurant draft only from verified public facts", async () => {
+  it("generates a new version for an enriched no-website restaurant with an existing draft", async () => {
+    const boundedDescription = (
+      "Salvadoran restaurant with pupusas, breakfast plates, soups, and casual counter-service dining in Margate. "
+    )
+      .repeat(6)
+      .slice(0, 500);
     const verified = await validateVerifiedPublicFacts(
       {
         sourceUrl: "https://public.example.test/antojitos-profile",
-        description: "Salvadoran restaurant serving public menu favorites in Margate.",
-        cuisine: "Salvadoran",
-        hours: "Mon-Sat 10 AM - 8 PM",
-        rating: "4.7",
-        reviewCount: "186",
+        description: boundedDescription,
+        cuisine: "Salvadoran restaurant",
+        hours: "Monday-Saturday 10 AM - 8 PM",
+        rating: "4.5",
+        reviewCount: "295",
         socialUrl: "https://social.example.test/antojitos",
         menuUrl: "https://public.example.test/antojitos-menu",
         orderUrl: "https://orders.example.test/antojitos",
@@ -251,6 +256,8 @@ describe("factual integrity", () => {
     );
     assert.equal(verified.ok, true);
     if (!verified.ok) return;
+    const normalizedDescription = verified.summary.facts.description;
+    assert.ok(normalizedDescription);
 
     const result = runBuilderPipeline(
       lead({
@@ -270,15 +277,36 @@ describe("factual integrity", () => {
       }),
       noWebsiteAudit(),
     );
+    const prior = buildGeneratedWebsiteInsert({
+      result,
+      websiteId: "web-prior-internal",
+      auditId: null,
+      runId: "run-prior",
+      beforeScore: null,
+    });
+    const next = buildGeneratedWebsiteInsert({
+      result,
+      websiteId: "web-enriched-next",
+      auditId: null,
+      runId: "run-enriched",
+      beforeScore: null,
+    });
     const blob = JSON.stringify(result.spec);
 
     assert.equal(validateWebsiteSpec(result.spec).ok, true);
+    assert.notEqual(prior.id, next.id);
+    assert.equal(prior.lead_id, next.lead_id);
+    assert.equal(prior.status, "review_required");
+    assert.equal(next.status, "review_required");
+    assert.equal(next.source_audit_id, null);
+    assert.equal(next.source_run_id, "run-enriched");
     assert.equal(result.spec.business.websiteUrl, null);
-    assert.equal(result.spec.business.cuisine, "Salvadoran");
-    assert.equal(result.spec.business.rating, 4.7);
-    assert.equal(result.spec.business.reviewCount, 186);
-    assert.ok(blob.includes("Salvadoran restaurant serving public menu favorites in Margate."));
-    assert.ok(blob.includes("Mon-Sat 10 AM - 8 PM"));
+    assert.equal(result.spec.business.cuisine, "Salvadoran restaurant");
+    assert.equal(result.spec.business.rating, 4.5);
+    assert.equal(result.spec.business.reviewCount, 295);
+    assert.equal(result.spec.business.description, normalizedDescription);
+    assert.ok(blob.includes(normalizedDescription.slice(0, 400)));
+    assert.ok(blob.includes("Monday-Saturday 10 AM - 8 PM"));
     assert.ok(blob.includes("https://public.example.test/antojitos-menu"));
     assert.ok(blob.includes("https://orders.example.test/antojitos"));
     assert.ok(blob.includes("https://social.example.test/antojitos"));
@@ -288,7 +316,17 @@ describe("factual integrity", () => {
         (item) =>
           item.field === "description" &&
           item.provenance === "sourced" &&
-          item.source === "lead.inspection_summary.verified_public_facts.description",
+          item.source ===
+            "manual_public_verification:lead.inspection_summary.verified_public_facts.description",
+      ),
+    );
+    assert.ok(
+      result.spec.provenance.some(
+        (item) =>
+          item.field === "reviewCount" &&
+          item.provenance === "sourced" &&
+          item.source ===
+            "manual_public_verification:lead.inspection_summary.verified_public_facts.reviewCount",
       ),
     );
   });

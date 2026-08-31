@@ -226,20 +226,34 @@ export async function startBuilderRun(input: {
 
     return { ok: true, runId: run.id, websiteId: site.id };
   } catch (error) {
+    const failureReason = error instanceof Error ? error.message : "builder_failed";
     await mutateTable((client) =>
       client
         .from("agent_runs")
         .update({
           status: "failed",
           completed_at: new Date().toISOString(),
-          failure_reason: error instanceof Error ? error.message : "builder_failed",
+          failure_reason: failureReason,
         })
         .eq("id", run.id)
         .select("id")
         .maybeSingle(),
     );
-    return { ok: false, error: "Builder run failed." };
+    return { ok: false, error: safeBuilderFailureMessage(failureReason) };
   }
+}
+
+function safeBuilderFailureMessage(reason: string): string {
+  if (reason === "unsafe_hero" || reason === "unsafe_copy") {
+    return "Builder validation failed. Shorten or simplify the verified public summary, then try again.";
+  }
+  if (reason === "unsafe_hours") {
+    return "Builder validation failed. Shorten or simplify the verified public hours, then try again.";
+  }
+  if (reason.startsWith("unsafe_") || reason.startsWith("invalid_")) {
+    return `Builder validation failed: ${reason}.`;
+  }
+  return "Builder run failed.";
 }
 
 function toBuilderAudit(audit: WebsiteAudit | null) {

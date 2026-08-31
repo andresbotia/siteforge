@@ -130,6 +130,10 @@ function buildSeo(facts: BuilderFacts): { title: string; description: string } {
   return { title: title.slice(0, 70), description: description.slice(0, 160) };
 }
 
+function fitSpecText(value: string): string {
+  return value.slice(0, 400);
+}
+
 function buildPages(facts: BuilderFacts, template: TemplateKey, ctas: SiteCta[]): SpecPage[] {
   const header: Section = {
     type: "header",
@@ -315,7 +319,7 @@ function buildPages(facts: BuilderFacts, template: TemplateKey, ctas: SiteCta[])
 }
 
 function heroLede(facts: BuilderFacts, template: TemplateKey): string {
-  if (facts.description) return facts.description;
+  if (facts.description) return fitSpecText(facts.description);
   if (template === "restaurant-modern") {
     const category = facts.cuisine ?? facts.industry;
     return facts.city ? `${category} in ${facts.city}.` : `${category}.`;
@@ -341,7 +345,7 @@ function pickCtas(ctas: SiteCta[], template: TemplateKey, slot: "hero" | "footer
 }
 
 function aboutCopy(facts: BuilderFacts, template: TemplateKey): string {
-  if (facts.description) return facts.description;
+  if (facts.description) return fitSpecText(facts.description);
   if (template === "restaurant-modern") {
     const category = facts.cuisine ?? facts.industry.toLowerCase();
     return facts.city

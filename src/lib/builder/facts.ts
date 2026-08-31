@@ -95,6 +95,8 @@ export function extractFacts(
   const record = (field: string, provenanceKind: ProvenanceRecord["provenance"], source: string | null) => {
     provenance.push({ field, provenance: provenanceKind, source });
   };
+  const verifiedSource = (field: string) =>
+    `manual_public_verification:lead.inspection_summary.verified_public_facts.${field}`;
 
   record("businessName", "sourced", "lead.business_name");
   record("industry", "sourced", "lead.industry");
@@ -106,15 +108,15 @@ export function extractFacts(
   if (noStandaloneWebsite) {
     record("websiteStatus", "sourced", "lead.inspection_summary.no_standalone_website");
   }
-  record("rating", rating ? "sourced" : "omitted", rating ? (verifiedFacts?.rating === rating ? "lead.inspection_summary.verified_public_facts.rating" : "lead.google_rating") : null);
-  record("reviewCount", reviewCount ? "sourced" : "omitted", reviewCount ? (verifiedFacts?.reviewCount === reviewCount ? "lead.inspection_summary.verified_public_facts.reviewCount" : "lead.review_count") : null);
-  record("description", description ? "sourced" : "omitted", description ? (verifiedFacts?.description === description ? "lead.inspection_summary.verified_public_facts.description" : "lead.inspection_summary.public_description") : null);
-  record("cuisine", cuisine ? "sourced" : "omitted", cuisine ? (verifiedFacts?.cuisine === cuisine ? "lead.inspection_summary.verified_public_facts.cuisine" : "lead.inspection_summary.cuisine") : null);
-  record("hours", hours ? "sourced" : "omitted", hours ? (verifiedFacts?.hours === hours ? "lead.inspection_summary.verified_public_facts.hours" : "lead.inspection_summary.public_hours") : null);
-  record("menuLink", menuLink ? "sourced" : "omitted", menuLink ? (verifiedFacts?.menuUrl === menuLink ? "lead.inspection_summary.verified_public_facts.menuUrl" : "lead.inspection_summary.menu_link") : null);
-  record("reservationUrl", reservationUrl ? "sourced" : "omitted", reservationUrl ? (verifiedFacts?.reservationUrl === reservationUrl ? "lead.inspection_summary.verified_public_facts.reservationUrl" : "lead.inspection_summary.reservation_link") : null);
-  record("orderUrl", orderUrl ? "sourced" : "omitted", orderUrl ? (verifiedFacts?.orderUrl === orderUrl ? "lead.inspection_summary.verified_public_facts.orderUrl" : "lead.inspection_summary.order_link") : null);
-  record("socialUrl", socialUrl ? "sourced" : "omitted", socialUrl ? (verifiedFacts?.socialUrl === socialUrl ? "lead.inspection_summary.verified_public_facts.socialUrl" : "lead.inspection_summary.social_url") : null);
+  record("rating", rating ? "sourced" : "omitted", rating ? (verifiedFacts?.rating === rating ? verifiedSource("rating") : "lead.google_rating") : null);
+  record("reviewCount", reviewCount ? "sourced" : "omitted", reviewCount ? (verifiedFacts?.reviewCount === reviewCount ? verifiedSource("reviewCount") : "lead.review_count") : null);
+  record("description", description ? "sourced" : "omitted", description ? (verifiedFacts?.description === description ? verifiedSource("description") : "lead.inspection_summary.public_description") : null);
+  record("cuisine", cuisine ? "sourced" : "omitted", cuisine ? (verifiedFacts?.cuisine === cuisine ? verifiedSource("cuisine") : "lead.inspection_summary.cuisine") : null);
+  record("hours", hours ? "sourced" : "omitted", hours ? (verifiedFacts?.hours === hours ? verifiedSource("hours") : "lead.inspection_summary.public_hours") : null);
+  record("menuLink", menuLink ? "sourced" : "omitted", menuLink ? (verifiedFacts?.menuUrl === menuLink ? verifiedSource("menuUrl") : "lead.inspection_summary.menu_link") : null);
+  record("reservationUrl", reservationUrl ? "sourced" : "omitted", reservationUrl ? (verifiedFacts?.reservationUrl === reservationUrl ? verifiedSource("reservationUrl") : "lead.inspection_summary.reservation_link") : null);
+  record("orderUrl", orderUrl ? "sourced" : "omitted", orderUrl ? (verifiedFacts?.orderUrl === orderUrl ? verifiedSource("orderUrl") : "lead.inspection_summary.order_link") : null);
+  record("socialUrl", socialUrl ? "sourced" : "omitted", socialUrl ? (verifiedFacts?.socialUrl === socialUrl ? verifiedSource("socialUrl") : "lead.inspection_summary.social_url") : null);
   record("reservationsOffered", reservationsOffered ? "sourced" : "omitted", reservationsOffered ? "inspection_or_audit" : null);
   record("orderingOffered", orderingOffered ? "sourced" : "omitted", orderingOffered ? "inspection_or_audit" : null);
   record("emergencyOffered", emergencyOffered ? "sourced" : "omitted", emergencyOffered ? "audit.findings" : null);
