@@ -27,7 +27,8 @@ export type CtaKind =
   | "reservation"
   | "order"
   | "menu"
-  | "social";
+  | "social"
+  | "directions";
 
 export type SiteCta = {
   kind: CtaKind;
@@ -43,9 +44,11 @@ export type ServiceItem = {
 export type ImageRole = "hero" | "gallery" | "service" | "team" | "project";
 export type ImageSourceType =
   | "manual_upload"
+  | "operator_uploaded"
   | "managed_asset"
   | "business_owned"
   | "licensed_stock"
+  | "approved_public_asset"
   | "third_party_reference";
 export type ImageRightsStatus = "approved" | "pending" | "unknown" | "rejected";
 export type ImageApprovalStatus = "approved" | "pending" | "rejected";
@@ -59,6 +62,37 @@ export type WebsiteImageAsset = {
   rightsStatus: ImageRightsStatus;
   approvalStatus: ImageApprovalStatus;
   attribution: string | null;
+};
+
+export type DayKey =
+  | "monday"
+  | "tuesday"
+  | "wednesday"
+  | "thursday"
+  | "friday"
+  | "saturday"
+  | "sunday";
+
+export type DailyHours = {
+  day: DayKey;
+  label: string;
+  value: string;
+  closed: boolean;
+};
+
+export type SocialPlatform =
+  | "instagram"
+  | "facebook"
+  | "tiktok"
+  | "youtube"
+  | "x"
+  | "linkedin";
+
+export type SocialProfile = {
+  platform: SocialPlatform;
+  url: string;
+  sourceUrl: string | null;
+  verificationStatus: "operator_verified" | "candidate";
 };
 
 export type Section =
@@ -158,7 +192,9 @@ export type WebsiteSpec = {
     description: string | null;
     cuisine: string | null;
     hours: string | null;
+    dailyHours: DailyHours[];
     socialUrl: string | null;
+    socialProfiles: SocialProfile[];
     menuUrl: string | null;
     orderUrl: string | null;
     reservationUrl: string | null;

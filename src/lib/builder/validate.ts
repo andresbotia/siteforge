@@ -25,7 +25,17 @@ const CTA_KINDS = new Set([
   "order",
   "menu",
   "social",
+  "directions",
 ]);
+const SOCIAL_HOSTS = {
+  instagram: ["instagram.com", "www.instagram.com"],
+  facebook: ["facebook.com", "www.facebook.com", "fb.com", "www.fb.com"],
+  tiktok: ["tiktok.com", "www.tiktok.com"],
+  youtube: ["youtube.com", "www.youtube.com", "youtu.be"],
+  x: ["x.com", "www.x.com"],
+  linkedin: ["linkedin.com", "www.linkedin.com"],
+} as const;
+const DAY_KEYS = new Set(["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]);
 const MAX_BUSINESS_DESCRIPTION = 500;
 
 export type SpecValidation =
@@ -120,6 +130,21 @@ function validateBusiness(spec: WebsiteSpec["business"]): string | null {
     if (!Array.isArray(spec.highlights) || spec.highlights.length > 6) return "invalid_highlights";
     for (const item of spec.highlights) {
       if (!safeString(item)) return "unsafe_highlight";
+    }
+  }
+  if (spec.dailyHours !== undefined) {
+    if (!Array.isArray(spec.dailyHours) || spec.dailyHours.length > 7) return "invalid_daily_hours";
+    for (const row of spec.dailyHours) {
+      if (!DAY_KEYS.has(row.day)) return "invalid_daily_hours";
+      if (!safeString(row.label) || !safeString(row.value)) return "unsafe_daily_hours";
+      if (typeof row.closed !== "boolean") return "invalid_daily_hours";
+    }
+  }
+  if (spec.socialProfiles !== undefined) {
+    if (!Array.isArray(spec.socialProfiles) || spec.socialProfiles.length > 6) return "invalid_social_profiles";
+    for (const profile of spec.socialProfiles) {
+      if (profile.verificationStatus !== "operator_verified") return "unverified_social_profile";
+      if (!isExpectedSocialUrl(profile.platform, profile.url)) return "unsafe_social_profile";
     }
   }
   return null;
@@ -236,6 +261,15 @@ function safeHttpHref(value: string): boolean {
   } catch {
     return false;
   }
+}
+
+function isExpectedSocialUrl(platform: string, value: string): boolean {
+  if (!(platform in SOCIAL_HOSTS)) return false;
+  if (!safeHttpHref(value)) return false;
+  const url = new URL(value);
+  return (SOCIAL_HOSTS[platform as keyof typeof SOCIAL_HOSTS] as readonly string[]).includes(
+    url.hostname.toLowerCase(),
+  );
 }
 
 function hasExecutable(spec: WebsiteSpec): boolean {

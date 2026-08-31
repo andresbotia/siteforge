@@ -75,16 +75,12 @@ button {
 
 .sf-restaurant-v2 .sf-hero-fallback {
   background:
-    radial-gradient(circle at 18% 22%, rgba(243, 201, 107, 0.35), transparent 28%),
-    linear-gradient(135deg, rgba(166, 73, 45, 0.8) 0%, rgba(35, 60, 47, 0.88) 48%, rgba(33, 31, 27, 0.95) 100%);
-}
-
-.sf-restaurant-v2 .sf-map-fallback {
-  background:
-    linear-gradient(90deg, rgba(166, 73, 45, 0.14) 1px, transparent 1px),
-    linear-gradient(0deg, rgba(166, 73, 45, 0.14) 1px, transparent 1px),
-    #faf7f0;
-  background-size: 28px 28px;
+    radial-gradient(circle at 18% 45%, rgba(243, 201, 107, 0.24), transparent 20%),
+    radial-gradient(circle at 72% 30%, rgba(166, 73, 45, 0.28), transparent 22%),
+    linear-gradient(90deg, rgba(250, 247, 240, 0.07) 1px, transparent 1px),
+    linear-gradient(0deg, rgba(250, 247, 240, 0.05) 1px, transparent 1px),
+    linear-gradient(135deg, #211f1b 0%, #233c2f 52%, #6d2f22 100%);
+  background-size: auto, auto, 42px 42px, 42px 42px, auto;
 }
 
 @media (prefers-reduced-motion: no-preference) {

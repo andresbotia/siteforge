@@ -4,9 +4,11 @@ import type { ImageRole, ImageSourceType, WebsiteImageAsset } from "./types";
 const IMAGE_ROLES = new Set<ImageRole>(["hero", "gallery", "service", "team", "project"]);
 const IMAGE_SOURCE_TYPES = new Set<ImageSourceType>([
   "manual_upload",
+  "operator_uploaded",
   "managed_asset",
   "business_owned",
   "licensed_stock",
+  "approved_public_asset",
   "third_party_reference",
 ]);
 
@@ -45,10 +47,15 @@ function parseImageAsset(value: unknown): WebsiteImageAsset | null {
     url: row.url,
     alt: row.alt.trim().slice(0, 160),
     role: row.role as ImageRole,
-    sourceType: row.sourceType as ImageSourceType,
+    sourceType: normalizeSourceType(row.sourceType as ImageSourceType),
     sourceUrl: typeof row.sourceUrl === "string" && row.sourceUrl.trim() ? row.sourceUrl.trim() : null,
     rightsStatus: row.rightsStatus === "approved" ? "approved" : "unknown",
     approvalStatus: row.approvalStatus === "approved" ? "approved" : "pending",
     attribution: typeof row.attribution === "string" && row.attribution.trim() ? row.attribution.trim().slice(0, 160) : null,
   };
+}
+
+function normalizeSourceType(value: ImageSourceType): ImageSourceType {
+  if (value === "manual_upload") return "operator_uploaded";
+  return value;
 }

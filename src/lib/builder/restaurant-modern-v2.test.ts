@@ -80,10 +80,20 @@ async function enrichedNoWebsiteResult() {
       description:
         "Salvadoran restaurant with pupusas, breakfast plates, soups, seafood, and casual counter-service dining.",
       cuisine: "Salvadoran restaurant",
-      hours: "Monday-Saturday 10 AM - 8 PM; Sunday 10 AM - 6 PM",
+      dailyHours: {
+        monday: { value: "8:00 AM - 10:00 PM", closed: false },
+        tuesday: { value: "8:00 AM - 10:00 PM", closed: false },
+        wednesday: { value: "8:00 AM - 10:00 PM", closed: false },
+        thursday: { value: "8:00 AM - 11:00 PM", closed: false },
+        friday: { value: "8:00 AM - 11:00 PM", closed: false },
+        saturday: { value: "8:00 AM - 11:00 PM", closed: false },
+        sunday: { value: "", closed: true },
+      },
       rating: "4.5",
       reviewCount: "295",
-      socialUrl: "https://social.example.test/mariposa-comedor",
+      socialProfiles: {
+        instagram: "https://instagram.com/mariposa.comedor",
+      },
       menuUrl: "https://public.example.test/mariposa-comedor-menu",
     },
     {
@@ -148,6 +158,8 @@ describe("Restaurant Modern V2 data contract", () => {
     assert.equal(result.spec.business.rating, 4.5);
     assert.equal(result.spec.business.reviewCount, 295);
     assert.equal(result.spec.business.ratingSource, "public");
+    assert.equal(result.spec.business.dailyHours.length, 7);
+    assert.equal(result.spec.business.socialProfiles[0]?.platform, "instagram");
     assert.deepEqual(result.spec.business.highlights, [
       "Salvadoran restaurant",
       "Pupusas",
@@ -224,11 +236,16 @@ describe("Restaurant Modern V2 rendering", () => {
     assert.match(html, /Mariposa Comedor/);
     assert.match(html, /Salvadoran restaurant/);
     assert.match(html, /Coconut Creek, FL/);
-    assert.match(html, /Monday-Saturday 10 AM - 8 PM/);
+    assert.match(html, /Monday/);
+    assert.match(html, /8:00 AM - 10:00 PM/);
+    assert.match(html, /Sunday/);
+    assert.match(html, /Closed/);
     assert.match(html, /4\.5/);
     assert.match(html, /295/);
     assert.match(html, /Public rating/);
     assert.doesNotMatch(html, /Google rating/);
+    assert.match(html, /Get Directions/);
+    assert.match(html, /destination=123%20Sample%20Road%2C%20Coconut%20Creek%2C%20FL/);
   });
 
   it("uses Google attribution only when the persisted rating source says Google", () => {
@@ -252,6 +269,7 @@ describe("Restaurant Modern V2 rendering", () => {
     });
     assert.match(fallbackHtml, /sf-hero-fallback/);
     assert.doesNotMatch(fallbackHtml, /h-24 rounded-2xl bg-white\/10/);
+    assert.doesNotMatch(fallbackHtml, /sf-map-fallback/);
   });
 
   it("handles partial gallery image counts without dropping approved images", () => {
@@ -286,5 +304,153 @@ describe("Restaurant Modern V2 rendering", () => {
     assert.doesNotMatch(html, /Pupusas|Soups|Seafood|Traditional dishes/);
     assert.doesNotMatch(html, /\$\d+/);
     assert.doesNotMatch(html, /SiteForge|provenance|manual_public_verification|This draft/i);
+  });
+});
+
+describe("Restaurant Modern V2.1 legacy summary and structured fact handling", () => {
+  const legacySummary =
+    "Cuisine/category: Salvadoran restaurant Rating: 4.5 Review count: 295 Description: Salvadoran restaurant in Margate serving Salvadoran dishes including pupusas, soups, seafood and other traditional plates. Hours: Monday: 8:00 AM - 10:00 PM Tuesday: 8:00 AM - 10:00 PM Wednesday: 8:00 AM - 10:00 PM Thursday: 8:00 AM - 11:00 PM Friday: 8:00 AM - 11:00 PM Saturday: 8:00 AM - 11:00 PM Sunday: 8:00 AM - 11:00 PM";
+
+  it("sanitizes the exact legacy combined-summary shape before visitor-facing output", () => {
+    const result = runBuilderPipeline(
+      lead({
+        businessName: "Legacy Summary Restaurant",
+        city: "Margate",
+        state: "FL",
+        address: "456 Sample Street, Margate, FL",
+        phone: "(954) 555-0211",
+        inspectionSummary: {
+          ...noStandaloneWebsiteSummary(),
+          public_description: legacySummary,
+          cuisine: "Salvadoran restaurant",
+          public_hours: "Monday-Sunday 8:00 AM - 10:00 PM",
+        },
+        rating: 4.5,
+        reviewCount: 295,
+      }),
+      noWebsiteAudit(),
+    );
+    const html = render(result.spec);
+
+    assert.doesNotMatch(html, /Cuisine\/category:|Rating:|Review count:|Description:|Hours:/);
+    assert.match(html, /Salvadoran restaurant in Margate serving Salvadoran dishes including pupusas, soups, seafood and other traditional plates\./);
+    assert.match(html, /Salvadoran restaurant/);
+    assert.match(html, /4\.5/);
+    assert.match(html, /295/);
+    assert.match(html, /Monday/);
+    assert.match(html, /8:00 AM - 10:00 PM/);
+    assert.match(html, /456 Sample Street, Margate, FL/);
+    assert.match(html, /\(954\) 555-0211/);
+  });
+
+  it("lets dedicated cuisine, rating, review count, and structured hours win over labels inside summary", async () => {
+    const verified = await validateVerifiedPublicFacts(
+      {
+        description: legacySummary,
+        cuisine: "Cafe",
+        rating: "4.1",
+        reviewCount: "12",
+        dailyHours: {
+          monday: { value: "9:00 AM - 5:00 PM", closed: false },
+          tuesday: { value: "", closed: true },
+        },
+      },
+      { lookup: async () => ["93.184.216.34"] },
+    );
+    assert.equal(verified.ok, true);
+    if (!verified.ok) return;
+    const result = runBuilderPipeline(
+      lead({ inspectionSummary: { ...noStandaloneWebsiteSummary(), verified_public_facts: verified.summary } }),
+      noWebsiteAudit(),
+    );
+
+    assert.equal(result.spec.business.description, "Salvadoran restaurant in Margate serving Salvadoran dishes including pupusas, soups, seafood and other traditional plates.");
+    assert.equal(result.spec.business.cuisine, "Cafe");
+    assert.equal(result.spec.business.rating, 4.1);
+    assert.equal(result.spec.business.reviewCount, 12);
+    assert.deepEqual(result.spec.business.dailyHours.map((row) => row.value), ["9:00 AM - 5:00 PM", "Closed"]);
+    assert.doesNotMatch(JSON.stringify(result.spec), /Cuisine\/category:|Rating:|Review count:|Description:|Hours:/);
+  });
+
+  it("omits unknown structured facts and internal provenance language", () => {
+    const result = runBuilderPipeline(
+      lead({
+        address: null,
+        city: null,
+        state: null,
+        inspectionSummary: noStandaloneWebsiteSummary(),
+        rating: null,
+        reviewCount: 0,
+        phone: null,
+      }),
+      noWebsiteAudit(),
+    );
+    const html = render(result.spec);
+
+    assert.doesNotMatch(html, /Public rating|Public reviews|Hours|SiteForge|manual_public_verification|provenance/);
+    assert.doesNotMatch(html, /Get Directions/);
+  });
+});
+
+describe("Restaurant Modern V2.1 social, maps, and image safety", () => {
+  it("renders verified social platforms and omits missing profiles cleanly", () => {
+    const html = render();
+    assert.match(html, /aria-label="Instagram"/);
+    assert.match(html, /aria-label="Facebook"/);
+    assert.match(html, /aria-label="YouTube"/);
+
+    const empty = render({
+      ...restaurantModernV2FixtureSpec,
+      business: { ...restaurantModernV2FixtureSpec.business, socialProfiles: [] },
+    });
+    assert.doesNotMatch(empty, /aria-label="Instagram"|Follow/);
+  });
+
+  it("rejects mismatched, javascript, malformed, and unverified social profiles", () => {
+    for (const url of ["https://evil.example/restaurant", "javascript:alert(1)", "not a url"]) {
+      const bad = {
+        ...restaurantModernV2FixtureSpec,
+        business: {
+          ...restaurantModernV2FixtureSpec.business,
+          socialProfiles: [{ platform: "instagram", url, sourceUrl: null, verificationStatus: "operator_verified" }],
+        },
+      };
+      assert.equal(validateWebsiteSpec(bad).ok, false);
+    }
+    const candidate = {
+      ...restaurantModernV2FixtureSpec,
+      business: {
+        ...restaurantModernV2FixtureSpec.business,
+        socialProfiles: [{
+          platform: "instagram",
+          url: "https://instagram.com/candidate",
+          sourceUrl: null,
+          verificationStatus: "candidate",
+        }],
+      },
+    };
+    assert.equal(validateWebsiteSpec(candidate).ok, false);
+  });
+
+  it("validates Google directions and blocks malicious address markup", () => {
+    const html = render();
+    assert.match(html, /https:\/\/www\.google\.com\/maps\/dir\/\?api=1&amp;destination=123%20Sample%20Road%2C%20Coconut%20Creek%2C%20FL/);
+    assert.doesNotMatch(html, /<iframe|sf-map-fallback|dangerouslySetInnerHTML/);
+
+    const bad = {
+      ...restaurantModernV2FixtureSpec,
+      business: { ...restaurantModernV2FixtureSpec.business, address: "123 Sample <script>alert(1)</script>" },
+    };
+    assert.equal(validateWebsiteSpec(bad).ok, false);
+  });
+
+  it("keeps image rights, role selection, and provenance fail-closed", async () => {
+    assert.equal(validateWebsiteSpec({ ...restaurantModernV2FixtureSpec, assets: { images: [approvedImage({ rightsStatus: "unknown" })] } }).ok, false);
+    assert.equal(validateWebsiteSpec({ ...restaurantModernV2FixtureSpec, assets: { images: [approvedImage({ approvalStatus: "pending" })] } }).ok, false);
+    assert.equal(validateWebsiteSpec({ ...restaurantModernV2FixtureSpec, assets: { images: [approvedImage({ url: "http://127.0.0.1/photo.svg" })] } }).ok, false);
+
+    const result = await enrichedNoWebsiteResult();
+    assert.equal(result.spec.assets?.images[0]?.role, "hero");
+    assert.ok(result.spec.provenance.some((item) => item.field === "images"));
   });
 });

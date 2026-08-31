@@ -1,8 +1,8 @@
 import type { BuilderAuditInput, BuilderLeadInput, ProvenanceRecord } from "./types";
-import type { WebsiteImageAsset } from "./types";
+import type { DailyHours, SocialProfile, WebsiteImageAsset } from "./types";
 import { readApprovedImages } from "./images";
 import { isNoStandaloneWebsiteLead } from "@/lib/prospects/no-website";
-import { readVerifiedPublicFacts } from "@/lib/prospects/verified-public-facts";
+import { DAY_ORDER, inferVerifiedSocialProfile, readDailyHours, readSocialProfiles, readVerifiedPublicFacts } from "@/lib/prospects/verified-public-facts";
 
 function blankToNull(value: string | null | undefined): string | null {
   const trimmed = value?.trim() ?? "";
@@ -39,10 +39,12 @@ export type BuilderFacts = {
   description: string | null;
   cuisine: string | null;
   hours: string | null;
+  dailyHours: DailyHours[];
   menuLink: string | null;
   reservationUrl: string | null;
   orderUrl: string | null;
   socialUrl: string | null;
+  socialProfiles: SocialProfile[];
   ratingSource: "google" | "public" | null;
   shortName: string | null;
   highlights: string[];
@@ -72,9 +74,16 @@ export function extractFacts(
   const reviewCount =
     verifiedFacts?.reviewCount ?? (lead.reviewCount > 0 ? lead.reviewCount : null);
   const codes = new Set(audit.findings.map((item) => item.code));
-  const description = verifiedFacts?.description ?? summaryString(lead.inspectionSummary, "public_description");
+  const rawDescription = verifiedFacts?.description ?? summaryString(lead.inspectionSummary, "public_description");
+  const description = sanitizePublicSummary(rawDescription);
   const cuisine = verifiedFacts?.cuisine ?? summaryString(lead.inspectionSummary, "cuisine");
   const hours = verifiedFacts?.hours ?? summaryString(lead.inspectionSummary, "public_hours");
+  const dailyHours =
+    verifiedFacts?.hoursByDay.length
+      ? verifiedFacts.hoursByDay
+      : readDailyHours(lead.inspectionSummary?.public_hours_by_day).length
+        ? readDailyHours(lead.inspectionSummary?.public_hours_by_day)
+        : extractLegacyDailyHours(rawDescription);
   const menuLinkRaw = verifiedFacts?.menuUrl ?? summaryString(lead.inspectionSummary, "menu_link");
   const reservationLink = summaryString(lead.inspectionSummary, "reservation_link");
   const orderLink = summaryString(lead.inspectionSummary, "order_link");
@@ -89,6 +98,14 @@ export function extractFacts(
     reservationUrlRaw && isHttpUrl(reservationUrlRaw) ? reservationUrlRaw : null;
   const orderUrl = orderUrlRaw && isHttpUrl(orderUrlRaw) ? orderUrlRaw : null;
   const socialUrl = socialUrlRaw && isHttpUrl(socialUrlRaw) ? socialUrlRaw : null;
+  const structuredSocialProfiles =
+    verifiedFacts?.socialProfiles.length
+      ? verifiedFacts.socialProfiles
+      : readSocialProfiles(lead.inspectionSummary?.social_profiles);
+  const legacySocialProfile = structuredSocialProfiles.length === 0
+    ? inferVerifiedSocialProfile(socialUrl, "lead.inspection_summary.social_url")
+    : null;
+  const socialProfiles = legacySocialProfile ? [legacySocialProfile] : structuredSocialProfiles;
   const ratingSourceRaw = summaryString(lead.inspectionSummary, "rating_source");
   const ratingSource = rating || reviewCount
     ? ratingSourceRaw === "google"
@@ -128,10 +145,12 @@ export function extractFacts(
   record("description", description ? "sourced" : "omitted", description ? (verifiedFacts?.description === description ? verifiedSource("description") : "lead.inspection_summary.public_description") : null);
   record("cuisine", cuisine ? "sourced" : "omitted", cuisine ? (verifiedFacts?.cuisine === cuisine ? verifiedSource("cuisine") : "lead.inspection_summary.cuisine") : null);
   record("hours", hours ? "sourced" : "omitted", hours ? (verifiedFacts?.hours === hours ? verifiedSource("hours") : "lead.inspection_summary.public_hours") : null);
+  record("dailyHours", dailyHours.length > 0 ? "sourced" : "omitted", dailyHours.length > 0 ? "lead.inspection_summary.public_hours_by_day" : null);
   record("menuLink", menuLink ? "sourced" : "omitted", menuLink ? (verifiedFacts?.menuUrl === menuLink ? verifiedSource("menuUrl") : "lead.inspection_summary.menu_link") : null);
   record("reservationUrl", reservationUrl ? "sourced" : "omitted", reservationUrl ? (verifiedFacts?.reservationUrl === reservationUrl ? verifiedSource("reservationUrl") : "lead.inspection_summary.reservation_link") : null);
   record("orderUrl", orderUrl ? "sourced" : "omitted", orderUrl ? (verifiedFacts?.orderUrl === orderUrl ? verifiedSource("orderUrl") : "lead.inspection_summary.order_link") : null);
   record("socialUrl", socialUrl ? "sourced" : "omitted", socialUrl ? (verifiedFacts?.socialUrl === socialUrl ? verifiedSource("socialUrl") : "lead.inspection_summary.social_url") : null);
+  record("socialProfiles", socialProfiles.length > 0 ? "sourced" : "omitted", socialProfiles.length > 0 ? "manual_public_verification:lead.inspection_summary.social_profiles" : null);
   record("ratingSource", ratingSource ? "sourced" : "omitted", ratingSource ? (ratingSourceRaw ? "lead.inspection_summary.rating_source" : "manual_public_verification") : null);
   record("images", images.length > 0 ? "sourced" : "omitted", images.length > 0 ? "manual_public_verification:lead.inspection_summary.approved_images" : null);
   record("restaurantHighlights", highlights.length > 0 ? "derived" : "omitted", highlights.length > 0 ? "verified_public_facts.description+cuisine" : null);
@@ -156,10 +175,12 @@ export function extractFacts(
     description,
     cuisine,
     hours,
+    dailyHours,
     menuLink,
     reservationUrl,
     orderUrl,
     socialUrl,
+    socialProfiles,
     ratingSource,
     shortName,
     highlights,
@@ -169,6 +190,35 @@ export function extractFacts(
     emergencyOffered,
     provenance,
   };
+}
+
+export function sanitizePublicSummary(value: string | null): string | null {
+  if (!value) return null;
+  const cleaned = value.trim().replace(/\s+/g, " ");
+  if (!hasStructuredLabels(cleaned)) return cleaned;
+  const match = cleaned.match(/\bDescription:\s*(.*?)(?=\s+(Cuisine\/category|Cuisine|Rating|Review count|Hours|Phone|Address|Menu|Ordering|Reservation):|$)/i);
+  return match?.[1]?.trim() || null;
+}
+
+function hasStructuredLabels(value: string): boolean {
+  return /\b(Cuisine\/category|Cuisine|Rating|Review count|Description|Hours|Phone|Address|Menu|Ordering|Reservation):/i.test(value);
+}
+
+function extractLegacyDailyHours(value: string | null): DailyHours[] {
+  if (!value || !hasStructuredLabels(value)) return [];
+  const source = value.replace(/\s+/g, " ");
+  const rows: DailyHours[] = [];
+  for (let index = 0; index < DAY_ORDER.length; index += 1) {
+    const { key, label } = DAY_ORDER[index];
+    const next = DAY_ORDER[index + 1]?.label;
+    const pattern = new RegExp(`${label}:\\s*(.*?)(?=${next ? `\\s+${next}:` : "\\s*$"})`, "i");
+    const match = source.match(pattern);
+    const raw = match?.[1]?.trim();
+    if (!raw) continue;
+    const valueText = raw.replace(/^(closed)$/i, "Closed").slice(0, 60);
+    rows.push({ day: key, label, value: valueText, closed: /^closed$/i.test(valueText) });
+  }
+  return rows;
 }
 
 function deriveShortName(name: string): string | null {
