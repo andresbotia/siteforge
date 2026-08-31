@@ -4,11 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createManualPublicProspect } from "@/data/leads";
 import { requireAdminSession } from "@/lib/auth/guard";
+import {
+  buildManualPublicProspectFailureState,
+  readManualPublicProspectFormValues,
+  type ManualPublicProspectFormState,
+} from "@/lib/prospects/form-state";
 
-export type ManualPublicProspectActionState = {
-  ok: boolean;
-  error?: string;
-};
+export type ManualPublicProspectActionState = ManualPublicProspectFormState;
 
 export async function importManualPublicProspectAction(
   _previousState: ManualPublicProspectActionState,
@@ -16,18 +18,11 @@ export async function importManualPublicProspectAction(
 ): Promise<ManualPublicProspectActionState> {
   await requireAdminSession();
 
-  const result = await createManualPublicProspect({
-    businessName: String(formData.get("businessName") ?? ""),
-    websiteUrl: String(formData.get("websiteUrl") ?? ""),
-    location: String(formData.get("location") ?? ""),
-    industry: String(formData.get("industry") ?? ""),
-    phone: String(formData.get("phone") ?? ""),
-    address: String(formData.get("address") ?? ""),
-    sourceNote: String(formData.get("sourceNote") ?? ""),
-  });
+  const values = readManualPublicProspectFormValues(formData);
+  const result = await createManualPublicProspect(values);
 
   if (!result.ok) {
-    return result;
+    return buildManualPublicProspectFailureState(result, values);
   }
 
   revalidatePath("/leads");

@@ -237,7 +237,7 @@ export async function listLeads(): Promise<Lead[]> {
 
 export type ManualPublicProspectImportResult =
   | { ok: true; leadId: string; duplicate: boolean }
-  | { ok: false; error: string };
+  | { ok: false; error: string; field?: keyof ManualPublicProspectInput };
 
 export async function createManualPublicProspect(
   input: ManualPublicProspectInput,

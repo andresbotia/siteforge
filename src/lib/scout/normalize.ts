@@ -40,13 +40,21 @@ export function parseLocation(input: string): { city: string; state: string; lab
   const trimmed = input.trim();
   const parts = trimmed.split(",").map((part) => part.trim()).filter(Boolean);
   if (parts.length >= 2) {
+    const city = toTitleCase(parts[0]);
+    const state = parts[1].replace(/\d+/g, "").trim().toUpperCase() || parts[1].toUpperCase();
     return {
-      city: parts[0],
-      state: parts[1].replace(/\d+/g, "").trim() || parts[1],
-      label: `${parts[0]}, ${parts[1]}`,
+      city,
+      state,
+      label: `${city}, ${state}`,
     };
   }
   return { city: trimmed, state: "", label: trimmed };
+}
+
+function toTitleCase(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
 export function locationMatches(

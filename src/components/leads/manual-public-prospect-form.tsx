@@ -17,6 +17,8 @@ export function ManualPublicProspectForm() {
     importManualPublicProspectAction,
     initialState,
   );
+  const values = state.values;
+  const errors = state.fieldErrors ?? {};
 
   return (
     <Card className="mb-4">
@@ -34,7 +36,15 @@ export function ManualPublicProspectForm() {
                 required
                 minLength={2}
                 placeholder="Example Plumbing Co."
+                defaultValue={values?.businessName ?? ""}
+                aria-invalid={Boolean(errors.businessName)}
+                aria-describedby={errors.businessName ? "manual-business-name-error" : undefined}
               />
+              {errors.businessName ? (
+                <p id="manual-business-name-error" className="text-[11px] text-danger">
+                  {errors.businessName}
+                </p>
+              ) : null}
             </Field>
           </div>
           <div className="lg:col-span-2">
@@ -48,22 +58,45 @@ export function ManualPublicProspectForm() {
                 name="websiteUrl"
                 required
                 placeholder="example.com"
+                defaultValue={values?.websiteUrl ?? ""}
+                aria-invalid={Boolean(errors.websiteUrl)}
+                aria-describedby={errors.websiteUrl ? "manual-website-url-error" : undefined}
               />
+              {errors.websiteUrl ? (
+                <p id="manual-website-url-error" className="text-[11px] text-danger">
+                  {errors.websiteUrl}
+                </p>
+              ) : null}
             </Field>
           </div>
           <div>
-            <Field label="Location" htmlFor="manual-location">
+            <Field label="Location" htmlFor="manual-location" hint="Example: Coconut Creek, FL">
               <TextInput
                 id="manual-location"
                 name="location"
                 required
-                placeholder="Miami, FL"
+                placeholder="Coconut Creek, FL"
+                defaultValue={values?.location ?? ""}
+                aria-invalid={Boolean(errors.location)}
+                aria-describedby={errors.location ? "manual-location-error" : undefined}
               />
+              {errors.location ? (
+                <p id="manual-location-error" className="text-[11px] text-danger">
+                  {errors.location}
+                </p>
+              ) : null}
             </Field>
           </div>
           <div>
             <Field label="Industry" htmlFor="manual-industry">
-              <SelectInput id="manual-industry" name="industry" required defaultValue="">
+              <SelectInput
+                id="manual-industry"
+                name="industry"
+                required
+                defaultValue={values?.industry ?? ""}
+                aria-invalid={Boolean(errors.industry)}
+                aria-describedby={errors.industry ? "manual-industry-error" : undefined}
+              >
                 <option value="" disabled>
                   Select
                 </option>
@@ -73,6 +106,11 @@ export function ManualPublicProspectForm() {
                   </option>
                 ))}
               </SelectInput>
+              {errors.industry ? (
+                <p id="manual-industry-error" className="text-[11px] text-danger">
+                  {errors.industry}
+                </p>
+              ) : null}
             </Field>
           </div>
           <div>
@@ -82,7 +120,15 @@ export function ManualPublicProspectForm() {
                 name="phone"
                 type="tel"
                 placeholder="Optional"
+                defaultValue={values?.phone ?? ""}
+                aria-invalid={Boolean(errors.phone)}
+                aria-describedby={errors.phone ? "manual-phone-error" : undefined}
               />
+              {errors.phone ? (
+                <p id="manual-phone-error" className="text-[11px] text-danger">
+                  {errors.phone}
+                </p>
+              ) : null}
             </Field>
           </div>
           <div className="lg:col-span-2">
@@ -91,6 +137,7 @@ export function ManualPublicProspectForm() {
                 id="manual-address"
                 name="address"
                 placeholder="Optional public address"
+                defaultValue={values?.address ?? ""}
               />
             </Field>
           </div>
@@ -102,6 +149,7 @@ export function ManualPublicProspectForm() {
                 rows={2}
                 maxLength={300}
                 placeholder="Where the public info came from"
+                defaultValue={values?.sourceNote ?? ""}
               />
             </Field>
           </div>

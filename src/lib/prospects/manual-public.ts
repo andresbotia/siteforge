@@ -33,7 +33,7 @@ export type ManualPublicProspectDraft = {
 
 export type ManualPublicProspectValidation =
   | { ok: true; draft: ManualPublicProspectDraft }
-  | { ok: false; error: string };
+  | { ok: false; error: string; field?: keyof ManualPublicProspectInput };
 
 const MAX_TEXT_LENGTH = 160;
 const MAX_NOTE_LENGTH = 300;
@@ -57,7 +57,7 @@ export async function validateManualPublicProspect(
 ): Promise<ManualPublicProspectValidation> {
   const businessName = cleanText(input.businessName);
   if (businessName.length < 2) {
-    return { ok: false, error: "Enter a public business name." };
+    return { ok: false, error: "Enter a public business name.", field: "businessName" };
   }
 
   const websiteUrl = withDefaultScheme(cleanText(input.websiteUrl, 220));
@@ -65,27 +65,27 @@ export async function validateManualPublicProspect(
   try {
     safeUrl = await assertSafeHttpUrl(websiteUrl, lookup);
   } catch {
-    return { ok: false, error: "Enter a public http or https website URL." };
+    return { ok: false, error: "Enter a public http or https website URL.", field: "websiteUrl" };
   }
 
   const location = parseLocation(input.location);
-  if (!location.city || !location.state) {
-    return { ok: false, error: "Enter city and state, for example Fort Lauderdale, FL." };
+  if (!location.city || !/^[A-Z]{2}$/.test(location.state)) {
+    return { ok: false, error: "Enter city and state, for example Coconut Creek, FL.", field: "location" };
   }
 
   const industry = cleanText(input.industry);
   if (!isIndustry(industry)) {
-    return { ok: false, error: "Choose a supported public business category." };
+    return { ok: false, error: "Choose a supported public business category.", field: "industry" };
   }
 
   const normalizedPhone = normalizePhone(input.phone);
   if (input.phone && !normalizedPhone) {
-    return { ok: false, error: "Enter a valid public phone number or leave it blank." };
+    return { ok: false, error: "Enter a valid public phone number or leave it blank.", field: "phone" };
   }
 
   const normalizedDomain = normalizeDomain(safeUrl.toString());
   if (!normalizedDomain) {
-    return { ok: false, error: "Enter a public business website URL." };
+    return { ok: false, error: "Enter a public business website URL.", field: "websiteUrl" };
   }
 
   const business: NormalizedBusiness = {

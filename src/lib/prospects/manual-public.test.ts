@@ -6,6 +6,10 @@ import { describe, it } from "node:test";
 import { isLeadEligibleForAudit } from "../auditor/eligibility";
 import { isLeadEligibleForBuild } from "../builder/eligibility";
 import {
+  buildManualPublicProspectFailureState,
+  readManualPublicProspectFormValues,
+} from "./form-state";
+import {
   MANUAL_PUBLIC_PROSPECT_SOURCE,
   isManualPublicProspectSource,
   validateManualPublicProspect,
@@ -38,6 +42,85 @@ describe("manual public prospect import validation", () => {
     assert.equal(result.draft.business.normalizedPhone, "9545550142");
     assert.equal(result.draft.business.normalizedName, "harborline plumbing");
     assert.equal(result.draft.duplicateId, null);
+  });
+
+  it("accepts and normalizes reasonable location whitespace and casing", async () => {
+    const result = await validateManualPublicProspect(
+      {
+        businessName: "Coconut Creek Cooling",
+        websiteUrl: "coconut-cooling.example.test",
+        location: "  coconut creek , fl  ",
+        industry: "HVAC",
+      },
+      [],
+    );
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.draft.business.city, "Coconut Creek");
+    assert.equal(result.draft.business.state, "FL");
+  });
+
+  it("accepts Coconut Creek, FL as a valid location", async () => {
+    const result = await validateManualPublicProspect(
+      {
+        businessName: "Coconut Creek Electric",
+        websiteUrl: "coconut-electric.example.test",
+        location: "Coconut Creek, FL",
+        industry: "Electrical",
+      },
+      [],
+    );
+
+    assert.equal(result.ok, true);
+    if (!result.ok) return;
+    assert.equal(result.draft.business.city, "Coconut Creek");
+    assert.equal(result.draft.business.state, "FL");
+  });
+
+  it("preserves entered form values when location validation fails", async () => {
+    const formData = new FormData();
+    formData.set("businessName", "Palm Aire Plumbing");
+    formData.set("websiteUrl", "palmaire.example.test");
+    formData.set("location", "Coconut Creek Florida");
+    formData.set("industry", "Plumbing");
+    formData.set("phone", "(954) 555-0199");
+    formData.set("address", "123 Public Rd");
+    formData.set("sourceNote", "Public website footer");
+
+    const values = readManualPublicProspectFormValues(formData);
+    const result = await validateManualPublicProspect(values, []);
+
+    assert.equal(result.ok, false);
+    if (result.ok) return;
+    const state = buildManualPublicProspectFailureState(result, values);
+    assert.equal(state.values?.businessName, "Palm Aire Plumbing");
+    assert.equal(state.values?.websiteUrl, "palmaire.example.test");
+    assert.equal(state.values?.location, "Coconut Creek Florida");
+    assert.equal(state.values?.industry, "Plumbing");
+    assert.equal(state.values?.phone, "(954) 555-0199");
+    assert.equal(state.values?.address, "123 Public Rd");
+    assert.equal(state.values?.sourceNote, "Public website footer");
+    assert.equal(state.fieldErrors?.location, result.error);
+  });
+
+  it("rejects malformed location values", async () => {
+    for (const location of ["Coconut Creek Florida", "Coconut Creek, Florida", "FL", ""]) {
+      const result = await validateManualPublicProspect(
+        {
+          businessName: "Malformed Location Business",
+          websiteUrl: "malformed-location.example.test",
+          location,
+          industry: "HVAC",
+        },
+        [],
+      );
+
+      assert.equal(result.ok, false);
+      if (!result.ok) {
+        assert.equal(result.field, "location");
+      }
+    }
   });
 
   it("dedupes against existing normalized domains", async () => {
