@@ -13,8 +13,12 @@ export const EXTERNAL_SITE_STATUSES = [
   "validating",
   "validation_failed",
   "ready_for_review",
+  "deployment_approval_required",
+  "deployment_approval_pending",
+  "deploying",
   "approved_for_preview",
   "preview_deployed",
+  "deployment_failed",
   "revoked",
 ] as const;
 
@@ -250,12 +254,12 @@ export function mergeExternalArtifactMetadata(
     ...metadata,
     artifactId: artifact.id,
     sourceManifestFingerprint: artifact.source_manifest_fingerprint,
-    controlledPreviewUrl: deploymentUrl ?? metadata.controlledPreviewUrl,
+    controlledPreviewUrl: deploymentStatus === "deployed" ? deploymentUrl : null,
     deploymentStatus,
     deploymentId: stringOrNull(artifact.deployment_id),
     deploymentUrl,
     deploymentFailureSummary: stringOrNull(artifact.failure_summary),
-    lifecycleStatus: deploymentStatus === "deployed" ? "preview_deployed" : metadata.lifecycleStatus,
+    lifecycleStatus: lifecycleStatusFor(metadata.validation.ok, buildStatus === "passed", deploymentStatus),
     build: {
       ...metadata.build,
       ok: buildStatus === "passed",
@@ -372,21 +376,23 @@ export function canApproveExternalGeneratedSite(metadata: ExternalApprovalMetada
   if (!metadata.build.ok) {
     return { ok: false, error: "External generated site build validation has not passed." };
   }
-  if (!metadata.controlledPreviewUrl || !isControlledPreviewUrl(metadata.controlledPreviewUrl)) {
-    return { ok: false, error: "External generated site needs an approved SiteForge-controlled Vercel preview deployment before public preview approval." };
-  }
-  if (metadata.deploymentStatus && metadata.deploymentStatus !== "deployed") {
+  if (metadata.deploymentStatus !== "deployed") {
     return { ok: false, error: "External generated site preview deployment has not completed." };
+  }
+  const deploymentUrl = metadata.deploymentUrl;
+  if (!deploymentUrl || !isControlledPreviewUrl(deploymentUrl)) {
+    return { ok: false, error: "External generated site needs an approved SiteForge-controlled Vercel preview deployment before public preview approval." };
   }
   return { ok: true };
 }
 
 export function getExternalPreviewTarget(metadata: ExternalApprovalMetadata | null): string | null {
   if (!metadata) return null;
-  if (!metadata.controlledPreviewUrl || !isControlledPreviewUrl(metadata.controlledPreviewUrl)) return null;
   if (!metadata.validation.ok || !metadata.build.ok) return null;
-  if (metadata.deploymentStatus && metadata.deploymentStatus !== "deployed") return null;
-  return metadata.controlledPreviewUrl;
+  if (metadata.deploymentStatus !== "deployed") return null;
+  const deploymentUrl = metadata.deploymentUrl;
+  if (!deploymentUrl || !isControlledPreviewUrl(deploymentUrl)) return null;
+  return deploymentUrl;
 }
 
 export function buildExternalSiteMetadata(input: {
@@ -394,7 +400,6 @@ export function buildExternalSiteMetadata(input: {
   providerProjectId?: string | null;
   providerCommitSha?: string | null;
   providerPreviewUrl?: string | null;
-  controlledPreviewUrl?: string | null;
   importedAt: string;
   generationCostCredits?: number | null;
   generationCostUsdEstimate?: number | null;
@@ -417,7 +422,7 @@ export function buildExternalSiteMetadata(input: {
     providerProjectId: cleanOptional(input.providerProjectId, 120),
     providerCommitSha: cleanOptional(input.providerCommitSha, 80),
     providerPreviewUrl: cleanOptional(input.providerPreviewUrl, 300),
-    controlledPreviewUrl: cleanOptional(input.deploymentUrl ?? input.controlledPreviewUrl, 300),
+    controlledPreviewUrl: cleanOptional(input.deploymentUrl, 300),
     artifactId: cleanOptional(input.artifactId, 80),
     sourceManifestFingerprint: cleanOptional(input.sourceManifestFingerprint, 80),
     deploymentStatus: input.deploymentStatus ?? "not_requested",
@@ -427,7 +432,11 @@ export function buildExternalSiteMetadata(input: {
     importedAt: input.importedAt,
     importedBy: "admin",
     provenance: "operator_imported_external_generated_site",
-    lifecycleStatus: input.validation.ok && input.build.ok ? "ready_for_review" : "validation_failed",
+    lifecycleStatus: lifecycleStatusFor(
+      input.validation.ok,
+      input.build.ok,
+      input.deploymentStatus ?? "not_requested",
+    ),
     generationCostCredits: input.generationCostCredits ?? null,
     generationCostUsdEstimate: input.generationCostUsdEstimate ?? null,
     providerCostNotes: cleanOptional(input.providerCostNotes, 300),
@@ -487,6 +496,20 @@ function buildResultFor(
     command: "static source inspection only",
     reason: "Unsupported external generated site stack.",
   };
+}
+
+function lifecycleStatusFor(
+  validationOk: boolean,
+  buildOk: boolean,
+  deploymentStatus: ExternalGeneratedSiteMetadata["deploymentStatus"],
+): ExternalSiteLifecycleStatus {
+  if (!validationOk) return "validation_failed";
+  if (!buildOk) return "ready_for_review";
+  if (deploymentStatus === "pending_approval") return "deployment_approval_pending";
+  if (deploymentStatus === "deploying") return "deploying";
+  if (deploymentStatus === "deployed") return "preview_deployed";
+  if (deploymentStatus === "failed") return "deployment_failed";
+  return "deployment_approval_required";
 }
 
 function inspectFile(path: string, content: string, findings: ExternalSiteFinding[]): void {

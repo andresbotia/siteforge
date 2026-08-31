@@ -52,8 +52,11 @@ export default async function PublicPreviewPage({
   });
 
   const externalTarget = getPublicPreviewExternalTarget(preview.site);
-  if (externalTarget) {
-    redirect(externalTarget);
+  if (preview.site.externalGeneratedSite) {
+    if (externalTarget) {
+      redirect(externalTarget);
+    }
+    notFound();
   }
 
   return (

@@ -148,8 +148,12 @@ export interface ExternalGeneratedSite {
     | "validating"
     | "validation_failed"
     | "ready_for_review"
+    | "deployment_approval_required"
+    | "deployment_approval_pending"
+    | "deploying"
     | "approved_for_preview"
     | "preview_deployed"
+    | "deployment_failed"
     | "revoked";
   importedAt: string;
   importedBy: "admin";

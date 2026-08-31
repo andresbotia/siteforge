@@ -42,7 +42,6 @@ export type ExternalSiteImportInput = {
   providerProjectId?: string | null;
   providerCommitSha?: string | null;
   providerPreviewUrl?: string | null;
-  controlledPreviewUrl?: string | null;
   generationCostCredits?: string | null;
   generationCostUsdEstimate?: string | null;
   providerCostNotes?: string | null;
@@ -88,7 +87,7 @@ export async function importExternalGeneratedSite(
   const currentSnapshot = createVerifiedFactSnapshot(lead);
   const checked = validateExternalSourceArtifact({
     provider,
-    controlledPreviewUrl: normalizeOptionalUrl(input.controlledPreviewUrl),
+    controlledPreviewUrl: null,
     providerPreviewUrl: normalizeOptionalUrl(input.providerPreviewUrl),
     manifest: input.manifest,
   });
@@ -170,7 +169,6 @@ export async function importExternalGeneratedSite(
     providerProjectId: input.providerProjectId,
     providerCommitSha: input.providerCommitSha,
     providerPreviewUrl: normalizeOptionalUrl(input.providerPreviewUrl),
-    controlledPreviewUrl: normalizeOptionalUrl(input.controlledPreviewUrl),
     importedAt: now,
     generationCostCredits: numericOrNull(input.generationCostCredits),
     generationCostUsdEstimate: numericOrNull(input.generationCostUsdEstimate),

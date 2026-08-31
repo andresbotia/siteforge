@@ -40,7 +40,6 @@ export async function importExternalGeneratedSiteAction(
     providerProjectId: stringValue(formData.get("providerProjectId")),
     providerCommitSha: stringValue(formData.get("providerCommitSha")),
     providerPreviewUrl: stringValue(formData.get("providerPreviewUrl")),
-    controlledPreviewUrl: stringValue(formData.get("controlledPreviewUrl")),
     generationCostCredits: stringValue(formData.get("generationCostCredits")),
     generationCostUsdEstimate: stringValue(formData.get("generationCostUsdEstimate")),
     providerCostNotes: stringValue(formData.get("providerCostNotes")),

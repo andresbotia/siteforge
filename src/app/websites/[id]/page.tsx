@@ -95,19 +95,29 @@ export default async function WebsiteDetailPage({ params }: WebsitePageProps) {
           />
           <CardBody className="space-y-4">
             <div className="grid gap-3 sm:grid-cols-2">
-              <Detail label="Provider" value={site.externalGeneratedSite.externalProvider} />
-              <Detail label="Project ID" value={site.externalGeneratedSite.providerProjectId ?? "none"} />
-              <Detail label="Commit SHA" value={site.externalGeneratedSite.providerCommitSha ?? "none"} />
-              <Detail label="Provider preview" value={site.externalGeneratedSite.providerPreviewUrl ?? "none"} />
-              <Detail label="SiteForge target" value={site.externalGeneratedSite.controlledPreviewUrl ?? "missing"} />
+              <Detail label="Provider reference" value={site.externalGeneratedSite.externalProvider} />
+              <Detail label="Provider project ID" value={site.externalGeneratedSite.providerProjectId ?? "none"} />
+              <Detail label="Provider commit" value={site.externalGeneratedSite.providerCommitSha ?? "none"} />
+              <Detail label="Provider preview URL - admin only" value={site.externalGeneratedSite.providerPreviewUrl ?? "none"} />
               <Detail label="Artifact ID" value={site.externalGeneratedSite.artifactId ?? "missing"} />
+              <Detail label="Artifact status" value={site.externalGeneratedSite.lifecycleStatus} />
               <Detail label="Artifact fingerprint" value={site.externalGeneratedSite.sourceManifestFingerprint ?? "missing"} />
               <Detail label="Fact fingerprint" value={site.externalGeneratedSite.verifiedFactFingerprint || "none"} />
-              <Detail label="Validation" value={site.externalGeneratedSite.validation.status} />
-              <Detail label="Build" value={`${site.externalGeneratedSite.build.status} - ${site.externalGeneratedSite.build.reason}`} />
-              <Detail label="Deployment" value={site.externalGeneratedSite.deploymentStatus} />
-              <Detail label="Deployment ID" value={site.externalGeneratedSite.deploymentId ?? "none"} />
-              <Detail label="Deployment URL" value={site.externalGeneratedSite.deploymentUrl ?? "none"} />
+              <Detail label="Validation status" value={site.externalGeneratedSite.validation.status} />
+              <Detail label="Build status" value={`${site.externalGeneratedSite.build.status} - ${site.externalGeneratedSite.build.reason}`} />
+              <Detail label="Deployment status" value={site.externalGeneratedSite.deploymentStatus} />
+              <Detail label="SiteForge/Vercel deployment ID - generated" value={site.externalGeneratedSite.deploymentId ?? "none"} />
+              <Detail label="SiteForge/Vercel deployment URL - generated" value={site.externalGeneratedSite.deploymentUrl ?? "none"} />
+              <Detail
+                label="Public SiteForge preview"
+                value={
+                  previewAnalytics.deployment
+                    ? `${previewAnalytics.deployment.status} token ...${previewAnalytics.deployment.tokenHint}`
+                    : previewAnalytics.pendingApprovalId
+                      ? "approval pending"
+                      : "not published"
+                }
+              />
             </div>
             {site.externalGeneratedSite.deploymentFailureSummary ? (
               <div className="rounded-md border border-danger/30 bg-danger-muted p-3 text-sm text-danger">

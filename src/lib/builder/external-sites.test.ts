@@ -87,7 +87,7 @@ describe("external generated site import validation", () => {
   it("accepts a fictional Lovable-like Vite React restaurant fixture", () => {
     const result = validateExternalSiteSource({
       provider: "lovable",
-      controlledPreviewUrl: "https://mariposa-siteforge-preview.vercel.app",
+      controlledPreviewUrl: null,
       providerPreviewUrl: "https://preview.lovable.app/projects/sample",
       manifest: fixtureManifest,
     });
@@ -175,13 +175,12 @@ describe("external generated site import validation", () => {
     const snapshot = createVerifiedFactSnapshot(lead);
     const checked = validateExternalSiteSource({
       provider: "lovable",
-      controlledPreviewUrl: "https://mariposa-siteforge-preview.vercel.app",
+      controlledPreviewUrl: null,
       providerPreviewUrl: null,
       manifest: fixtureManifest,
     });
     const metadata = buildExternalSiteMetadata({
       provider: "lovable",
-      controlledPreviewUrl: "https://mariposa-siteforge-preview.vercel.app",
       importedAt: "2026-08-30T00:00:00.000Z",
       snapshot,
       currentSnapshot: snapshot,
@@ -191,8 +190,46 @@ describe("external generated site import validation", () => {
     assert.equal(canApproveExternalGeneratedSite(metadata).ok, false);
     assert.equal(getExternalPreviewTarget(metadata), null);
 
-    const failed = { ...metadata, controlledPreviewUrl: "https://preview.lovable.app" };
-    assert.equal(canApproveExternalGeneratedSite(failed).ok, false);
-    assert.equal(getExternalPreviewTarget(failed), null);
+    const operatorSupplied = {
+      ...metadata,
+      controlledPreviewUrl: "https://operator-supplied.vercel.app",
+      deploymentStatus: "deployed" as const,
+    };
+    assert.equal(canApproveExternalGeneratedSite(operatorSupplied).ok, false);
+    assert.equal(getExternalPreviewTarget(operatorSupplied), null);
+
+    const deployed = {
+      ...metadata,
+      controlledPreviewUrl: "https://mariposa-siteforge-preview.vercel.app",
+      deploymentUrl: "https://mariposa-siteforge-preview.vercel.app",
+      deploymentStatus: "deployed" as const,
+      deploymentId: "dpl_123",
+    };
+    assert.deepEqual(canApproveExternalGeneratedSite(deployed), { ok: true });
+    assert.equal(getExternalPreviewTarget(deployed), "https://mariposa-siteforge-preview.vercel.app");
+  });
+
+  it("keeps provider preview URL as optional metadata and never as the public target", () => {
+    const snapshot = createVerifiedFactSnapshot(lead);
+    const checked = validateExternalSiteSource({
+      provider: "lovable",
+      controlledPreviewUrl: null,
+      providerPreviewUrl: "https://preview.lovable.app/projects/sample",
+      manifest: fixtureManifest,
+    });
+    const metadata = buildExternalSiteMetadata({
+      provider: "lovable",
+      providerPreviewUrl: "https://preview.lovable.app/projects/sample",
+      importedAt: "2026-08-30T00:00:00.000Z",
+      snapshot,
+      currentSnapshot: snapshot,
+      validation: checked.validation,
+      build: checked.build,
+    });
+
+    assert.equal(metadata.providerPreviewUrl, "https://preview.lovable.app/projects/sample");
+    assert.equal(metadata.controlledPreviewUrl, null);
+    assert.equal(metadata.deploymentUrl, null);
+    assert.equal(getExternalPreviewTarget(metadata), null);
   });
 });

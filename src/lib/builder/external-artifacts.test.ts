@@ -341,12 +341,24 @@ describe("external source artifacts", () => {
   it("keeps the /websites external import entry point admin-bound", async () => {
     const websitesPage = await readFile("src/app/websites/page.tsx", "utf8");
     const importPage = await readFile("src/app/websites/import-external/page.tsx", "utf8");
+    const form = await readFile("src/components/builder/external-site-import-form.tsx", "utf8");
     const action = await readFile("src/app/actions/external-sites.ts", "utf8");
     assert.match(websitesPage, /Import External Site/);
     assert.match(websitesPage, /href="\/websites\/import-external"/);
     assert.match(importPage, /listEligibleLeadsForBuild/);
     assert.match(importPage, /ExternalSiteImportForm/);
+    assert.match(form, /SiteForge\/Vercel URL is generated only after that deployment completes/);
+    assert.doesNotMatch(form, /name="controlledPreviewUrl"/);
+    assert.doesNotMatch(action, /formData\.get\("controlledPreviewUrl"\)/);
     assert.match(action, /importExternalGeneratedSite/);
     assert.match(action, /requestExternalPreviewDeployment/);
+  });
+
+  it("keeps external public previews fail-closed until SiteForge deployment exists", async () => {
+    const publicPreviewPage = await readFile("src/app/p/[token]/page.tsx", "utf8");
+    assert.match(publicPreviewPage, /preview\.site\.externalGeneratedSite/);
+    assert.match(publicPreviewPage, /notFound\(\)/);
+    assert.ok(publicPreviewPage.indexOf("await recordPreviewEvent") < publicPreviewPage.indexOf("redirect(externalTarget)"));
+    assert.doesNotMatch(publicPreviewPage, /providerPreviewUrl/);
   });
 });

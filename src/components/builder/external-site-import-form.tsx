@@ -36,6 +36,10 @@ export function ExternalSiteImportForm({ leads }: { leads: BuilderCandidate[] })
         </SelectInput>
       </Field>
 
+      <div className="rounded-md border border-border-subtle p-3 text-sm text-muted">
+        Import stores an immutable source artifact, then SiteForge validates and build-checks it. Preview deployment is a separate approval-gated action, and the SiteForge/Vercel URL is generated only after that deployment completes.
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <Field label="Provider" htmlFor="external-provider">
           <SelectInput id="external-provider" name="provider" defaultValue="lovable" required>
@@ -51,21 +55,14 @@ export function ExternalSiteImportForm({ leads }: { leads: BuilderCandidate[] })
           <TextInput id="external-commit" name="providerCommitSha" />
         </Field>
         <Field
-          label="Vercel-controlled preview URL"
-          htmlFor="external-controlled-preview"
-          hint="Required before public preview approval; provider editor URLs are never prospect-facing."
+          label="Provider preview URL"
+          htmlFor="external-provider-preview"
+          hint="Optional admin reference only. This is never used as the public preview destination."
         >
-          <TextInput
-            id="external-controlled-preview"
-            name="controlledPreviewUrl"
-            placeholder="https://example.vercel.app"
-          />
-        </Field>
-        <Field label="Provider preview URL" htmlFor="external-provider-preview">
           <TextInput
             id="external-provider-preview"
             name="providerPreviewUrl"
-            placeholder="Admin reference only"
+            placeholder="https://preview.provider.example"
           />
         </Field>
         <Field label="Cost notes" htmlFor="external-cost-notes">
