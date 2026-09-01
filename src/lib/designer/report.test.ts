@@ -17,6 +17,7 @@ describe("designer worker report contract", () => {
       unsupportedFactCheck: "No invented facts.",
       technicalNotes: "Vite + React static export.",
       visualNotes: "Full-bleed hero, editorial services list.",
+      selfCritique: "Tightened the CTA link so it never wraps to two lines on a 375px viewport.",
       recommendedMasterFamily: "home_services",
       candidateForMaster: true,
       warnings: [],
@@ -27,6 +28,7 @@ describe("designer worker report contract", () => {
       assert.equal(parsed.report.status, "completed");
       assert.equal(parsed.report.candidateForMaster, true);
       assert.equal(parsed.report.recommendedMasterFamily, "home_services");
+      assert.match(parsed.report.selfCritique, /never wraps to two lines/);
     }
   });
 

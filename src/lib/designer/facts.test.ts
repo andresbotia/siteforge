@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { DESIGNER_IMAGE_PROVENANCE, businessFactsFromLead, emptyImageryManifest, fingerprintFacts, fixtureBusinessFacts } from "./facts";
+import { DESIGNER_IMAGE_PROVENANCE, businessFactsFromLead, computeImageryMode, emptyImageryManifest, fingerprintFacts, fixtureBusinessFacts } from "./facts";
 
 describe("designer facts sanitization", () => {
   it("builds fixture facts that carry no sourced identity beyond what was passed in", () => {
@@ -55,5 +55,23 @@ describe("designer facts sanitization", () => {
       [...DESIGNER_IMAGE_PROVENANCE].sort(),
       ["customer_supplied", "generated", "licensed", "operator_verified", "template_illustrative"].sort(),
     );
+  });
+});
+
+describe("computeImageryMode", () => {
+  const asset = (url: string) => ({ role: "hero" as const, sourceType: "operator_verified" as const, url, alt: "x", note: "" });
+
+  it("is photo_absent with no usable images", () => {
+    assert.equal(computeImageryMode(emptyImageryManifest()), "photo_absent");
+    assert.equal(computeImageryMode({ images: [asset("")], policy: "x" }), "photo_absent");
+  });
+
+  it("is photo_light with one or two usable images", () => {
+    assert.equal(computeImageryMode({ images: [asset("/a.jpg")], policy: "x" }), "photo_light");
+    assert.equal(computeImageryMode({ images: [asset("/a.jpg"), asset("/b.jpg")], policy: "x" }), "photo_light");
+  });
+
+  it("is photo_rich with three or more usable images", () => {
+    assert.equal(computeImageryMode({ images: [asset("/a.jpg"), asset("/b.jpg"), asset("/c.jpg")], policy: "x" }), "photo_rich");
   });
 });

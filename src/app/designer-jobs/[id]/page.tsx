@@ -33,6 +33,8 @@ export default async function DesignerJobDetailPage({ params }: PageProps) {
   const qa = asRecord(job.technical_qa_report);
   const validation = asRecord(qa.validation);
   const build = asRecord(qa.build);
+  const workerReport = asRecord(job.output_report);
+  const hasWorkerReport = typeof workerReport.summary === "string" && workerReport.summary.length > 0;
   const cancellable = ["queued", "claimed", "preparing", "generating"].includes(job.status);
   const promotable = canPromoteToMaster({ status: job.status, visualReviewStatus: job.visual_review_status, mode: job.mode }) && !job.is_fixture;
 
@@ -112,6 +114,50 @@ export default async function DesignerJobDetailPage({ params }: PageProps) {
           </pre>
         </CardBody>
       </Card>
+
+      {hasWorkerReport ? (
+        <Card className="mt-4">
+          <CardHeader
+            title="Worker's own report"
+            description="A claim, not a verdict -- SiteForge independently validates the output above and does not trust this by itself."
+          />
+          <CardBody className="grid gap-3 text-sm">
+            <Row label="Summary" value={String(workerReport.summary)} />
+            {typeof workerReport.visualNotes === "string" && workerReport.visualNotes ? (
+              <div>
+                <p className="text-xs font-medium text-muted">Design decisions (visualNotes)</p>
+                <p className="mt-1 whitespace-pre-wrap text-xs text-muted">{workerReport.visualNotes}</p>
+              </div>
+            ) : null}
+            {typeof workerReport.selfCritique === "string" && workerReport.selfCritique ? (
+              <div>
+                <p className="text-xs font-medium text-muted">Self-critique pass</p>
+                <p className="mt-1 whitespace-pre-wrap text-xs text-muted">{workerReport.selfCritique}</p>
+              </div>
+            ) : null}
+            {Array.isArray(workerReport.factsOmitted) && workerReport.factsOmitted.length > 0 ? (
+              <div>
+                <p className="text-xs font-medium text-muted">Facts omitted (honest absence, not invented)</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-muted">
+                  {workerReport.factsOmitted.map((item: unknown, index: number) => (
+                    <li key={index}>{String(item)}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {Array.isArray(workerReport.warnings) && workerReport.warnings.length > 0 ? (
+              <div>
+                <p className="text-xs font-medium text-muted">Worker warnings</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4 text-xs text-muted">
+                  {workerReport.warnings.map((item: unknown, index: number) => (
+                    <li key={index}>{String(item)}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
 
       {job.status === "visual_review_required" ? (
         <Card className="mt-4">

@@ -83,6 +83,25 @@ describe("designer worker system prompt", () => {
     assert.doesNotMatch(DESIGNER_WORKER_SYSTEM_PROMPT, /ANTHROPIC_API_KEY/);
     assert.doesNotMatch(DESIGNER_WORKER_SYSTEM_PROMPT, /XAI_API_KEY/);
   });
+
+  it("states the commercial bar explicitly and a flexible, non-rigid page-anatomy framework", () => {
+    assert.ok(includesPhrase("would a human reviewer confidently send this url to the business owner"));
+    assert.ok(includesPhrase("COMMERCIAL PAGE ANATOMY"));
+    assert.ok(includesPhrase("a strong closing conversion section"));
+    assert.ok(includesPhrase("not a fixed template or a required section order"));
+  });
+
+  it("requires an explicit image-mode strategy decision (PHOTO_RICH/PHOTO_LIGHT/PHOTO_ABSENT)", () => {
+    for (const mode of ["PHOTO_RICH", "PHOTO_LIGHT", "PHOTO_ABSENT"]) {
+      assert.ok(includesPhrase(mode));
+    }
+  });
+
+  it("requires a self-critique pass before the worker finishes", () => {
+    assert.ok(includesPhrase("SELF-CRITIQUE BEFORE YOU FINISH"));
+    assert.ok(includesPhrase("mobile check"));
+    assert.ok(includesPhrase("selfCritique"));
+  });
 });
 
 describe("buildDesignerUserPrompt", () => {
@@ -140,5 +159,21 @@ describe("buildDesignerUserPrompt", () => {
     assert.match(prompt, /REVISION REQUESTED/);
     assert.match(prompt, /Make the hero stronger and simplify the service-area section\./);
     assert.ok(prompt.replace(/\s+/g, " ").includes("read your previous workspace/site/ files first"));
+  });
+
+  it("derives and states the category context and image mode from the job's own facts/imagery", () => {
+    const prompt = buildDesignerUserPrompt({
+      jobId: "job-1",
+      mode: "new_master",
+      templateFamily: null,
+      reason: "smoke test",
+      facts,
+      imagery: emptyImageryManifest(),
+      designBriefText: "brief",
+      isFixture: true,
+    });
+    assert.match(prompt, /Category: Landscaping \/ outdoor services/);
+    assert.match(prompt, /Image mode for this job: PHOTO_ABSENT/);
+    assert.match(prompt, /Reference: /);
   });
 });

@@ -1,3 +1,5 @@
+import { resolveDesignerCategoryContext } from "./category";
+
 /**
  * Provider-neutral, Builder-agnostic brief for a Designer Job.
  *
@@ -35,11 +37,20 @@ export type DesignerBrief = {
 export function buildDesignerBrief(request: DesignerBriefRequest): DesignerBrief {
   const industry = request.industry.trim() || "local service business";
   const example = request.exampleBusiness ?? null;
+  const category = resolveDesignerCategoryContext(industry);
 
   const sections = [
     `# Design brief: ${industry}`,
     "",
     `A single-location ${industry} business in a US metro area, being evaluated for one premium, category-specific candidate website.`,
+    "",
+    `## Category context: ${category.label}`,
+    "",
+    "This category typically needs to communicate, roughly in order of importance (only where the underlying facts support it):",
+    "",
+    ...category.informationPriorities.map((item) => `- ${item}`),
+    "",
+    "This is a priority list, not a required section list or a fixed order -- decide the actual page structure yourself. Do not force a different category's information architecture (e.g. a menu, a portfolio grid, or a credentials block) onto a business it doesn't fit.",
     "",
   ];
 

@@ -104,6 +104,26 @@ export function emptyImageryManifest(): DesignerImageryManifest {
   return { images: [], policy: NO_IMAGERY_POLICY };
 }
 
+/**
+ * How much legitimate photography this job has to work with. Computed
+ * deterministically from the manifest already on the job row -- never
+ * stored separately, so it can't drift from the manifest it describes.
+ * Mirrors the PHOTO_RICH/PHOTO_LIGHT/PHOTO_ABSENT distinction the Designer
+ * Worker must reason about explicitly (see prompt.ts's IMAGE STRATEGY
+ * section): 3+ usable images is enough to genuinely compose with, 1-2 means
+ * one strong image used deliberately rather than a gallery, 0 means an
+ * honest non-photographic treatment.
+ */
+export const DESIGNER_IMAGERY_MODES = ["photo_rich", "photo_light", "photo_absent"] as const;
+export type DesignerImageryMode = (typeof DESIGNER_IMAGERY_MODES)[number];
+
+export function computeImageryMode(manifest: DesignerImageryManifest): DesignerImageryMode {
+  const usable = manifest.images.filter((image) => image.url.trim().length > 0);
+  if (usable.length >= 3) return "photo_rich";
+  if (usable.length >= 1) return "photo_light";
+  return "photo_absent";
+}
+
 export function fingerprintFacts(facts: DesignerBusinessFacts): string {
   return createHash("sha256").update(stableJson(facts)).digest("hex");
 }

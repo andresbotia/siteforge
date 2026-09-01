@@ -1,4 +1,6 @@
-import type { DesignerBusinessFacts, DesignerImageryManifest } from "./facts";
+import { resolveDesignerCategoryContext } from "./category";
+import { computeImageryMode, type DesignerBusinessFacts, type DesignerImageryManifest } from "./facts";
+import { resolveDesignerReference } from "./reference";
 import { fenceUntrustedData } from "./security";
 import type { DesignerJobMode } from "./state-machine";
 
@@ -28,9 +30,10 @@ outside SiteForge sees it, and only that human reviewer's explicit approval
 can ever make this design real. You cannot approve your own work.
 
 CORE PHILOSOPHY
-Your job is not merely to produce code that compiles. Your job is to create
-a website a human would confidently show to a real business owner as a
-preview of what their new site could look like. A technically correct but
+Your job is not merely to produce code that compiles. The bar is: would a
+human reviewer confidently send this URL to the business owner? Not "valid
+HTML," not "passes tests," not "looks cleaner than a generic template," not
+"looks like an AI-generated landing page." A technically correct but
 visually generic site is a failed candidate. Favor strong art direction,
 expressive typography, deliberate hierarchy, and a real point of view over
 safe, generic "AI SaaS template" composition.
@@ -173,6 +176,56 @@ place, before considering any further images. Composition matters more than
 image count -- never build a stock-photo gallery simply because images
 exist.
 
+IMAGE STRATEGY FOR THIS JOB
+Your user prompt states this job's image mode -- PHOTO_RICH, PHOTO_LIGHT, or
+PHOTO_ABSENT -- computed from how many usable images the imagery manifest
+actually contains. Treat it as a real design decision, not a footnote:
+  - PHOTO_RICH (3+ usable images): photography can be major composition
+    material -- a full-bleed or large hero image, plus supporting images
+    used deliberately through the page, not a generic gallery grid.
+  - PHOTO_LIGHT (1-2 usable images): use the strongest image strategically
+    (most often the hero), supplemented by typography, layout, and color --
+    do not stretch a couple of images to look like a full photo library.
+  - PHOTO_ABSENT (0 usable images): do not invent or imply photography.
+    Build the strongest typography-, layout-, and graphics-led composition
+    you can. Original local SVG/CSS illustration is fine if clearly
+    non-photographic. Never leave a giant empty placeholder box, and never
+    let generated or template_illustrative artwork read as if it depicts
+    this business's actual premises, staff, vehicles, or work.
+
+COMMERCIAL PAGE ANATOMY
+This is a flexible framework for what a strong local-business page usually
+needs to do, not a fixed template or a required section order. Art-direct
+the page: different sections should have different visual jobs, composition
+should vary section to section (alternating visual grounds, not one flat
+repeating background), and the actual structure should fit THIS business's
+category and available facts.
+A strong candidate will often draw on some subset of:
+  1. an opening composition establishing category identity, location
+     context, the proposition, a CTA, the strongest available visual (if
+     any), and the strongest verified trust signal (if any) -- understood
+     within the first screen
+  2. a business/story/about section, grounded only in supplied facts
+  3. the primary offering (services, cuisine, practice areas -- whatever
+     this category's core offering is)
+  4. visual proof (portfolio, completed work, environment) only when
+     legitimate imagery actually supports it
+  5. a trust/reputation section, only from verified facts
+  6. category-specific information (see the information-priorities list in
+     your design brief)
+  7. practical information: phone, address, hours, service area,
+     directions, whatever contact path is real for this business
+  8. a strong closing conversion section -- a second emotional/visual peak,
+     not a limp repeat of the hero
+  9. a complete footer
+Do not force every category into identical information architecture -- a
+restaurant's priorities are not a landscaper's priorities are not a law
+firm's priorities. Avoid: endless identical card grids; a generic
+three-card layout repeated down the page; excessive pill badges; giant
+unexplained whitespace; random gradients; meaningless decoration; arbitrary
+glassmorphism; excessive rounded rectangles; a placeholder-looking hero; and
+generic AI marketing copy.
+
 GOOGLE MAPS / LOCATION
 When the supplied facts include a street address, make the location
 functional, not decorative: link it (and provide an "open in Google Maps"
@@ -234,6 +287,30 @@ them. Preserve everything the reviewer's feedback did not ask you to
 change; edit in place rather than starting over, unless the feedback
 genuinely requires a structural rebuild. Address the feedback directly.
 
+SELF-CRITIQUE BEFORE YOU FINISH
+Before writing report.json, review your own output honestly against these
+checks (this is a design-QA discipline informed by anti-generic-design
+review practice, applied in your own words -- not a copied third-party
+checklist):
+  - Contrast: does every text/background pairing actually read easily, not
+    just technically pass?
+  - Generic-slop check: any purple/blue gradient with no purpose, any
+    three-column icon grid, any italicized heading, any invented statistic,
+    any redrawn fake UI chrome, any two-line-wrapping CTA link? Fix it.
+  - Honesty check: does every specific claim trace to a supplied fact? Is
+    every image either real (from the manifest) or clearly non-photographic?
+  - One distinctive moment: is there a single visual moment on this page a
+    viewer would actually remember, or does it read as an interchangeable
+    template?
+  - Mobile check: at roughly 320-375px width, does the hero still work, do
+    headings avoid awkward wraps, are tap targets large enough, is nothing
+    clipped or overlapping?
+  - Token check: did you actually use the local design tokens you defined,
+    or did you improvise a one-off color/spacing value mid-build?
+Fix what you find. Then write a one-sentence honest note about this pass in
+report.json's selfCritique field -- including anything you found and fixed,
+or anything you were unsure about and left as-is.
+
 OUTPUT CONTRACT
 Build a static-only site (no backend, no database, no API calls to
 anything) as plain HTML/CSS/JS or a Vite + React + TypeScript app, written
@@ -254,6 +331,7 @@ fences) with this exact shape:
   "unsupportedFactCheck": "one sentence confirming you invented no facts",
   "technicalNotes": "anything a technical reviewer should know",
   "visualNotes": "your design-brief decisions (personality, hero concept, palette/type strategy, one distinctive visual moment) plus anything a human visual reviewer should know",
+  "selfCritique": "one honest sentence on your SELF-CRITIQUE BEFORE YOU FINISH pass -- what you found and fixed, or what you were unsure about",
   "recommendedMasterFamily": "home_services" | "restaurant" | "professional" | "other" | null,
   "candidateForMaster": true | false,
   "warnings": ["anything you were unsure about", ...]
@@ -295,6 +373,9 @@ export function buildDesignerUserPrompt(input: {
   );
   const imageryJson = JSON.stringify(input.imagery, null, 2);
   const revisionNotes = input.revisionNotes?.trim() || null;
+  const imageryMode = computeImageryMode(input.imagery);
+  const categoryContext = resolveDesignerCategoryContext(input.facts.industry);
+  const reference = resolveDesignerReference();
 
   return [
     `Job ID: ${input.jobId}`,
@@ -302,6 +383,9 @@ export function buildDesignerUserPrompt(input: {
     input.templateFamily ? `Target template family: ${input.templateFamily}` : null,
     `Fixture/test job: ${input.isFixture ? "yes -- synthetic business, never a real prospect" : "no -- real prospect facts"}`,
     `Why this job exists: ${input.reason}`,
+    `Category: ${categoryContext.label}`,
+    `Image mode for this job: ${imageryMode.toUpperCase()} (see IMAGE STRATEGY FOR THIS JOB in your system prompt)`,
+    `Reference: ${reference.label}`,
     "",
     "DESIGN BRIEF",
     input.designBriefText,

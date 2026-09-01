@@ -55,4 +55,16 @@ describe("designer brief (Builder-agnostic)", () => {
     assert.match(brief.markdown, /Pool Service/);
     assert.doesNotMatch(brief.markdown, /Facts available/);
   });
+
+  it("includes category-specific information priorities as guidance, not a required structure", () => {
+    const brief = buildDesignerBrief({ industry: "Restaurant" });
+    assert.match(brief.markdown, /Category context: Restaurant/);
+    assert.match(brief.markdown, /menu or category highlights/i);
+    assert.match(brief.markdown, /not a required section list or a fixed order/i);
+  });
+
+  it("falls back to a generic category context for an unrecognized industry", () => {
+    const brief = buildDesignerBrief({ industry: "Artisanal Kite Repair" });
+    assert.match(brief.markdown, /Category context: General local business/);
+  });
 });

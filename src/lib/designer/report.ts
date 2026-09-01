@@ -17,6 +17,7 @@ export type DesignerWorkerReport = {
   unsupportedFactCheck: string;
   technicalNotes: string;
   visualNotes: string;
+  selfCritique: string;
   recommendedMasterFamily: string | null;
   candidateForMaster: boolean;
   warnings: string[];
@@ -64,6 +65,7 @@ export function parseDesignerWorkerReport(raw: string, expectedJobId: string): P
       unsupportedFactCheck: bounded(typeof row.unsupportedFactCheck === "string" ? row.unsupportedFactCheck : "", MAX_TEXT),
       technicalNotes: bounded(typeof row.technicalNotes === "string" ? row.technicalNotes : "", MAX_TEXT),
       visualNotes: bounded(typeof row.visualNotes === "string" ? row.visualNotes : "", MAX_TEXT),
+      selfCritique: bounded(typeof row.selfCritique === "string" ? row.selfCritique : "", MAX_TEXT),
       recommendedMasterFamily:
         row.recommendedMasterFamily === "home_services" ||
         row.recommendedMasterFamily === "restaurant" ||
