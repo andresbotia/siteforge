@@ -260,6 +260,8 @@ src/
                     qa.ts            Deterministic pre-review draft QA
                     design-brief.ts  Provider-neutral brief for a new master template
   lib/previews/     Public preview tokens, policy, and tracking helpers
+  lib/designer/     Designer Job worker: CLI discovery, sandboxing, prompt generation, output contract
+  lib/leads/        Cross-agent lead composites (e.g. Commercial Potential)
   lib/sales/        Deterministic outreach drafting, approval binding, attribution tokens
   lib/email/        Mock and guarded Resend provider, delivery policy, webhook verification
   lib/payments/     Commercial offers, checkout policy, mock Stripe provider, webhook parsing
@@ -276,6 +278,10 @@ supabase/
 A master template is a registry entry, not a bespoke codebase. `registry.ts` records what each template needs and can express; `design-system.ts` supplies a curated preset (color, type, radius, density, hero treatment) as `--sf-*` CSS variables. Two renderers consume them: `restaurant-modern-v2` for restaurants and the shared `local-business-v2` section system for the other families. Adding a design variant should be a registry entry plus a preset, not new layout code.
 
 Template selection is deterministic keyword matching and reports a fallback rather than pretending an industry is covered. When it falls back, `design-brief.ts` produces a provider-neutral brief for a new master template. `qa.ts` runs deterministic pre-review checks over a composed spec and reports blockers, warnings, and notes; it is advisory and never gates an approval. Browse the library and the QA renders at `/templates`. All of this is `$0` and calls no paid service.
+
+### Designer Job / local Claude Code worker
+
+When the template registry has no coverage for a lead's industry (`needsNewMasterTemplate`), a human can create a **Designer Job** at `/agents/designer` instead of accepting a generic fallback draft. A local worker process (`npm run designer:worker`, or `designer:worker:once` / `designer:smoke-test` for a single run) invokes the operator's already-authenticated Claude Code CLI -- subscription auth only, never a paid API key -- in a sandboxed, tool-restricted subprocess (`src/lib/designer/`) confined to an isolated workspace under `.siteforge/designer-jobs/` (gitignored). The worker never receives `SUPABASE_SECRET_KEY` or any other SiteForge/provider secret; it can only read/write/search inside its own workspace and has no Bash/WebFetch/WebSearch access. Its output is fed through the same static-safety validation and isolated fixed-command build the external-generated-site import path already uses (`src/lib/builder/external-artifacts.ts`), and a passing candidate becomes a `generated_websites` draft awaiting the same preview-approval flow. **Only a human can move a Designer Job to `approved`** (`/designer-jobs/[id]`, gated by `requireAdminSession()`); no worker output or automated QA result can self-approve. See `HANDOFF.md` for the full architecture, a real local smoke-test result, and the current blocker (the `designer_jobs` migration is committed but not yet applied to the hosted project).
 
 Pages load data on the server through repositories after the SiteForge admin session is verified. The browser does not query application tables. Client Components are used only for filters, dialogs, tabs, mobile navigation, and approval forms. Approval writes go through Next.js server actions.
 
@@ -435,6 +441,9 @@ Schema and development seed live in:
 - `supabase/migrations/20260829230000_builder_generated_websites.sql`
 - `supabase/migrations/20260830000000_preview_deployments_tracking.sql`
 - `supabase/migrations/20260830230000_external_source_artifacts.sql`
+- `supabase/migrations/20260831150000_external_source_archive_storage.sql`
+- `supabase/migrations/20260901000000_designer_jobs.sql` (not yet applied to the hosted project -- see HANDOFF.md Blockers)
+- `supabase/migrations/20260901010000_designer_worker_provider.sql` (not yet applied to the hosted project -- see HANDOFF.md Blockers)
 
 Apply them to the hosted project with the Supabase CLI (after `supabase login` and `supabase link --project-ref afpjclfcajrcbpcrgzvd`):
 
