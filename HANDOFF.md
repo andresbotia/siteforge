@@ -142,6 +142,54 @@ M9.5D first controlled campaign preparation:
 - Email opens are not a primary engagement signal. Tracked SiteForge preview activity remains the stronger engagement signal.
 - Do not automatically choose Signature Air Conditioning or Joe & Joe Air Conditioning. The operator should manually select a prospect with a meaningfully poor/outdated website and credible redesign opportunity.
 
+## M9.5D Builder Design System (current)
+
+Session start commit `cfb6ee3d7c88aacc0cdd371d10687225f017777f`; end commit `7763d57`. Two commits: `f232f1b` (registry and design system) and `7763d57` (template library, visual QA, draft QA). No migration was needed; no production data changed; external cost was `$0.00`.
+
+Problem addressed: the Antojitos static import was technically valid but visually weaker than the approved Lovable design, and the non-restaurant Builder path was worse still. Home services and professional drafts rendered through a generic fallback whose hero contained a literal empty grey box (`<div className="mt-12 h-24 rounded-2xl bg-white/10" />`). Visual quality, not correctness, was the blocker to real outreach.
+
+New Builder architecture:
+
+- `src/lib/builder/design-system.ts` holds curated design presets (`trade-trust`, `contractor-premium`, `advisory-authority`, `advisory-clean`, `kitchen-warm`). A preset is a complete look: surface/ink/deep/accent/band/highlight colors, display and body font stacks, radius scale, density, and hero treatment. Presets are enumerated design decisions, never runtime randomization. `presetCssVariables` flattens a preset into `--sf-*` custom properties so renderers use static Tailwind arbitrary values while colors stay data-driven. `contrastRatio` and `contrastPairs` implement WCAG 2.x relative luminance; a test asserts every preset clears 4.5:1 for body pairs and 3:1 for large display pairs.
+- `src/lib/builder/registry.ts` is the single source of truth for template capability: versioned id, family, status, renderer, design preset, legacy palette key, summary, industry keywords, required/optional facts, image roles, image family, CTA capabilities, and designed section order. `selectTemplateForIndustry` does deterministic longest-keyword matching and returns `confidence: "matched" | "fallback"` plus a reason. `needsNewMasterTemplate` exposes the "no suitable template exists" signal. No paid AI is involved in selection.
+- `src/lib/builder/templates.ts` now derives `TEMPLATE_CATALOG` from the registry. `selectTemplate` and `templateLabel` keep their existing signatures, so `src/data/builder.ts`, `run.ts`, `spec.ts`, and `persist.ts` are unchanged.
+- `src/components/builder/site/local-business-v2.tsx` is a shared section system for the non-restaurant templates: sticky translucent nav, full-bleed hero with directional scrim and asymmetric grid, floating credibility panel, trust strip, numbered editorial service list, editorial split sections, visit panel with directions link and hours table, deep-ground closing CTA, quiet footer. It consumes the existing `Section[]` spec, so no spec migration was required. Every section omits itself when its facts are absent.
+- The no-image hero renders `.sf-local-v2 .sf-hero-canvas` in `globals.css`, a composed ground built from the preset's own CSS variables. There is no longer an empty box anywhere in the Builder output.
+- `DraftSite` dispatches on `definition.renderer`. `restaurant-modern-v2` and `local-business-v2` cover all three active templates; the legacy palette-based branch remains only as dead-code fallback for an unknown renderer.
+
+Template identifiers now in the registry:
+
+| Template key | Registry id | Renderer | Preset |
+| --- | --- | --- | --- |
+| `home-services-modern` | `home-services-modern@2.0.0` | `local-business-v2` | `trade-trust` |
+| `restaurant-modern` | `restaurant-modern@2.1.0` | `restaurant-modern-v2` | `kitchen-warm` |
+| `professional-services-modern` | `professional-services-modern@2.0.0` | `local-business-v2` | `advisory-authority` |
+
+Template QA (`src/lib/builder/qa.ts`) is deterministic, `$0`, and does no network or rendering work. It checks required facts, page/nav/section structure, unsupported marketing claims (superlatives, years in business, customer volume, awards, guarantees, prices, licensing/insurance, free-estimate offers), internal and placeholder copy leaks, CTA safety and reachability, image renderability/alt text/role support/illustrative labeling, conversion paths, and preset contrast. It reports blockers, warnings, and notes; it never mutates drafts or gates approvals. The report is surfaced on `/websites/[id]` for Builder-generated drafts.
+
+Designer brief (`src/lib/builder/design-brief.ts`) generates a provider-neutral master-template brief covering required sections, design direction from the chosen preset, static-export requirement, mobile-first and contrast requirements, SEO patterns, imagery rights policy, and the explicit prohibited-invention list. A test asserts the brief mentions no provider by name. `/templates` exposes it through an admin-guarded server action; generating a brief performs no network call and authorizes no paid generation.
+
+Imagery: `ImageSourceType` gains `template_illustrative` for rights-safe artwork bundled with a template. The renderable allowlist generalized from `/fixtures/restaurant/**` to `/fixtures/{restaurant,home-services,professional}/**` (local SVG only). `imageProvenanceLabel` gives operator-facing provenance text that keeps template artwork visibly illustrative. No image was scraped, downloaded, or rehosted, and no artwork has been authored for the `home-services` or `professional` families yet — those templates currently render the designed CSS hero ground.
+
+Also in this session: `derivedServices` now falls back to keyword matching, so real-world labels such as "Air Conditioning & Heating" reach HVAC capability copy instead of generic professional copy. Service lists remain generic category capability language and still make no claim about a specific business.
+
+New operator surfaces:
+
+- `/templates` - registry contents, palette swatches, matched keywords, visual QA links, designer brief form.
+- `/visual-qa/local-business/[variant]` - four variants (`home-services`, `home-services-minimal`, `professional`, `professional-minimal`) rendered from real `runBuilderPipeline` output on fictional QA businesses. Admin-only via the default-deny proxy, `robots: noindex, nofollow`. The QA businesses are invented for rendering checks and must never enter the lead pipeline.
+
+Validation: `npx tsc --noEmit`, `npm test` (326/326), `npm run lint`, `npm run build`, `git diff --check` all clean.
+
+Not done in this session, in priority order:
+
+1. No human has eyeballed the four `/visual-qa/local-business/*` pages yet. They prerender without error and pass automated QA, but a design pass by the operator is the next step before any home-services or professional draft goes to a prospect.
+2. No illustrative artwork exists for the `home-services` or `professional` fixture families. The allowlist, provenance types, and image slots are ready; the SVGs are not authored.
+3. Restaurant Modern still has a bespoke renderer rather than running on the shared preset system. That is deliberate - it is locked and tested - but the two systems should eventually converge.
+4. `contractor-premium` and `advisory-clean` presets are defined and contrast-tested but no template uses them yet. They exist so a second variant per family is a registry entry rather than new layout code.
+5. QA is advisory only. It is not wired into the preview-approval path; a draft with blockers can still be approved by a human.
+
+M9.5D safety state is unchanged by this session: no prospect email, no public preview, no deployment, no payment, no DNS, no paid AI, no Antojitos mutation. Antojitos generated website `b7598a73-3be7-4a47-8d70-d538af500c3e` and artifact `d6ca8f0f-c2e7-4dcf-bbf0-dbeeddce5a9d` were not read, modified, or deployed.
+
 ## Credential Rotation Before Sensitive Data
 
 Rotation is deferred by operator decision for the narrow M9.5B public-data-only path. Rotate these before entering sensitive customer data, handling payment/card data, enabling live email/payment providers, or expanding production use. Do not store rotated values in git or share them with agents.
@@ -395,3 +443,11 @@ Validation:
 ## Next Milestone
 
 Continue with M9.5D by having the human operator manually select one real prospect for review. Do not send the first prospect email until the exact draft, preview, approval, and readiness checklist have been reviewed. Do not start M10.
+
+Immediate next actions:
+
+1. Operator reviews `/visual-qa/local-business/home-services` and `/visual-qa/local-business/professional` at desktop and 390px widths and records what still looks weak. That judgment drives the next design pass.
+2. Author rights-safe illustrative SVGs under `public/fixtures/home-services/` and `public/fixtures/professional/`, wired as `template_illustrative` with alt text that reads as illustrative. Do not source imagery from Google, Yelp, Instagram, Facebook, or any listing site.
+3. Rebuild one existing home-services draft through the new renderer and compare it against the current Antojitos external artifact to decide whether the deterministic Builder is now good enough to skip an external generation for the next non-restaurant prospect.
+
+Also updated `README.md` architecture notes for the registry, design system, QA, and designer brief.

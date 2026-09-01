@@ -255,6 +255,10 @@ src/
   lib/scout/        Discovery, SSRF-safe inspection, scoring, dedupe
   lib/auditor/      Deterministic website audit pipeline and scoring
   lib/builder/      Deterministic template drafts and WebsiteSpec
+                    registry.ts      Master template capability and deterministic selection
+                    design-system.ts Curated design presets and WCAG contrast checks
+                    qa.ts            Deterministic pre-review draft QA
+                    design-brief.ts  Provider-neutral brief for a new master template
   lib/previews/     Public preview tokens, policy, and tracking helpers
   lib/sales/        Deterministic outreach drafting, approval binding, attribution tokens
   lib/email/        Mock and guarded Resend provider, delivery policy, webhook verification
@@ -266,6 +270,12 @@ src/
 supabase/
   migrations/       Version-controlled schema and seed SQL
 ```
+
+### Builder template system
+
+A master template is a registry entry, not a bespoke codebase. `registry.ts` records what each template needs and can express; `design-system.ts` supplies a curated preset (color, type, radius, density, hero treatment) as `--sf-*` CSS variables. Two renderers consume them: `restaurant-modern-v2` for restaurants and the shared `local-business-v2` section system for the other families. Adding a design variant should be a registry entry plus a preset, not new layout code.
+
+Template selection is deterministic keyword matching and reports a fallback rather than pretending an industry is covered. When it falls back, `design-brief.ts` produces a provider-neutral brief for a new master template. `qa.ts` runs deterministic pre-review checks over a composed spec and reports blockers, warnings, and notes; it is advisory and never gates an approval. Browse the library and the QA renders at `/templates`. All of this is `$0` and calls no paid service.
 
 Pages load data on the server through repositories after the SiteForge admin session is verified. The browser does not query application tables. Client Components are used only for filters, dialogs, tabs, mobile navigation, and approval forms. Approval writes go through Next.js server actions.
 
