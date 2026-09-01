@@ -37,6 +37,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Designer Job local worker workspaces (isolated per-job source generation,
+# never committed; see src/lib/designer/sandbox.ts)
+/.siteforge/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

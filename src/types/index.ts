@@ -132,7 +132,7 @@ export type GeneratedWebsiteStatus =
 export type GenerationSource = "deterministic_builder" | "external_generated";
 
 export interface ExternalGeneratedSite {
-  externalProvider: "lovable" | "manual" | "other";
+  externalProvider: "lovable" | "manual" | "claude_code_worker" | "grok_worker" | "other";
   providerProjectId: string | null;
   providerCommitSha: string | null;
   providerPreviewUrl: string | null;

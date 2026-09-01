@@ -76,7 +76,16 @@ describe("temporary admin session tokens", () => {
   it("rejects a tampered token", async () => {
     const secret = "test-secret-with-enough-length";
     const token = await createSessionToken("admin@example.com", secret);
-    const tampered = `${token.slice(0, -1)}${token.endsWith("a") ? "b" : "a"}`;
+    // Flip a character in the middle of the signature rather than the very
+    // last character of the token. The last base64url character of a
+    // 32-byte signature only encodes 4 significant bits (the other 2 are
+    // discarded on decode), so occasionally two different last characters
+    // decode to the exact same byte, making that specific tamper a no-op by
+    // chance and flaking this test. A middle character always changes a
+    // full decoded byte.
+    const midpoint = Math.floor(token.length / 2);
+    const tamperedChar = token[midpoint] === "a" ? "b" : "a";
+    const tampered = `${token.slice(0, midpoint)}${tamperedChar}${token.slice(midpoint + 1)}`;
     assert.equal(await verifySessionToken(tampered, secret), null);
   });
 

@@ -227,6 +227,88 @@ export type Database = {
         };
         Relationships: [];
       };
+      designer_jobs: {
+        Row: {
+          id: string;
+          lead_id: string | null;
+          is_fixture: boolean;
+          requested_by_agent_run_id: string | null;
+          mode: string;
+          template_family: string | null;
+          base_template_key: string | null;
+          reason: string;
+          provider: string;
+          billing_mode: string;
+          claimed_by: string | null;
+          claimed_at: string | null;
+          status: string;
+          design_brief: Json;
+          input_facts_snapshot: Json;
+          input_facts_fingerprint: string | null;
+          imagery_manifest: Json;
+          workspace_path: string | null;
+          started_at: string | null;
+          completed_at: string | null;
+          output_report: Json;
+          cash_cost_usd: number;
+          subscription_usage_class: string;
+          subscription_usage_status: string;
+          failure_code: string | null;
+          failure_reason: string | null;
+          technical_qa_report: Json;
+          output_generated_website_id: string | null;
+          output_artifact_id: string | null;
+          visual_review_status: string;
+          visual_review_notes: string | null;
+          visual_reviewed_by: string | null;
+          visual_reviewed_at: string | null;
+          promoted_to_master: boolean;
+          master_template_key: string | null;
+          created_by: string;
+        } & Timestamps;
+        Insert: {
+          id?: string;
+          lead_id?: string | null;
+          is_fixture?: boolean;
+          requested_by_agent_run_id?: string | null;
+          mode: string;
+          template_family?: string | null;
+          base_template_key?: string | null;
+          reason?: string;
+          provider?: string;
+          billing_mode?: string;
+          status?: string;
+          design_brief?: Json;
+          input_facts_snapshot?: Json;
+          input_facts_fingerprint?: string | null;
+          imagery_manifest?: Json;
+          created_by?: string;
+        };
+        Update: {
+          claimed_by?: string | null;
+          claimed_at?: string | null;
+          status?: string;
+          workspace_path?: string | null;
+          started_at?: string | null;
+          completed_at?: string | null;
+          output_report?: Json;
+          cash_cost_usd?: number;
+          subscription_usage_status?: string;
+          failure_code?: string | null;
+          failure_reason?: string | null;
+          technical_qa_report?: Json;
+          output_generated_website_id?: string | null;
+          output_artifact_id?: string | null;
+          visual_review_status?: string;
+          visual_review_notes?: string | null;
+          visual_reviewed_by?: string | null;
+          visual_reviewed_at?: string | null;
+          promoted_to_master?: boolean;
+          master_template_key?: string | null;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       preview_deployments: {
         Row: {
           id: string;
@@ -897,6 +979,10 @@ export type Database = {
         };
         Returns: Json;
       };
+      siteforge_claim_designer_job: {
+        Args: { p_job_id: string; p_claimed_by: string };
+        Returns: Database["public"]["Tables"]["designer_jobs"]["Row"];
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
@@ -930,3 +1016,4 @@ export type SubscriptionRow =
 export type IntegrationRow =
   Database["public"]["Tables"]["integration_status"]["Row"];
 export type ActivityRow = Database["public"]["Tables"]["activity_events"]["Row"];
+export type DesignerJobRow = Database["public"]["Tables"]["designer_jobs"]["Row"];

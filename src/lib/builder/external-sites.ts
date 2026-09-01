@@ -7,7 +7,7 @@ import type { WebsiteSpec } from "./types";
 export const EXTERNAL_SITE_METADATA_KEY = "external_generated_site";
 
 export const GENERATION_SOURCES = ["deterministic_builder", "external_generated"] as const;
-export const EXTERNAL_PROVIDERS = ["lovable", "manual", "other"] as const;
+export const EXTERNAL_PROVIDERS = ["lovable", "manual", "claude_code_worker", "grok_worker", "other"] as const;
 export const EXTERNAL_SITE_STATUSES = [
   "imported",
   "validating",

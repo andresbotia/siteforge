@@ -658,6 +658,8 @@ async function markExternalDeploymentFailure(
 function providerLabel(provider: ExternalProvider): string {
   if (provider === "lovable") return "Lovable";
   if (provider === "manual") return "Manual";
+  if (provider === "claude_code_worker") return "Claude Code Designer Worker";
+  if (provider === "grok_worker") return "Grok Designer Worker";
   return "Other";
 }
 
