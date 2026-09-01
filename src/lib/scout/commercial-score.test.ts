@@ -86,6 +86,29 @@ describe("assessCommercialScore", () => {
     }
   });
 
+  it("keeps a high-confidence provider's website-not-listed opportunity conservative -- below social_or_directory_only and never automatically maximal", () => {
+    const notListed = assess(business({ phone: "(954) 555-0100", source: "google_places" }), NO_WEBSITE, score(80, 42));
+    const social = assess(business({ phone: "(954) 555-0100", instagramUrl: "https://www.instagram.com/testco" }), NO_WEBSITE, score(80, 42));
+    assert.equal(notListed.components.websiteOpportunity, 65);
+    assert.ok(notListed.components.websiteOpportunity < social.components.websiteOpportunity);
+  });
+
+  it("overrides the recommendation to SKIP for a permanently closed business regardless of an otherwise-strong score", () => {
+    const closedBusiness = business({ phone: "(954) 555-0100", address: "1 Main St", instagramUrl: "https://www.instagram.com/testco", businessStatus: "CLOSED_PERMANENTLY" });
+    const result = assess(closedBusiness, NO_WEBSITE, score(95, 42));
+    assert.equal(result.recommendation, "SKIP");
+    assert.ok(result.reasons.some((r) => /Overridden to SKIP/.test(r)));
+  });
+
+  it("does not override recommendation for an operational or status-unknown business", () => {
+    const result = assess(
+      business({ phone: "(954) 555-0100", address: "1 Main St", hours: "Mo-Fr", instagramUrl: "https://www.instagram.com/testco", businessStatus: "OPERATIONAL" }),
+      NO_WEBSITE,
+      score(90, 42),
+    );
+    assert.notEqual(result.recommendation, "SKIP");
+  });
+
   it("reflects Designer coverage from the Designer category architecture, not the legacy Builder registry", () => {
     const proven = assess(business({ industry: "Landscaping", phone: "(954) 555-0100", address: "1 Main St" }), NO_WEBSITE, score(50, 42));
     const unknown = assess(business({ industry: "Artisanal Kite Repair", phone: "(954) 555-0100", address: "1 Main St" }), NO_WEBSITE, score(50, 42));

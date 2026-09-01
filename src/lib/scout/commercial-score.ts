@@ -119,6 +119,24 @@ function opportunityInput(input: CommercialScoreInput): { score: number; reason:
         "No standalone website, but a real public listing with contact info was found -- a strong, moderately-confident SiteForge opportunity (Scout's raw websiteOpportunityScore is left unchanged; this override applies only to the commercial-potential composite).",
     };
   }
+  if (input.websiteStatus === "website_not_listed_by_provider") {
+    // Deliberately well below social_or_directory_only's 85 and below a
+    // typical unreachable-site score -- a high-confidence provider (Google)
+    // having no website field is real but moderate evidence, not proof.
+    // Awarding maximum no-website opportunity here is exactly the Scout V1
+    // failure this session exists to fix (see HANDOFF.md).
+    return {
+      score: 65,
+      reason:
+        "A high-confidence provider (Google) lists no website for this business -- a real but conservative signal, not confirmed absence. Kept below the fully-corroborated social/directory case.",
+    };
+  }
+  if (input.websiteStatus === "no_standalone_website_unverified") {
+    return {
+      score: input.score.websiteOpportunityScore,
+      reason: "Only a low-confidence source omitted a website field -- using Scout's unboosted website-opportunity score rather than assuming no website exists.",
+    };
+  }
   return { score: input.score.websiteOpportunityScore, reason: "Using Scout's existing deterministic website-opportunity score unchanged." };
 }
 
@@ -168,6 +186,12 @@ export function assessCommercialScore(input: CommercialScoreInput): CommercialSc
   } else {
     recommendation = "SKIP";
   }
+
+  if (input.business.businessStatus === "CLOSED_PERMANENTLY" && recommendation !== "SKIP") {
+    recommendation = "SKIP";
+    reasons.push("Overridden to SKIP: Google marks this business as permanently closed.");
+  }
+
   reasons.push(`Commercial potential ${commercialPotentialScore}/100 -> ${recommendation}.`);
 
   return {

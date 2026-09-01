@@ -40,4 +40,16 @@ describe("classifyWebsiteStatus", () => {
   it("is only no_standalone_website_unverified when the source truly gave nothing to go on", () => {
     assert.equal(classifyWebsiteStatus(business(), NO_WEBSITE), "no_standalone_website_unverified");
   });
+
+  it("is website_not_listed_by_provider (not no_standalone_website_unverified) when a high-confidence provider like Google omits a website", () => {
+    assert.equal(classifyWebsiteStatus(business({ source: "google_places" }), NO_WEBSITE), "website_not_listed_by_provider");
+  });
+
+  it("stays in the weaker no_standalone_website_unverified bucket for a low-confidence provider like OpenStreetMap omitting a website -- the exact Scout V1 false-opportunity failure this fixes", () => {
+    assert.equal(classifyWebsiteStatus(business({ source: "openstreetmap_overpass" }), NO_WEBSITE), "no_standalone_website_unverified");
+  });
+
+  it("still prefers an actual listed website over provider-confidence classification", () => {
+    assert.equal(classifyWebsiteStatus(business({ source: "google_places", websiteUrl: "https://x.test" }), REACHABLE), "working_standalone_website");
+  });
 });

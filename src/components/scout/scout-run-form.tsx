@@ -9,6 +9,7 @@ import { Button } from "@/components/shared/button";
 import { Field, SelectInput, TextInput } from "@/components/shared/field";
 import { SCOUT_CATEGORIES } from "@/lib/scout/categories";
 import {
+  GOOGLE_PLACES_PROVIDER_LABEL,
   SCOUT_DEFAULT_CANDIDATES,
   SCOUT_DISCOVERY_COST_USD,
   SCOUT_MAX_CANDIDATES,
@@ -18,7 +19,7 @@ import { listSupportedScoutLocations } from "@/lib/scout/locations";
 
 const locations = listSupportedScoutLocations();
 
-export function ScoutRunForm() {
+export function ScoutRunForm({ googlePlacesConfigured }: { googlePlacesConfigured: boolean }) {
   const [state, action, pending] = useActionState<ScoutActionState, FormData>(
     startScoutRunAction,
     null,
@@ -72,7 +73,8 @@ export function ScoutRunForm() {
           Discovery cost: ${SCOUT_DISCOVERY_COST_USD.toFixed(2)}
         </p>
         <p className="mt-1 text-muted">
-          Provider: {SCOUT_REAL_PROVIDER_LABEL}. Paid AI: Not required.
+          Provider: {googlePlacesConfigured ? `${GOOGLE_PLACES_PROVIDER_LABEL} (preferred), ${SCOUT_REAL_PROVIDER_LABEL} (fallback)` : `${SCOUT_REAL_PROVIDER_LABEL} (Google Places not configured)`}. Paid AI: Not
+          required.
         </p>
       </div>
       <div className="flex justify-end">

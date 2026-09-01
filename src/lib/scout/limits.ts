@@ -33,3 +33,21 @@ export const SCOUT_REAL_PROVIDER_ID = "openstreetmap_overpass" as const;
 export const SCOUT_REAL_PROVIDER_LABEL = "OpenStreetMap (Overpass API, public, keyless)";
 export const SCOUT_DISCOVERY_FETCH_TIMEOUT_MS = 20_000;
 export const SCOUT_DISCOVERY_MAX_RESPONSE_BYTES = 2_000_000;
+
+/**
+ * Official Google Places API (New) provider -- see providers/google-places.ts.
+ * Preferred over Overpass when GOOGLE_PLACES_API_KEY is configured, because
+ * Google Business Profile data is business-controlled (rating, review
+ * count, and website presence/absence are far more reliable than OSM's
+ * community-maintained tags). This is a billable Google Cloud API, so every
+ * bound here is deliberately conservative -- see HANDOFF.md's Scout V1.1
+ * session for the false-opportunity failure this provider fixes.
+ */
+export const GOOGLE_PLACES_PROVIDER_ID = "google_places" as const;
+export const GOOGLE_PLACES_PROVIDER_LABEL = "Google Places API (New) -- Text Search";
+/** Exactly one Text Search request per Scout run. No pagination, no retries. Enforced by construction, named here for clarity/reporting. */
+export const GOOGLE_PLACES_MAX_REQUESTS_PER_RUN = 1;
+/** Google Text Search (New) caps a single page at 20 results. */
+export const GOOGLE_PLACES_MAX_RESULTS_PER_REQUEST = 20;
+/** Conservative default monthly ceiling on Google Places requests across all Scout runs, operator-overridable via GOOGLE_PLACES_MONTHLY_REQUEST_CEILING. */
+export const GOOGLE_PLACES_DEFAULT_MONTHLY_REQUEST_CEILING = 300;

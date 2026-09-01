@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { inspectWebsite, createMockHttpClient } from "./inspector";
 import { normalizeBusinessName, normalizeDomain, normalizePhone } from "./normalize";
-import { classifyTier, scoreCandidate, SCORING } from "./scoring";
+import { classifyTier, scoreBusinessStrength, scoreCandidate, SCORING } from "./scoring";
 import type { InspectionResult, NormalizedBusiness } from "./types";
 
 function business(
@@ -100,6 +100,67 @@ describe("restaurant-specific scoring", () => {
       inspection,
     );
     assert.equal(result.reasons.some((line) => /reservation/i.test(line)), false);
+  });
+});
+
+describe("scoreBusinessStrength: Google rating/review evidence quality", () => {
+  it("gives 4.6 stars / 487 reviews stronger establishment evidence than 4.9 stars / 11 reviews, all else equal", () => {
+    const strongVolume = scoreBusinessStrength(business({ name: "A", categoryId: "landscapers", rating: 4.6, reviewCount: 487 }));
+    const thinVolume = scoreBusinessStrength(business({ name: "B", categoryId: "landscapers", rating: 4.9, reviewCount: 11 }));
+    assert.ok(strongVolume.score > thinVolume.score, `expected ${strongVolume.score} > ${thinVolume.score}`);
+  });
+
+  it("does not implement a simplistic rating times reviews formula -- review count alone can outrank a slightly higher rating", () => {
+    // 487 reviews clears the "reviewsStrong" bar for full review points even
+    // though the rating (4.6) is below the "ratingStrong" bar for full
+    // rating points -- the two dimensions are evaluated independently.
+    const result = scoreBusinessStrength(business({ name: "A", categoryId: "landscapers", rating: 4.6, reviewCount: 487 }));
+    assert.ok(result.reasons.some((r) => /487 reviews/.test(r)));
+    assert.ok(result.reasons.some((r) => /STRONG tier/.test(r) || /VERY_STRONG tier/.test(r)));
+  });
+
+  it("downranks a sub-3.0 rating relative to a strong rating with comparable review volume", () => {
+    const weak = scoreBusinessStrength(business({ name: "A", categoryId: "landscapers", rating: 2.6, reviewCount: 300 }));
+    const strong = scoreBusinessStrength(business({ name: "B", categoryId: "landscapers", rating: 4.7, reviewCount: 300 }));
+    assert.ok(weak.score < strong.score);
+    assert.ok(weak.reasons.some((r) => /WEAK tier/.test(r)));
+  });
+
+  it("treats a missing rating as unavailable, never as zero stars", () => {
+    const result = scoreBusinessStrength(business({ name: "A", categoryId: "landscapers", rating: null, reviewCount: 50 }));
+    assert.ok(result.reasons.some((r) => r === "Google rating unavailable"));
+    assert.ok(!result.reasons.some((r) => /0\.0/.test(r)));
+  });
+
+  it("treats a missing review count as unavailable, never as zero reviews", () => {
+    const result = scoreBusinessStrength(business({ name: "A", categoryId: "landscapers", rating: 4.5, reviewCount: null }));
+    assert.ok(result.reasons.some((r) => r === "Google review count unavailable"));
+  });
+
+  it("treats an explicit zero review count as a real EMERGING fact, distinct from unavailable", () => {
+    const result = scoreBusinessStrength(business({ name: "A", categoryId: "landscapers", rating: 4.5, reviewCount: 0 }));
+    assert.ok(result.reasons.some((r) => /0 reviews \(EMERGING tier\)/.test(r)));
+    assert.ok(!result.reasons.some((r) => r === "Google review count unavailable"));
+  });
+
+  it("never crashes when Google data is entirely absent", () => {
+    assert.doesNotThrow(() => scoreBusinessStrength(business({ name: "A", categoryId: "landscapers", rating: null, reviewCount: null })));
+  });
+
+  it("does not penalize an operational or status-unknown business, but caps a permanently closed one hard", () => {
+    const unknown = scoreBusinessStrength(business({ name: "A", categoryId: "landscapers", rating: 4.8, reviewCount: 500 }));
+    const operational = scoreBusinessStrength(business({ name: "B", categoryId: "landscapers", rating: 4.8, reviewCount: 500, businessStatus: "OPERATIONAL" }));
+    const closed = scoreBusinessStrength(business({ name: "C", categoryId: "landscapers", rating: 4.8, reviewCount: 500, businessStatus: "CLOSED_PERMANENTLY" }));
+    assert.ok(operational.score >= unknown.score);
+    assert.ok(closed.score <= 10);
+    assert.ok(closed.reasons.some((r) => /permanently closed/.test(r)));
+  });
+
+  it("moderately reduces score for a temporarily closed business without a hard floor", () => {
+    const open = scoreBusinessStrength(business({ name: "A", categoryId: "landscapers", rating: 4.8, reviewCount: 500 }));
+    const temp = scoreBusinessStrength(business({ name: "B", categoryId: "landscapers", rating: 4.8, reviewCount: 500, businessStatus: "CLOSED_TEMPORARILY" }));
+    assert.ok(temp.score < open.score);
+    assert.ok(temp.reasons.some((r) => /temporarily closed/.test(r)));
   });
 });
 

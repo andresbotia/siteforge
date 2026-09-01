@@ -1,4 +1,5 @@
 import { isRestaurantCategory } from "./categories";
+import { classifyRatingTier, classifyReviewVolumeTier } from "./rating-tiers";
 import type {
   InspectionResult,
   NormalizedBusiness,
@@ -93,33 +94,40 @@ export function scoreBusinessStrength(business: NormalizedBusiness): {
 } {
   const reasons: string[] = [];
   let score = 0;
-  const rating = business.rating ?? 0;
-  const reviews = business.reviewCount ?? 0;
+  // Missing rating/review-count must never be coerced to zero -- a real
+  // zero-review business (EMERGING tier) and an unknown one are different
+  // facts and must be scored/labeled differently. See rating-tiers.ts.
+  const rating = business.rating ?? null;
+  const reviews = business.reviewCount ?? null;
+  const ratingTier = classifyRatingTier(rating);
+  const reviewTier = classifyReviewVolumeTier(reviews);
 
-  if (rating >= SCORING.ratingStrong) {
+  if (rating === null) {
+    reasons.push("Google rating unavailable");
+  } else if (rating >= SCORING.ratingStrong) {
     score += SCORING.business.ratingMax;
-    reasons.push(`Public rating ${rating.toFixed(1)} meets the ${SCORING.ratingStrong}+ bar`);
+    reasons.push(`Public rating ${rating.toFixed(1)}/5 (${ratingTier} tier) meets the ${SCORING.ratingStrong}+ bar`);
   } else if (rating >= SCORING.ratingReview) {
     score += Math.round(SCORING.business.ratingMax * 0.55);
-    reasons.push(`Public rating ${rating.toFixed(1)} is only moderate`);
-  } else if (rating > 0) {
-    score += Math.round(SCORING.business.ratingMax * 0.2);
-    reasons.push(`Public rating ${rating.toFixed(1)} is below the commercial-health bar`);
+    reasons.push(`Public rating ${rating.toFixed(1)}/5 (${ratingTier} tier) is only moderate`);
   } else {
-    reasons.push("No public rating available");
+    score += Math.round(SCORING.business.ratingMax * 0.2);
+    reasons.push(`Public rating ${rating.toFixed(1)}/5 (${ratingTier} tier) is below the commercial-health bar`);
   }
 
-  if (reviews >= SCORING.reviewsStrong) {
+  if (reviews === null) {
+    reasons.push("Google review count unavailable");
+  } else if (reviews >= SCORING.reviewsStrong) {
     score += SCORING.business.reviewsMax;
-    reasons.push(`${reviews} reviews indicate an established local presence`);
+    reasons.push(`${reviews} reviews (${reviewTier} tier) indicate an established local presence`);
   } else if (reviews >= SCORING.reviewsMeaningful) {
     score += Math.round(SCORING.business.reviewsMax * 0.65);
-    reasons.push(`${reviews} reviews is a meaningful but not deep sample`);
+    reasons.push(`${reviews} reviews (${reviewTier} tier) is a meaningful but not deep sample`);
   } else if (reviews >= SCORING.reviewsWeak) {
     score += Math.round(SCORING.business.reviewsMax * 0.3);
-    reasons.push(`${reviews} reviews is a thin public sample`);
+    reasons.push(`${reviews} reviews (${reviewTier} tier) is a thin public sample`);
   } else {
-    reasons.push("Review count is too low to treat the business as established");
+    reasons.push(`${reviews} reviews (${reviewTier} tier) is too low to treat the business as established`);
   }
 
   if (business.websiteUrl) {
@@ -137,6 +145,20 @@ export function scoreBusinessStrength(business: NormalizedBusiness): {
 
   if (business.city && business.industry) {
     score += SCORING.business.localPresence;
+  }
+
+  // Google's own operational-status signal. Absent/unknown is never
+  // penalized -- only an explicit closed status counts, and permanently
+  // closed caps the score hard since such a business is not a real
+  // prospect regardless of its historical rating/review evidence.
+  if (business.businessStatus === "CLOSED_PERMANENTLY") {
+    score = Math.min(score, 10);
+    reasons.push("Google marks this business as permanently closed -- not a real prospect");
+  } else if (business.businessStatus === "CLOSED_TEMPORARILY") {
+    score = Math.round(score * 0.5);
+    reasons.push("Google marks this business as temporarily closed");
+  } else if (business.businessStatus === "OPERATIONAL") {
+    reasons.push("Business operational");
   }
 
   return { score: clamp(score), reasons };

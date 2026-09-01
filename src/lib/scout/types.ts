@@ -15,6 +15,9 @@ export type DiscoverySource = {
   retrievedAt: string;
 };
 
+export const GOOGLE_BUSINESS_STATUSES = ["OPERATIONAL", "CLOSED_TEMPORARILY", "CLOSED_PERMANENTLY"] as const;
+export type GoogleBusinessStatus = (typeof GOOGLE_BUSINESS_STATUSES)[number];
+
 export type DiscoveredBusiness = {
   name: string;
   categoryId: ScoutCategoryId | "manual_public";
@@ -33,9 +36,13 @@ export type DiscoveredBusiness = {
   instagramUrl?: string | null;
   facebookUrl?: string | null;
   hours?: string | null;
-  /** A public page a human can open to see the raw source record (e.g. the OSM object page). */
+  /** A public page a human can open to see the raw source record (e.g. the OSM object page, or a Google Maps place link). */
   sourceUrl?: string | null;
   sources?: DiscoverySource[];
+  /** Google Place ID, when the source is Google Places. Used for dedupe and provenance. Null for non-Google sources. */
+  placeId?: string | null;
+  /** Google's own operational-status signal. Absent/null must never be treated as "closed" -- only an explicit value counts. */
+  businessStatus?: GoogleBusinessStatus | null;
 };
 
 export type NormalizedBusiness = DiscoveredBusiness & {
@@ -127,6 +134,8 @@ export type ExistingLeadRecord = {
   notes: string | null;
   normalizedDomain?: string | null;
   normalizedPhone?: string | null;
+  /** Read back from a prior run's inspection_summary.google_place_id -- no dedicated leads column/migration. */
+  googlePlaceId?: string | null;
 };
 
 export type PersistDecision = {

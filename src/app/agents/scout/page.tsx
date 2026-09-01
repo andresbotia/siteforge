@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { listScoutRuns } from "@/data/scout";
 import { formatDateTime } from "@/lib/format";
 import { asRecord } from "@/lib/json";
+import { isGooglePlacesConfigured } from "@/lib/scout/providers/google-config";
 
 export const dynamic = "force-dynamic";
 
@@ -15,12 +16,17 @@ export const metadata: Metadata = {
 
 export default async function ScoutPage() {
   const runs = await listScoutRuns();
+  const googleConfigured = isGooglePlacesConfigured();
 
   return (
     <>
       <PageHeader
         title="Scout"
-        description="Real, $0 lead discovery from the public OpenStreetMap Overpass API. No paid API key and no paid AI. Stops at a ranked recommendation -- no outreach, no site generation, no deployment."
+        description={
+          googleConfigured
+            ? "Google Places (official API) is configured and preferred for discovery, with the $0 OpenStreetMap Overpass provider as fallback. No paid AI. Stops at a ranked recommendation -- no outreach, no site generation, no deployment."
+            : "Real, $0 lead discovery from the public OpenStreetMap Overpass API. Google Places is not configured (GOOGLE_PLACES_API_KEY unset) -- see Settings. No paid AI. Stops at a ranked recommendation -- no outreach, no site generation, no deployment."
+        }
       />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
@@ -29,7 +35,7 @@ export default async function ScoutPage() {
             description="Configure geography and category, then inspect a bounded candidate set."
           />
           <CardBody>
-            <ScoutRunForm />
+            <ScoutRunForm googlePlacesConfigured={googleConfigured} />
           </CardBody>
         </Card>
         <Card>
@@ -59,6 +65,7 @@ export default async function ScoutPage() {
                       {typeof output.build === "number"
                         ? ` · ${output.build} build / ${output.review_commercial ?? 0} review / ${output.skip ?? 0} skip`
                         : ""}
+                      {run.provider ? ` · ${run.provider}` : ""}
                     </p>
                   </li>
                 );

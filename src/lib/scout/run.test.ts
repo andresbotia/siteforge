@@ -38,6 +38,73 @@ describe("duplicate detection", () => {
     assert.equal(decision.action, "update");
     assert.equal(decision.existingId, existing[0].id);
   });
+
+  it("matches an existing lead by Google Place ID first, even when other fields differ (e.g. a corrected phone/domain)", () => {
+    const business: NormalizedBusiness = {
+      name: "Perfect Choice Nursery LLC",
+      categoryId: "landscapers",
+      industry: "Landscaping",
+      city: "Davie",
+      state: "FL",
+      websiteUrl: "https://perfectchoicenursery.com/",
+      phone: "(954) 555-9999",
+      source: "google_places",
+      placeId: "place-perfect-choice-nursery",
+      normalizedName: "perfect choice nursery",
+      normalizedDomain: "perfectchoicenursery.com",
+      normalizedPhone: "9545559999",
+    };
+    const existing: ExistingLeadRecord[] = [
+      {
+        id: "10000000-0000-4000-8000-000000000002",
+        businessName: "Perfect Choice Nursery",
+        websiteUrl: null,
+        phone: "(954) 555-0100",
+        city: "Davie",
+        status: "discovered",
+        notes: null,
+        normalizedDomain: null,
+        normalizedPhone: "9545550100",
+        googlePlaceId: "place-perfect-choice-nursery",
+      },
+    ];
+    const decision = decidePersistence(business, existing);
+    assert.equal(decision.action, "update");
+    assert.equal(decision.existingId, existing[0].id);
+  });
+
+  it("never merges two distinct businesses merely because their names are similar", () => {
+    const business: NormalizedBusiness = {
+      name: "Green Thumb Landscaping",
+      categoryId: "landscapers",
+      industry: "Landscaping",
+      city: "Fort Lauderdale",
+      state: "FL",
+      websiteUrl: "https://greenthumb-fl.example.test",
+      phone: "(954) 555-2222",
+      source: "google_places",
+      placeId: "place-green-thumb-a",
+      normalizedName: "green thumb landscaping",
+      normalizedDomain: "greenthumb-fl.example.test",
+      normalizedPhone: "9545552222",
+    };
+    const existing: ExistingLeadRecord[] = [
+      {
+        id: "10000000-0000-4000-8000-000000000003",
+        businessName: "Green Thumb Landscaping Co",
+        websiteUrl: "https://different-domain.example.test",
+        phone: "(954) 555-3333",
+        city: "Pompano Beach",
+        status: "discovered",
+        notes: null,
+        normalizedDomain: "different-domain.example.test",
+        normalizedPhone: "9545553333",
+        googlePlaceId: "place-green-thumb-b",
+      },
+    ];
+    const decision = decidePersistence(business, existing);
+    assert.equal(decision.action, "insert");
+  });
 });
 
 describe("scout pipeline", () => {
@@ -188,5 +255,28 @@ describe("scout cannot bypass paid-AI or create side effects", () => {
     assert.equal(SCOUT_SIDE_EFFECTS.canDeploy, false);
     assert.equal(SCOUT_SIDE_EFFECTS.canCharge, false);
     assert.equal(SCOUT_SIDE_EFFECTS.canCallXaiDirectly, false);
+  });
+
+  it("cannot invoke Designer -- no Scout module imports Designer's job-creation/prompt/worker code", async () => {
+    const { readdirSync, readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const scoutDir = join(process.cwd(), "src", "lib", "scout");
+    const forbiddenImports = [/@\/lib\/designer\/(prompt|runner|worker-db|report)/, /@\/data\/designer/];
+
+    function scan(dir: string): void {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scan(full);
+          continue;
+        }
+        if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
+        const source = readFileSync(full, "utf8");
+        for (const pattern of forbiddenImports) {
+          assert.doesNotMatch(source, pattern, `${full} must not import Designer job-invocation code`);
+        }
+      }
+    }
+    scan(scoutDir);
   });
 });

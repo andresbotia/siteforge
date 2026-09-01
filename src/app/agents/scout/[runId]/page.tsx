@@ -22,6 +22,10 @@ const FILTERS = [
   { key: "skip", label: "SKIP" },
   { key: "no_website", label: "No website" },
   { key: "weak_website", label: "Weak website" },
+  { key: "rating_3", label: "3.0+ stars" },
+  { key: "rating_4", label: "4.0+ stars" },
+  { key: "reviews_100", label: "100+ reviews" },
+  { key: "reviews_500", label: "500+ reviews" },
 ] as const;
 type FilterKey = (typeof FILTERS)[number]["key"];
 
@@ -59,6 +63,15 @@ export default async function ScoutRunPage({ params, searchParams }: PageProps) 
           <CardBody className="text-sm">
             <p className="font-medium">Discovery note</p>
             <p className="mt-1 text-muted">{discoveryDiagnostic}</p>
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {typeof output.provider_selection_note === "string" ? (
+        <Card className="mb-4">
+          <CardBody className="text-sm">
+            <p className="font-medium">Provider selection</p>
+            <p className="mt-1 text-muted">{output.provider_selection_note}</p>
           </CardBody>
         </Card>
       ) : null}
@@ -105,6 +118,8 @@ export default async function ScoutRunPage({ params, searchParams }: PageProps) 
               <tr>
                 <th className="px-4 py-2 font-medium">Business</th>
                 <th className="px-4 py-2 font-medium">Category / City</th>
+                <th className="px-4 py-2 font-medium">Provider</th>
+                <th className="px-4 py-2 font-medium">Rating / Reviews</th>
                 <th className="px-4 py-2 font-medium">Website status</th>
                 <th className="px-4 py-2 font-medium">Strength</th>
                 <th className="px-4 py-2 font-medium">Opportunity</th>
@@ -118,7 +133,7 @@ export default async function ScoutRunPage({ params, searchParams }: PageProps) 
             <tbody>
               {candidates.length === 0 ? (
                 <tr>
-                  <td className="px-4 py-6 text-muted" colSpan={10}>
+                  <td className="px-4 py-6 text-muted" colSpan={12}>
                     No candidates match this filter.
                   </td>
                 </tr>
@@ -150,7 +165,18 @@ export default async function ScoutRunPage({ params, searchParams }: PageProps) 
                         <br />
                         {String(row.city ?? "")}
                       </td>
-                      <td className="px-4 py-2 text-muted">{websiteStatusText(String(row.website_status ?? ""))}</td>
+                      <td className="px-4 py-2 text-muted">{String(row.source ?? "—")}</td>
+                      <td className="px-4 py-2 tabular-nums text-muted">
+                        {row.rating ? `${Number(row.rating).toFixed(1)} (${String(row.rating_tier ?? "—")})` : "— (UNKNOWN)"}
+                        <br />
+                        {typeof row.reviews === "number" ? `${row.reviews} (${String(row.review_volume_tier ?? "—")})` : "— (UNKNOWN)"}
+                      </td>
+                      <td className="px-4 py-2 text-muted">
+                        {websiteStatusText(String(row.website_status ?? ""))}
+                        {row.business_status && row.business_status !== "OPERATIONAL" ? (
+                          <div className="text-[11px] text-danger">{String(row.business_status)}</div>
+                        ) : null}
+                      </td>
                       <td className="px-4 py-2 tabular-nums">{String(row.business_strength ?? "—")}</td>
                       <td className="px-4 py-2 tabular-nums">{String(row.website_opportunity ?? "—")}</td>
                       <td className="px-4 py-2 tabular-nums">
@@ -184,8 +210,14 @@ function matchesFilter(row: Record<string, unknown>, filter: FilterKey): boolean
   if (filter === "build") return row.recommendation === "BUILD";
   if (filter === "review") return row.recommendation === "REVIEW";
   if (filter === "skip") return row.recommendation === "SKIP";
-  if (filter === "no_website") return row.website_status === "no_standalone_website_unverified" || row.website_status === "social_or_directory_only";
+  if (filter === "no_website") {
+    return row.website_status === "no_standalone_website_unverified" || row.website_status === "social_or_directory_only" || row.website_status === "website_not_listed_by_provider";
+  }
   if (filter === "weak_website") return typeof row.website_opportunity === "number" && row.website_opportunity >= 55;
+  if (filter === "rating_3") return typeof row.rating === "number" && row.rating >= 3.0;
+  if (filter === "rating_4") return typeof row.rating === "number" && row.rating >= 4.0;
+  if (filter === "reviews_100") return typeof row.reviews === "number" && row.reviews >= 100;
+  if (filter === "reviews_500") return typeof row.reviews === "number" && row.reviews >= 500;
   return true;
 }
 
@@ -197,6 +229,8 @@ function websiteStatusText(status: string): string {
       return "Listed but unreachable";
     case "social_or_directory_only":
       return "Social/directory only";
+    case "website_not_listed_by_provider":
+      return "Not listed by Google (unconfirmed)";
     case "no_standalone_website_unverified":
       return "No website verified";
     default:

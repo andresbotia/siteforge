@@ -2,6 +2,70 @@
 
 For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5B real-prospect preparation and Auditor calibration are locked, with the M9.5B Auditor Calibration lock at `1358caad47c46b9832f875ec1e62d5834043906b`. M9.5C guarded real email integration/internal send is complete: Resend is configured server-side, the sending domain was verified externally, the live-email gate was exercised for one operator-only test, and the test delivered without prospect/customer funnel mutation. M9.5D first controlled prospect campaign preparation is current. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live payment use, or broader production operation. This is NOT M10.
 
+## Session: Scout V1.1 -- Google Places discovery + business-strength qualification
+
+Session start commit `2021d10` (prior session, above). One commit, pushed. No migration -- Google Place ID/business status/rating tiers all persist into the existing `leads.inspection_summary` JSON column, and the monthly usage guard reuses the existing `agent_tool_calls` table. `GOOGLE_PLACES_API_KEY` was **not configured** in this environment during this session -- see "Live validation status" below.
+
+### Why
+
+Real Scout V1 validation (prior session) ran Broward County landscaping through the $0 OpenStreetMap Overpass provider and returned three candidates -- Verdant Lyfe, The Time Is Now Design & Build, Perfect Choice Nursery -- as if their missing website field were meaningful "no website" opportunity evidence. Manual verification found all three have real, working, professionally-adequate websites; OSM simply had no website tag for them (OSM is community-maintained and frequently incomplete, not a business-controlled record). Scout was about to recommend spending Designer capacity on businesses that did not need it. This session fixes the root cause: OSM data quality, not Scout's scoring math.
+
+### Google Places' role vs. OSM's role
+
+Google Places API (New) -- Text Search -- becomes the **preferred** discovery provider when `GOOGLE_PLACES_API_KEY` is configured server-side, because Google Business Profile data is business-controlled (owners actively manage rating, review count, and website fields) where OSM is community-maintained and often stale/incomplete. OSM Overpass remains the **$0 fallback**: used automatically when Google is unconfigured, or when the monthly Google request ceiling has been reached this month. Neither provider was deleted or weakened; `src/lib/scout/run.ts`, `scoring.ts`'s point thresholds, and the existing SSRF/inspection stack are all unchanged in this session -- only the businessStrength reason labels and one new opportunity-input case were added.
+
+### Google fields used (exact field mask)
+
+`places.id, places.displayName, places.formattedAddress, places.businessStatus, places.rating, places.userRatingCount, places.websiteUri, places.nationalPhoneNumber, places.location, places.primaryType` -- never a wildcard mask. No review text, photos, generative summaries, or opening hours are requested (`src/lib/scout/providers/google-places.ts`).
+
+### Review/rating tiers (`src/lib/scout/rating-tiers.ts`)
+
+Review-volume: 0-24 EMERGING, 25-99 ESTABLISHED, 100-499 STRONG, 500-999 VERY_STRONG, 1000+ MAJOR_LOCAL_PRESENCE. Rating: 4.5-5.0 EXCELLENT, 4.0-4.49 STRONG, 3.5-3.99 VIABLE, 3.0-3.49 LOWER_PRIORITY, below 3.0 WEAK. Missing rating/review count is always `UNKNOWN`, never coerced to zero -- an explicit `0` review count is a real EMERGING fact, distinct from unknown. These tiers are a labeling layer on top of `scoring.ts`'s existing, unmodified point thresholds, which already produce the correct qualitative ordering (a 4.6-star/487-review business outranks a 4.9-star/11-review one) once real numbers are supplied -- the math didn't need to change, only the input quality did.
+
+### Website-resolution semantics -- the actual fix
+
+`src/lib/scout/website-status.ts` now has five statuses, not four: `working_standalone_website`, `website_unreachable`, `social_or_directory_only`, **`website_not_listed_by_provider`** (new), `no_standalone_website_unverified`. The split between the last two is by source confidence: Google explicitly having no `websiteUri` is real, moderately-trustworthy evidence (business-controlled data); OpenStreetMap silence proves nothing. In the commercial-score composite (`commercial-score.ts`), `website_not_listed_by_provider` gets a conservative opportunity input of 65 (well below `social_or_directory_only`'s 85, and never the previous behavior of treating provider silence as maximal opportunity); `no_standalone_website_unverified` still uses Scout's raw, unboosted opportunity score. A working `websiteUri` from Google flows into the exact same `inspectWebsite()` call OSM-sourced URLs already used -- SSRF protections are untouched and apply identically regardless of source (directly tested: a Google-sourced URL pointing at the AWS metadata IP is blocked before any fetch).
+
+### Business-strength scoring
+
+`scoreBusinessStrength()` (`scoring.ts`) no longer coerces a missing rating/review count to zero internally -- both are checked explicitly so "unknown" and "a real zero" are never conflated, and reasons now include the tier name (e.g. "327 reviews (STRONG tier)..."). A new, additive signal: Google's `businessStatus`. `OPERATIONAL`/absent is never penalized; `CLOSED_TEMPORARILY` halves the score; `CLOSED_PERMANENTLY` hard-caps the score at 10 and also overrides the commercial recommendation straight to SKIP regardless of an otherwise-strong weighted score (`commercial-score.ts`). The point thresholds/weights themselves are unchanged -- Google just supplies more reliable inputs than OSM ever could.
+
+### Place ID, dedupe, and provenance
+
+`DiscoveredBusiness`/`NormalizedBusiness` gained `placeId` and `businessStatus`. `findDuplicate()` (`dedupe.ts`) now checks Google Place ID first (read back from a prior lead's `inspection_summary.google_place_id`, via a new `ExistingLeadRecord.googlePlaceId` -- no new column) before falling back to the existing domain/phone/name matching. `inspection_summary` now also carries `business_status`, `rating_tier`, `review_volume_tier`, and each source's own provenance (`provider`, `query`, `retrievedAt`) -- never raw Google response bodies, never review text.
+
+### Cost / quota safety
+
+Exactly one Text Search request per Scout run (no pagination, no retries -- enforced by construction, not just documented). A `checkGoogleMonthlyUsageGuard()` in `src/data/scout.ts` reuses the existing `agent_tool_calls` table (already recording every Scout discovery call) to count this UTC month's `provider = 'google_places'` calls against a default ceiling of 300/month, operator-overridable via `GOOGLE_PLACES_MONTHLY_REQUEST_CEILING`; exceeding it falls back to Overpass for the rest of the month. The existing hard candidate max (50) and per-run external-request ceiling (300, from the prior Scout V1 session) are unchanged and apply identically regardless of provider.
+
+### Configuration required (operator action, not done by this session)
+
+- Enable the **Places API (New)** in the relevant Google Cloud project.
+- Set the server-only environment variable `GOOGLE_PLACES_API_KEY` (never `NEXT_PUBLIC_`-prefixed) locally and in Vercel's server environment.
+- Billing must be attached to the Google Cloud project -- Places API (New) requires it even within the free monthly allowance.
+- Recommended key restriction: an API-restricted key limited to the Places API only (not an unrestricted key). Application restriction (IP or none, since calls originate server-side from Vercel/local, not a browser) is an operator/Google-Cloud-console decision outside this repo.
+- No key was created, requested, fabricated, committed, or printed by this session.
+
+### Live validation status: **PENDING OPERATOR SETUP**
+
+`GOOGLE_PLACES_API_KEY` was not present in this environment's `.env.local` during this session. No live Google API call was made -- confirmed by design (the provider fails closed to "not configured" before ever constructing a request) and by the absence of the key. All behavior above is covered by mocked-response tests, including regression fixtures for the three real businesses that exposed the original failure (their names/URLs appear only as mock test data, never in production logic -- directly asserted by a test reading the provider's own source). The next real action is the operator configuring the key per above, after which one bounded real run (e.g. Broward County landscaping, limit 10) should be performed to confirm live behavior before broader use.
+
+### Dashboard
+
+`/agents/scout` shows whether Google Places is configured and which provider is preferred; the run list shows each run's provider. `/agents/scout/[runId]` gained a provider-selection note banner, a Provider column, a Rating/Reviews column (with tier labels), a business-status flag for a closed business, and four new filters (3.0+ stars, 4.0+ stars, 100+ reviews, 500+ reviews) alongside the existing BUILD/REVIEW/SKIP/no-website/weak-website filters. `/leads/[id]`'s existing "Commercial potential (Scout)" card is unchanged and continues to work with either provider's data.
+
+### Human gates (unchanged)
+
+Scout still only ever writes to `leads`; it has no import of Designer's job-creation/prompt/worker code anywhere under `src/lib/scout/` (directly tested). BUILD means "a human should consider spending Designer capacity," never permission to spend it automatically. No paid AI call occurs anywhere in this session's code.
+
+### Validation
+
+`npx tsc --noEmit`, `npm test` (513/513, up from 460), `npm run lint`, `npm run build`, `git diff --check` all clean. The build and full test suite pass with `GOOGLE_PLACES_API_KEY` absent, as required.
+
+### Next milestone
+
+Stripe work is the next milestone after Scout V1.1 is live-validated with a real Google Places key -- explicitly out of scope for this session and untouched.
+
 ## Designer Job / local Claude Code worker session (current, parallel to M9.5D)
 
 This session implemented a new, parallel architecture track the operator requested directly (not part of the M9.5A-D roadmap text above, and does not change M9.5D's status or advance the first controlled prospect campaign). It does not touch real prospect/customer/payment data and made no external side effect. See "Session: Designer Job system" below for the full detail; this paragraph is the one-line pointer for a session that only reads the top of this file.

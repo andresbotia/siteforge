@@ -2,10 +2,14 @@ import "server-only";
 
 import { recordActivityEvent } from "@/data/activity";
 import { createLiveHttpClient } from "@/lib/scout/inspector";
+import { createGooglePlacesDiscoveryProvider } from "@/lib/scout/providers/google-places";
+import { getGooglePlacesConfigFromEnv, getGooglePlacesMonthlyCeiling } from "@/lib/scout/providers/google-config";
 import { createOverpassDiscoveryProvider } from "@/lib/scout/providers/overpass";
-import { SCOUT_DEFAULT_CANDIDATES, SCOUT_MAX_CANDIDATES, SCOUT_REAL_PROVIDER_ID } from "@/lib/scout/limits";
+import { GOOGLE_PLACES_PROVIDER_ID, SCOUT_DEFAULT_CANDIDATES, SCOUT_MAX_CANDIDATES } from "@/lib/scout/limits";
+import { classifyRatingTier, classifyReviewVolumeTier } from "@/lib/scout/rating-tiers";
 import { buildExistingLeadScoutPatch } from "@/lib/scout/status";
 import { getScoutCategory, type ScoutCategoryId } from "@/lib/scout/categories";
+import type { BusinessDiscoveryProvider } from "@/lib/scout/discovery";
 import { runScoutPipeline, type EnrichedScoutCandidateResult, type ScoutPipelineResult } from "@/lib/scout/run";
 import { leadStatusForTier } from "@/lib/scout/scoring";
 import { websiteStatusLabel } from "@/lib/scout/website-status";
@@ -13,6 +17,7 @@ import { mutateTable, readTable } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 import type { AgentRow, AgentRunRow, LeadRow } from "@/types/database";
 import type { ExistingLeadRecord } from "@/lib/scout/types";
+import { asRecord } from "@/lib/json";
 
 const SCOUT_AGENT_SLUG = "scout";
 
@@ -36,6 +41,10 @@ function inspectionSummary(candidate: EnrichedScoutCandidateResult): Json {
     website_status_label: websiteStatusLabel(candidate.websiteStatus),
     source_url: candidate.business.sourceUrl ?? null,
     sources: candidate.business.sources ?? [],
+    google_place_id: candidate.business.placeId ?? null,
+    business_status: candidate.business.businessStatus ?? null,
+    rating_tier: classifyRatingTier(candidate.business.rating ?? null),
+    review_volume_tier: classifyReviewVolumeTier(candidate.business.reviewCount ?? null),
     contactability: {
       score: candidate.contactability.score,
       verified: candidate.contactability.verified,
@@ -63,7 +72,58 @@ function asExisting(row: LeadRow): ExistingLeadRecord {
     notes: row.notes,
     normalizedDomain: row.normalized_domain,
     normalizedPhone: row.normalized_phone,
+    googlePlaceId: typeof asRecord(row.inspection_summary).google_place_id === "string" ? (asRecord(row.inspection_summary).google_place_id as string) : null,
   };
+}
+
+/**
+ * Google Places is a billable Google Cloud API even within a free monthly
+ * allowance (see limits.ts). This reuses the existing agent_tool_calls
+ * table (already recording every Scout discovery call) as the usage
+ * counter -- no new table, no migration. A month is counted in UTC from
+ * the 1st; the ceiling is a hard request COUNT, not a dollar estimate
+ * SiteForge cannot verify live.
+ */
+async function checkGoogleMonthlyUsageGuard(): Promise<{ allowed: boolean; usedThisMonth: number; ceiling: number }> {
+  const ceiling = getGooglePlacesMonthlyCeiling(process.env);
+  const monthStart = new Date();
+  monthStart.setUTCDate(1);
+  monthStart.setUTCHours(0, 0, 0, 0);
+  const rows = await readTable<{ id: string }[]>((client) =>
+    client
+      .from("agent_tool_calls")
+      .select("id")
+      .eq("tool_name", "discover")
+      .eq("provider", GOOGLE_PLACES_PROVIDER_ID)
+      .gte("created_at", monthStart.toISOString()),
+  );
+  const usedThisMonth = rows?.length ?? 0;
+  return { allowed: usedThisMonth < ceiling, usedThisMonth, ceiling };
+}
+
+/**
+ * Google Places is preferred when GOOGLE_PLACES_API_KEY is configured and
+ * this month's usage is under the ceiling; otherwise Scout falls back to
+ * the $0 OpenStreetMap Overpass provider. Google never becomes active
+ * merely because its code exists -- it requires explicit server-side
+ * configuration (see google-config.ts).
+ */
+async function selectScoutDiscoveryProvider(): Promise<{ provider: BusinessDiscoveryProvider; providerSelectionNote: string | null }> {
+  const googleConfig = getGooglePlacesConfigFromEnv(process.env);
+  if (!googleConfig) {
+    return {
+      provider: createOverpassDiscoveryProvider(),
+      providerSelectionNote: "Google Places not configured (GOOGLE_PLACES_API_KEY unset); using the OpenStreetMap Overpass fallback for this run.",
+    };
+  }
+  const guard = await checkGoogleMonthlyUsageGuard();
+  if (!guard.allowed) {
+    return {
+      provider: createOverpassDiscoveryProvider(),
+      providerSelectionNote: `Google Places monthly request ceiling reached (${guard.usedThisMonth}/${guard.ceiling} this month); falling back to OpenStreetMap Overpass for this run.`,
+    };
+  }
+  return { provider: createGooglePlacesDiscoveryProvider(), providerSelectionNote: null };
 }
 
 export async function listScoutRuns(): Promise<AgentRunRow[]> {
@@ -104,6 +164,8 @@ export async function startScoutRun(input: {
   );
   if (!agent) return { ok: false, error: "Scout agent record was not found." };
 
+  const selectedProvider = await selectScoutDiscoveryProvider();
+
   const run = await mutateTable<AgentRunRow | null>((client) =>
     client
       .from("agent_runs")
@@ -111,7 +173,7 @@ export async function startScoutRun(input: {
         agent_id: agent.id,
         status: "running",
         trigger_type: "manual",
-        provider: SCOUT_REAL_PROVIDER_ID,
+        provider: selectedProvider.provider.id,
         purpose: `Scout ${category.label} in ${location}`,
         input: {
           location,
@@ -149,20 +211,21 @@ export async function startScoutRun(input: {
         existingLeads: (leads ?? []).map(asExisting),
       },
       {
-        discovery: createOverpassDiscoveryProvider(),
+        discovery: selectedProvider.provider,
         http: createLiveHttpClient(),
       },
     );
 
-    await recordToolCall(run.id, "discover", "search", {
+    await recordToolCall(run.id, "discover", "search", pipeline.discoveryProviderId, {
       location,
       category: category.id,
       limit,
     }, {
-      provider: SCOUT_REAL_PROVIDER_ID,
+      provider: pipeline.discoveryProviderId,
       count: pipeline.discovered,
       cost_usd: 0,
       diagnostic: pipeline.discoveryDiagnostic,
+      provider_selection_note: selectedProvider.providerSelectionNote,
     });
 
     const persisted: EnrichedScoutCandidateResult[] = [];
@@ -171,7 +234,7 @@ export async function startScoutRun(input: {
       persisted.push({ ...candidate, leadId });
     }
 
-    await recordToolCall(run.id, "inspect", "bounded_fetch", {
+    await recordToolCall(run.id, "inspect", "bounded_fetch", pipeline.discoveryProviderId, {
       pages_cap: 3,
       concurrency: 4,
     }, {
@@ -179,14 +242,14 @@ export async function startScoutRun(input: {
       ceiling_reached: pipeline.ceilingReached,
       not_inspected_due_to_ceiling: pipeline.notInspectedDueToCeiling,
     });
-    await recordToolCall(run.id, "qualify", "deterministic_score", {
+    await recordToolCall(run.id, "qualify", "deterministic_score", pipeline.discoveryProviderId, {
       paid_ai: "not_required",
     }, {
       qualified: pipeline.qualified,
       review: pipeline.review,
       rejected: pipeline.rejected,
     });
-    await recordToolCall(run.id, "commercial_rank", "deterministic_score", {
+    await recordToolCall(run.id, "commercial_rank", "deterministic_score", pipeline.discoveryProviderId, {
       paid_ai: "not_required",
     }, {
       build: pipeline.build,
@@ -207,6 +270,8 @@ export async function startScoutRun(input: {
       discovery_cost_usd: 0,
       discovery_provider: pipeline.discoveryProviderId,
       discovery_diagnostic: pipeline.discoveryDiagnostic,
+      provider_selection_note: selectedProvider.providerSelectionNote,
+      google_requests_used: pipeline.discoveryProviderId === GOOGLE_PLACES_PROVIDER_ID ? 1 : 0,
       ceiling_reached: pipeline.ceilingReached,
       not_inspected_due_to_ceiling: pipeline.notInspectedDueToCeiling,
       paid_ai: "not_required",
@@ -219,9 +284,14 @@ export async function startScoutRun(input: {
           category: item.business.industry,
           city: item.business.city,
           rating: item.business.rating,
+          rating_tier: classifyRatingTier(item.business.rating ?? null),
           reviews: item.business.reviewCount,
+          review_volume_tier: classifyReviewVolumeTier(item.business.reviewCount ?? null),
           website: item.business.websiteUrl,
           website_status: item.websiteStatus,
+          business_status: item.business.businessStatus ?? null,
+          google_place_id: item.business.placeId ?? null,
+          source: item.business.source,
           business_strength: item.score.businessStrengthScore,
           website_opportunity: item.score.websiteOpportunityScore,
           overall: item.score.overallQualificationScore,
@@ -369,6 +439,7 @@ async function recordToolCall(
   runId: string,
   tool: string,
   action: string,
+  provider: string,
   request: Json,
   response: Json,
 ) {
@@ -382,7 +453,7 @@ async function recordToolCall(
         request,
         response,
         status: "completed",
-        provider: SCOUT_REAL_PROVIDER_ID,
+        provider,
         estimated_cost_usd: 0,
         actual_cost_usd: 0,
         requires_approval: false,

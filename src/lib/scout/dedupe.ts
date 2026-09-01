@@ -10,6 +10,14 @@ export function findDuplicate(
   const phone = business.normalizedPhone;
   const name = business.normalizedName;
 
+  // Google Place ID is the strongest identity signal available -- check it
+  // first when both sides have one, before falling back to domain/phone/name
+  // matching (which stays in place for OSM-sourced or Place-ID-less leads).
+  if (business.placeId) {
+    const byPlaceId = existing.find((lead) => lead.googlePlaceId && lead.googlePlaceId === business.placeId);
+    if (byPlaceId) return byPlaceId;
+  }
+
   if (domain) {
     const byDomain = existing.find((lead) => {
       const leadDomain = lead.normalizedDomain ?? normalizeDomain(lead.websiteUrl);
