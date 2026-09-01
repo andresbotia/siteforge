@@ -281,7 +281,7 @@ Template selection is deterministic keyword matching and reports a fallback rath
 
 ### Designer Job / local Claude Code worker
 
-When the template registry has no coverage for a lead's industry (`needsNewMasterTemplate`), a human can create a **Designer Job** at `/agents/designer` instead of accepting a generic fallback draft. A local worker process (`npm run designer:worker`, or `designer:worker:once` / `designer:smoke-test` for a single run) invokes the operator's already-authenticated Claude Code CLI -- subscription auth only, never a paid API key -- in a sandboxed, tool-restricted subprocess (`src/lib/designer/`) confined to an isolated workspace under `.siteforge/designer-jobs/` (gitignored). The worker never receives `SUPABASE_SECRET_KEY` or any other SiteForge/provider secret; it can only read/write/search inside its own workspace and has no Bash/WebFetch/WebSearch access. Its output is fed through the same static-safety validation and isolated fixed-command build the external-generated-site import path already uses (`src/lib/builder/external-artifacts.ts`), and a passing candidate becomes a `generated_websites` draft awaiting the same preview-approval flow. **Only a human can move a Designer Job to `approved`** (`/designer-jobs/[id]`, gated by `requireAdminSession()`); no worker output or automated QA result can self-approve. See `HANDOFF.md` for the full architecture, a real local smoke-test result, and the current blocker (the `designer_jobs` migration is committed but not yet applied to the hosted project).
+When the template registry has no coverage for a lead's industry (`needsNewMasterTemplate`), a human can create a **Designer Job** at `/agents/designer` instead of accepting a generic fallback draft. A local worker process (`npm run designer:worker`, or `designer:worker:once` / `designer:smoke-test` for a single run) invokes the operator's already-authenticated Claude Code CLI -- subscription auth only, never a paid API key -- in a sandboxed, tool-restricted subprocess (`src/lib/designer/`) confined to an isolated workspace under `.siteforge/designer-jobs/` (gitignored). The worker never receives `SUPABASE_SECRET_KEY` or any other SiteForge/provider secret; it can only read/write/search inside its own workspace and has no Bash/WebFetch/WebSearch access. Its output is fed through the same static-safety validation and isolated fixed-command build the external-generated-site import path already uses (`src/lib/builder/external-artifacts.ts`), and a passing candidate becomes a `generated_websites` draft awaiting the same preview-approval flow. **Only a human can move a Designer Job to `approved`** (`/designer-jobs/[id]`, gated by `requireAdminSession()`); no worker output or automated QA result can self-approve. See `HANDOFF.md` for the full architecture and a real local smoke-test result. The `designer_jobs` schema is applied to the hosted project; the worker has not yet been run against a real (non-fixture) lead.
 
 Pages load data on the server through repositories after the SiteForge admin session is verified. The browser does not query application tables. Client Components are used only for filters, dialogs, tabs, mobile navigation, and approval forms. Approval writes go through Next.js server actions.
 
@@ -440,10 +440,10 @@ Schema and development seed live in:
 - `supabase/migrations/20260829220000_auditor_website_audits.sql`
 - `supabase/migrations/20260829230000_builder_generated_websites.sql`
 - `supabase/migrations/20260830000000_preview_deployments_tracking.sql`
-- `supabase/migrations/20260830230000_external_source_artifacts.sql`
-- `supabase/migrations/20260831150000_external_source_archive_storage.sql`
-- `supabase/migrations/20260901000000_designer_jobs.sql` (not yet applied to the hosted project -- see HANDOFF.md Blockers)
-- `supabase/migrations/20260901010000_designer_worker_provider.sql` (not yet applied to the hosted project -- see HANDOFF.md Blockers)
+- `supabase/migrations/20260831113741_external_source_artifacts.sql`
+- `supabase/migrations/20260831125533_external_source_archive_storage.sql`
+- `supabase/migrations/20260901000000_designer_jobs.sql`
+- `supabase/migrations/20260901010000_designer_worker_provider.sql`
 
 Apply them to the hosted project with the Supabase CLI (after `supabase login` and `supabase link --project-ref afpjclfcajrcbpcrgzvd`):
 
