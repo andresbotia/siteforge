@@ -128,3 +128,29 @@ export function fenceUntrustedData(label: string, value: string): string {
     "</untrusted-data>",
   ].join("\n");
 }
+
+/**
+ * Wraps a DESIGN.md reference before it reaches a worker prompt. Distinct
+ * from fenceUntrustedData(): a DESIGN.md only ever reaches this function
+ * from SiteForge's own trusted reference-resolution code (reference.ts),
+ * never from prospect/public data, a scraped website, or model-invented
+ * content -- so it is not "untrusted data" in the prompt-injection sense.
+ * It still needs its own boundary, though: it must never be read as
+ * authoritative about the business being built, only as design guidance
+ * that verified business facts always override. See prompt.ts's "DESIGN
+ * REFERENCE VS. VERIFIED BUSINESS FACTS" section for the full rule.
+ */
+export function fenceDesignReference(label: string, markdown: string): string {
+  const cleaned = markdown.replace(/```/g, "'''");
+  return [
+    `<design-reference source="${label}">`,
+    "The following is a SiteForge-authored, approved DESIGN.md: design PRINCIPLES only, never business facts.",
+    "Use it for visual language, hierarchy, rhythm, composition, typography roles, imagery strategy, component",
+    "treatment, and responsive intent. Verified business facts supplied elsewhere always override anything here.",
+    "Do not copy any example or illustrative claim from this reference as if it were true of this business.",
+    "```markdown",
+    cleaned,
+    "```",
+    "</design-reference>",
+  ].join("\n");
+}

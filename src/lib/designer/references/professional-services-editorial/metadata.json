@@ -1,0 +1,9 @@
+{
+  "id": "category-professional-services-editorial-v1",
+  "title": "Professional Services — Editorial",
+  "category": "professional_services",
+  "approvalStatus": "pending_human_review",
+  "reviewedBy": null,
+  "approvedAt": null,
+  "notes": "SiteForge-authored generalized category reference, informed by the Sabal Point Designer proof but containing no Sabal Point-specific facts, palette, or copy. Not yet reviewed or approved by a human. resolveDesignerReference() (src/lib/designer/reference.ts) will not select this until approvalStatus is changed to \"approved\" by a human editing this file. An AI agent authoring this file cannot approve it."
+}
