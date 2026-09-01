@@ -16,7 +16,7 @@
  *   validating                -> technical_qa_passed | technical_qa_failed
  *   technical_qa_failed      -> failed | superseded
  *   technical_qa_passed      -> visual_review_required
- *   visual_review_required   -> approved | rejected | superseded
+ *   visual_review_required   -> approved | rejected | superseded | queued
  *   approved                 -> (terminal; may separately be promoted_to_master)
  *   rejected                 -> (terminal)
  *   failed                   -> (terminal)
@@ -30,6 +30,21 @@
  * and no automated QA result can set status to `approved` directly. This
  * mirrors the mandatory human-approval boundary already used for M7 preview
  * publication and M9 checkout approval.
+ *
+ * Revision loop: `visual_review_required -> queued` is the ONE additional
+ * edge beyond the original linear happy path. recordVisualReview() takes it
+ * only when an admin submits visual_review_status='needs_revision' with
+ * non-empty notes, and resets the worker-owned execution fields (claimed_by,
+ * claimed_at, workspace_path, started_at, completed_at, technical_qa_report,
+ * failure_code/reason) so the job re-enters claimNextDesignerJob()'s normal
+ * queue exactly like a brand-new job -- but visual_review_notes is
+ * deliberately NOT cleared, and the job keeps its id, so the worker reuses
+ * the same on-disk workspace (createDesignerJobWorkspace() is keyed by job
+ * id and is not wiped between runs). This lets the Designer Worker read its
+ * own previous output back and revise it in place, informed by the human's
+ * notes, without a second job row, a new workspace, or a conversational
+ * revision protocol. No new status was introduced for this on purpose --
+ * "revising" is just "re-running the same job with feedback attached."
  */
 export const DESIGNER_JOB_STATES = [
   "queued",
@@ -59,7 +74,7 @@ const TRANSITIONS: Record<DesignerJobStatus, DesignerJobStatus[]> = {
   validating: ["technical_qa_passed", "technical_qa_failed"],
   technical_qa_failed: ["failed", "superseded"],
   technical_qa_passed: ["visual_review_required"],
-  visual_review_required: ["approved", "rejected", "superseded"],
+  visual_review_required: ["approved", "rejected", "superseded", "queued"],
   approved: [],
   rejected: [],
   failed: [],

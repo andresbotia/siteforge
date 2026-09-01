@@ -13,7 +13,7 @@ import { runBuilderPipeline } from "@/lib/builder/run";
 // no such marker, so it is safe to use directly from a standalone script.
 import { getSupabaseServerConfigFromEnv } from "@/lib/supabase/config-core";
 import type { Database, DesignerJobRow, Json } from "@/types/database";
-import type { DesignerBusinessFacts } from "./facts";
+import { fingerprintFacts, type DesignerBusinessFacts, type DesignerImageryManifest } from "./facts";
 import type { ParsedDesignerWorkerReport } from "./report";
 import { assertDesignerJobTransition, type DesignerFailureCode } from "./state-machine";
 import type { ExternalSiteValidationResult, ExternalSiteBuildResult, ExternalSiteImportManifest } from "@/lib/builder/external-sites";
@@ -54,6 +54,46 @@ function workerClient(): SupabaseClient<Database> {
     auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
   });
   return cachedClient;
+}
+
+export type EnqueueFixtureDesignerJobInput = {
+  mode: "new_master" | "adaptation";
+  templateFamily: string | null;
+  reason: string;
+  facts: DesignerBusinessFacts;
+  imagery: DesignerImageryManifest;
+  designBriefMarkdown: string;
+};
+
+/**
+ * Direct designer_jobs insert for the local operator smoke-test script
+ * (scripts/designer-smoke-test-enqueue.ts). Mirrors exactly what
+ * src/data/designer.ts's createDesignerJobRequest inserts through the
+ * requireAdminSession-gated web path; this exists only because a standalone
+ * script has no HTTP request/cookies to satisfy requireAdminSession(). Hard
+ * limited to is_fixture=true: a real lead's Designer Job must always go
+ * through the admin-authenticated web UI (requestDesignerJobAction), never
+ * this script path.
+ */
+export async function enqueueFixtureDesignerJob(input: EnqueueFixtureDesignerJobInput): Promise<{ ok: true; jobId: string } | { ok: false; error: string }> {
+  const client = workerClient();
+  const inserted = await client
+    .from("designer_jobs")
+    .insert({
+      lead_id: null,
+      is_fixture: true,
+      mode: input.mode,
+      template_family: input.templateFamily,
+      reason: input.reason.slice(0, 500),
+      design_brief: { markdown: input.designBriefMarkdown } as unknown as Json,
+      input_facts_snapshot: input.facts as unknown as Json,
+      input_facts_fingerprint: fingerprintFacts(input.facts),
+      imagery_manifest: input.imagery as unknown as Json,
+    })
+    .select("id")
+    .maybeSingle();
+  if (inserted.error || !inserted.data) return { ok: false, error: inserted.error?.message ?? "insert_failed" };
+  return { ok: true, jobId: inserted.data.id };
 }
 
 export async function claimNextDesignerJob(workerId: string): Promise<DesignerJobRow | null> {
@@ -142,14 +182,66 @@ export type FinalizeSuccessInput = {
  * approval flow (src/data/external-sites.ts) works on Designer Worker output
  * unchanged. Moves the job to technical_qa_passed then immediately
  * visual_review_required -- it can never reach `approved` from here.
+ *
+ * Fixture/QA jobs (input.leadId === null) are a deliberate exception: both
+ * generated_websites.lead_id and external_site_artifacts.lead_id are `not
+ * null references public.leads` (see
+ * supabase/migrations/20260829100000_initial_schema.sql). A fixture has no
+ * real leads row, and inventing one just to satisfy that foreign key would
+ * leak a synthetic business into the real lead pipeline (Sales eligibility,
+ * customer conversion, /leads listings) -- worse than not persisting a
+ * website row at all. So a fixture's technical QA result is written
+ * directly onto its designer_jobs row (still transitioning through
+ * technical_qa_passed -> visual_review_required exactly like a real job)
+ * and it never gets output_generated_website_id/output_artifact_id; its
+ * built output stays on disk under the job's own workspace for a human to
+ * open directly. This is a data-layer decision, not a schema change --
+ * see AGENTS.md on not creating migrations unless genuinely required.
  */
-export async function finalizeDesignerJobSuccess(input: FinalizeSuccessInput): Promise<{ ok: true; websiteId: string; artifactId: string } | { ok: false; error: string }> {
+export async function finalizeDesignerJobSuccess(
+  input: FinalizeSuccessInput,
+): Promise<{ ok: true; websiteId: string | null; artifactId: string | null } | { ok: false; error: string }> {
   const client = workerClient();
   const now = new Date().toISOString();
   const snapshot = input.facts.snapshot;
+  const qaPassed = input.validation.ok && input.build.ok;
+
+  if (!input.leadId) {
+    await client
+      .from("designer_jobs")
+      .update({
+        status: qaPassed ? "technical_qa_passed" : "technical_qa_failed",
+        technical_qa_report: {
+          validation: input.validation,
+          build: { ok: input.build.ok, status: input.build.status, reason: input.build.reason },
+        } as unknown as Json,
+        completed_at: now,
+        subscription_usage_status: "completed",
+        updated_at: now,
+      })
+      .eq("id", input.jobId);
+
+    if (qaPassed) {
+      await client
+        .from("designer_jobs")
+        .update({ status: "visual_review_required", visual_review_status: "pending", updated_at: new Date().toISOString() })
+        .eq("id", input.jobId)
+        .eq("status", "technical_qa_passed");
+    }
+
+    await insertActivityEvent(client, {
+      eventType: qaPassed ? "designer_job_technical_qa_passed" : "designer_job_technical_qa_failed",
+      title: qaPassed ? "Designer Job (fixture) passed technical QA" : "Designer Job (fixture) failed technical QA",
+      description: input.facts.businessName,
+      leadId: null,
+      metadata: { job_id: input.jobId, fixture: true },
+    });
+
+    return { ok: true, websiteId: null, artifactId: null };
+  }
 
   const leadInput = {
-    id: input.leadId ?? input.jobId,
+    id: input.leadId,
     businessName: input.facts.businessName,
     industry: input.facts.industry,
     city: input.facts.city,
@@ -181,7 +273,7 @@ export async function finalizeDesignerJobSuccess(input: FinalizeSuccessInput): P
   const artifact = createExternalSourceArtifact({
     id: artifactId,
     generatedWebsiteId: websiteId,
-    leadId: input.leadId ?? input.jobId,
+    leadId: input.leadId,
     provider: "claude_code_worker",
     manifest: input.manifest,
     importedAt: now,
@@ -222,7 +314,7 @@ export async function finalizeDesignerJobSuccess(input: FinalizeSuccessInput): P
     .from("generated_websites")
     .insert({
       id: websiteId,
-      lead_id: input.leadId ?? input.jobId,
+      lead_id: input.leadId,
       status: "review_required",
       template: `Designer Worker candidate (${input.templateFamily ?? "unassigned family"})`,
       template_key: baselineSpec.template,
@@ -252,7 +344,7 @@ export async function finalizeDesignerJobSuccess(input: FinalizeSuccessInput): P
     .insert({
       id: artifact.id,
       generated_website_id: websiteId,
-      lead_id: input.leadId ?? input.jobId,
+      lead_id: input.leadId,
       provider: artifact.provider,
       source_manifest_fingerprint: artifact.sourceManifestFingerprint,
       source_manifest: artifact.manifest as unknown as Json,
@@ -268,7 +360,6 @@ export async function finalizeDesignerJobSuccess(input: FinalizeSuccessInput): P
     return { ok: false, error: artifactInsert.error?.message ?? "could_not_persist_external_artifact" };
   }
 
-  const qaPassed = input.validation.ok && input.build.ok;
   await client
     .from("designer_jobs")
     .update({

@@ -26,8 +26,8 @@
 
 import { randomUUID } from "node:crypto";
 import { writeFile } from "node:fs/promises";
-import { buildDesignBrief } from "@/lib/builder/design-brief";
 import { createExternalSourceArtifact, buildExternalSourceArtifact } from "@/lib/builder/external-artifacts";
+import { buildDesignerBrief } from "@/lib/designer/brief";
 import { checkClaudeAuthHealth, checkClaudeCliVersion, locateClaudeCli } from "@/lib/designer/cli";
 import { collectDesignerWorkerOutput, validateCollectedManifest } from "@/lib/designer/collect";
 import { fixtureBusinessFacts, emptyImageryManifest } from "@/lib/designer/facts";
@@ -80,7 +80,7 @@ async function main(): Promise<void> {
     address: "410 NE 20th St, Fort Lauderdale, FL",
   });
   const imagery = emptyImageryManifest();
-  const brief = buildDesignBrief({
+  const brief = buildDesignerBrief({
     industry: facts.industry,
     exampleBusiness: {
       name: facts.businessName,
@@ -105,7 +105,7 @@ async function main(): Promise<void> {
   const userPrompt = buildDesignerUserPrompt({
     jobId,
     mode: "new_master",
-    templateFamily: brief.suggestedFamily,
+    templateFamily: null,
     reason:
       "Local smoke test proving the Designer Job -> Worker -> Claude -> build -> validate pipeline works end to end. " +
       "Keep scope small: a single static HTML+CSS page only (no build tooling, no framework, no package.json) so this " +
@@ -113,6 +113,7 @@ async function main(): Promise<void> {
     facts,
     imagery,
     designBriefText: brief.markdown,
+    isFixture: true,
   });
 
   log(`Invoking Claude Code CLI (timeout ${RUN_TIMEOUT_MS}ms). This uses real subscription capacity...`);

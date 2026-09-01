@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { businessFactsFromLead, emptyImageryManifest, fingerprintFacts, fixtureBusinessFacts } from "./facts";
+import { DESIGNER_IMAGE_PROVENANCE, businessFactsFromLead, emptyImageryManifest, fingerprintFacts, fixtureBusinessFacts } from "./facts";
 
 describe("designer facts sanitization", () => {
   it("builds fixture facts that carry no sourced identity beyond what was passed in", () => {
@@ -48,5 +48,12 @@ describe("designer facts sanitization", () => {
     const manifest = emptyImageryManifest();
     assert.deepEqual(manifest.images, []);
     assert.match(manifest.policy, /do not source, scrape, rehost, or invent/i);
+  });
+
+  it("exposes all five approved imagery-provenance categories, including generated", () => {
+    assert.deepEqual(
+      [...DESIGNER_IMAGE_PROVENANCE].sort(),
+      ["customer_supplied", "generated", "licensed", "operator_verified", "template_illustrative"].sort(),
+    );
   });
 });

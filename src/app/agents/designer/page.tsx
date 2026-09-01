@@ -81,7 +81,7 @@ export default async function DesignerAgentPage() {
                 <div>
                   <Link href={`/designer-jobs/${job.id}`} className="text-sm font-medium hover:text-accent">
                     {job.is_fixture ? "Fixture: " : ""}
-                    {(job.design_brief as { suggestedTemplateKey?: string } | null)?.suggestedTemplateKey ?? job.template_family ?? "Designer Job"}
+                    {job.template_family ?? "Designer Job"}
                   </Link>
                   <p className="mt-1 text-xs text-muted">
                     {job.mode} · {formatDateTime(job.created_at)}

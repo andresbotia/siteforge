@@ -108,6 +108,11 @@ async function processJob(job: DesignerJobRow, cliPath: string): Promise<void> {
     started_at: new Date().toISOString(),
   });
 
+  const isRevision = job.visual_review_status === "needs_revision" && Boolean(job.visual_review_notes?.trim());
+  if (isRevision) {
+    log(`Job ${job.id} is a REVISION pass (human reviewer requested changes); reusing this job's existing workspace.`);
+  }
+
   const userPrompt = buildDesignerUserPrompt({
     jobId: job.id,
     mode: job.mode as "new_master" | "adaptation",
@@ -116,6 +121,8 @@ async function processJob(job: DesignerJobRow, cliPath: string): Promise<void> {
     facts,
     imagery,
     designBriefText: brief,
+    isFixture: job.is_fixture,
+    revisionNotes: isRevision ? job.visual_review_notes : null,
   });
 
   const result = await runDesignerWorker({
@@ -188,9 +195,14 @@ async function processJob(job: DesignerJobRow, cliPath: string): Promise<void> {
   }
 
   const qaPassed = checked.validation.ok && buildResult.ok;
+  const persistedNote =
+    finalized.websiteId && finalized.artifactId
+      ? `Generated website ${finalized.websiteId}, artifact ${finalized.artifactId}.`
+      : `Fixture job: no generated_websites/external_site_artifacts row was created (no real leads row to reference). ` +
+        `Review the built site directly at ${workspace.workspaceDir}/site/.`;
   log(
     `Job ${job.id} ${qaPassed ? "PASSED technical QA and is now visual_review_required" : "FAILED technical QA (see designer_jobs.technical_qa_report)"}. ` +
-      `Generated website ${finalized.websiteId}, artifact ${finalized.artifactId}.`,
+      persistedNote,
   );
 
   // Workspace is left on disk for operator debugging/review of exactly what

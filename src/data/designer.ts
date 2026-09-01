@@ -1,6 +1,6 @@
 import "server-only";
 
-import { buildDesignBrief, type DesignBriefRequest } from "@/lib/builder/design-brief";
+import { buildDesignerBrief, type DesignerBriefRequest } from "@/lib/designer/brief";
 import { emptyImageryManifest, fingerprintFacts, type DesignerBusinessFacts, type DesignerImageryManifest } from "@/lib/designer/facts";
 import { assertDesignerJobTransition, canPromoteToMaster, type DesignerJobMode } from "@/lib/designer/state-machine";
 import { mutateTable, readTable } from "@/lib/supabase/server";
@@ -23,13 +23,21 @@ export type CreateDesignerJobResult = { ok: true; job: DesignerJobRow } | { ok: 
 /**
  * Creates a queued Designer Job for the local worker to pick up. This never
  * calls the Claude Code CLI, spends a dollar, or touches paid AI -- it only
- * writes a work order plus a deterministic, provider-neutral brief (reusing
- * buildDesignBrief from src/lib/builder/design-brief.ts, already used by the
- * /templates page).
+ * writes a work order plus a category brief.
+ *
+ * Deliberately uses buildDesignerBrief() from src/lib/designer/brief.ts, NOT
+ * buildDesignBrief() from src/lib/builder/design-brief.ts. The Builder brief
+ * reads src/lib/builder/design-system.ts's DESIGN_PRESETS (specific palette
+ * hex/oklch values, named hero treatments, a fixed section plan) -- exactly
+ * the "legacy Builder visual context" the Designer Worker must never see.
+ * template_family is therefore no longer pre-classified via the Builder
+ * registry either; it stays whatever the caller explicitly passes (or null),
+ * and the worker's own post-hoc recommendedMasterFamily self-report
+ * (src/lib/designer/report.ts) is the real signal for grouping.
  */
 export async function createDesignerJobRequest(input: CreateDesignerJobInput): Promise<CreateDesignerJobResult> {
   if (!input.reason.trim()) return { ok: false, error: "A reason is required." };
-  const briefRequest: DesignBriefRequest = {
+  const briefRequest: DesignerBriefRequest = {
     industry: input.facts.industry,
     exampleBusiness: {
       name: input.facts.businessName,
@@ -41,7 +49,7 @@ export async function createDesignerJobRequest(input: CreateDesignerJobInput): P
       hasHours: input.facts.snapshot.dailyHours.length > 0,
     },
   };
-  const brief = buildDesignBrief(briefRequest);
+  const brief = buildDesignerBrief(briefRequest);
   const imagery = input.imagery ?? emptyImageryManifest();
 
   const inserted = await mutateTable<DesignerJobRow | null>((client) =>
@@ -52,10 +60,10 @@ export async function createDesignerJobRequest(input: CreateDesignerJobInput): P
         is_fixture: input.isFixture ?? false,
         requested_by_agent_run_id: input.requestedByAgentRunId ?? null,
         mode: input.mode,
-        template_family: input.templateFamily ?? brief.suggestedFamily,
+        template_family: input.templateFamily ?? null,
         base_template_key: input.baseTemplateKey ?? null,
         reason: input.reason.slice(0, 500),
-        design_brief: { markdown: brief.markdown, suggestedTemplateKey: brief.suggestedTemplateKey, presetKey: brief.presetKey } as unknown as Json,
+        design_brief: { markdown: brief.markdown } as unknown as Json,
         input_facts_snapshot: input.facts as unknown as Json,
         input_facts_fingerprint: fingerprintFacts(input.facts),
         imagery_manifest: imagery as unknown as Json,
@@ -92,6 +100,17 @@ export type RecordVisualReviewResult = { ok: true } | { ok: false; error: string
  * session (readTable/mutateTable enforce requireAdminSession) reaches this
  * function; no worker code path calls it. This is the structural
  * "AI cannot approve its own design" boundary.
+ *
+ * `needs_revision` takes the visual_review_required -> queued edge (see
+ * state-machine.ts) instead of staying parked in visual_review_required
+ * forever. It resets only the worker-owned execution fields, not
+ * visual_review_notes -- the runner reads that back on its next claim of
+ * this same job id and forwards it to Claude as revision feedback, and
+ * because the job id (and therefore its on-disk workspace) is unchanged,
+ * the worker can read its own previous output back rather than starting
+ * over. This still cannot bypass human approval: the job returns to
+ * visual_review_required after the next run, and only this function, called
+ * again by an admin, can ever set status to `approved`.
  */
 export async function recordVisualReview(input: RecordVisualReviewInput): Promise<RecordVisualReviewResult> {
   const job = await getDesignerJob(input.jobId);
@@ -99,8 +118,12 @@ export async function recordVisualReview(input: RecordVisualReviewInput): Promis
   if (job.status !== "visual_review_required") {
     return { ok: false, error: `Job is not awaiting visual review (status: ${job.status}).` };
   }
+  if (input.status === "needs_revision" && !input.notes.trim()) {
+    return { ok: false, error: "Revision notes are required so the worker knows what to change." };
+  }
 
-  const nextJobStatus = input.status === "approved" ? "approved" : input.status === "rejected" ? "rejected" : job.status;
+  const nextJobStatus =
+    input.status === "approved" ? "approved" : input.status === "rejected" ? "rejected" : input.status === "needs_revision" ? "queued" : job.status;
   if (nextJobStatus !== job.status) {
     try {
       assertDesignerJobTransition(job.status as never, nextJobStatus as never);
@@ -108,6 +131,20 @@ export async function recordVisualReview(input: RecordVisualReviewInput): Promis
       return { ok: false, error: error instanceof Error ? error.message : "Illegal transition." };
     }
   }
+
+  const revisionReset =
+    input.status === "needs_revision"
+      ? {
+          claimed_by: null,
+          claimed_at: null,
+          workspace_path: null,
+          started_at: null,
+          completed_at: null,
+          technical_qa_report: null,
+          failure_code: null,
+          failure_reason: null,
+        }
+      : {};
 
   const updated = await mutateTable<Pick<DesignerJobRow, "id"> | null>((client) =>
     client
@@ -119,6 +156,7 @@ export async function recordVisualReview(input: RecordVisualReviewInput): Promis
         visual_reviewed_by: input.reviewedBy,
         visual_reviewed_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        ...revisionReset,
       })
       .eq("id", input.jobId)
       .eq("status", "visual_review_required")

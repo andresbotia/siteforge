@@ -43,6 +43,14 @@ describe("designer job state machine", () => {
     assert.equal(canTransitionDesignerJob("claimed", "cancelled"), true);
   });
 
+  it("supports the revision loop back to queued, without a new bypass to approved", () => {
+    assert.equal(canTransitionDesignerJob("visual_review_required", "queued"), true);
+    assert.equal(canTransitionDesignerJob("queued", "approved"), false);
+    assert.equal(canTransitionDesignerJob("queued", "visual_review_required"), false);
+    // The revision loop must still pass back through the full pipeline, not skip QA.
+    assert.equal(canTransitionDesignerJob("queued", "claimed"), true);
+  });
+
   it("marks terminal states correctly", () => {
     assert.equal(isTerminalDesignerJobStatus("approved"), true);
     assert.equal(isTerminalDesignerJobStatus("rejected"), true);

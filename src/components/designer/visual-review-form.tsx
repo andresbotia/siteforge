@@ -23,14 +23,14 @@ export function VisualReviewForm({ jobId }: { jobId: string }) {
       <Field label="Would you confidently send this to the business owner?" htmlFor="review-status">
         <SelectInput id="review-status" name="status" defaultValue="needs_revision">
           <option value="approved">Approved -- ready to become a reusable candidate</option>
-          <option value="needs_revision">Needs revision -- not ready yet</option>
+          <option value="needs_revision">Needs revision -- send back to the worker with notes</option>
           <option value="rejected">Rejected -- do not reuse this candidate</option>
         </SelectInput>
       </Field>
       <Field
         label="Notes"
         htmlFor="review-notes"
-        hint="Optional, but useful: hero, typography, imagery, mobile, conversion, overall."
+        hint="Required for 'Needs revision' -- this is what the worker will read and act on when it re-runs this same job. Optional otherwise."
       >
         <TextArea id="review-notes" name="notes" rows={4} placeholder="What would need to change, or why this is a strong candidate." />
       </Field>

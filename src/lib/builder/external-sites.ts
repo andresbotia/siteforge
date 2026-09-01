@@ -608,19 +608,26 @@ const SCRIPT_TAG = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
 
 /**
  * Flags any inline <script> block except two narrow, non-executable-in-place
- * cases: an external module script (type="module" with a src, already
- * exempted before this function existed) and inline JSON-LD structured data
- * (type="application/ld+json") -- the SEO pattern design-brief.ts itself
- * tells every template/Designer Worker to emit -- whose content contains no
- * `<` character at all, so it cannot smuggle a `</script>`-breakout payload
- * regardless of whether it happens to also be syntactically valid JSON.
+ * cases:
+ *   1. An external script reference (a `src` attribute) with no inline
+ *      content between the tags -- e.g. `<script src="script.js"></script>`,
+ *      the normal, spec-conformant way to include an external script,
+ *      regardless of type="module" or a classic script. Nothing between the
+ *      tags ever executes when `src` is present, so there is no inline code
+ *      to smuggle a payload through; the tag is only "safe" here because
+ *      inner is empty, not merely because it has a src.
+ *   2. Inline JSON-LD structured data (type="application/ld+json") -- the
+ *      SEO pattern design-brief.ts and the Designer Worker prompt both tell
+ *      every template/worker to emit -- whose content contains no `<`
+ *      character at all, so it cannot smuggle a `</script>`-breakout payload
+ *      regardless of whether it happens to also be syntactically valid JSON.
  */
 function hasDangerousInlineScript(content: string): boolean {
   for (const match of content.matchAll(SCRIPT_TAG)) {
     const attributes = match[1] ?? "";
-    const inner = match[2] ?? "";
-    const isExternalModule = /\btype\s*=\s*["']module["']/i.test(attributes) && /\bsrc\s*=/i.test(attributes);
-    if (isExternalModule) continue;
+    const inner = (match[2] ?? "").trim();
+    const isSafeExternalReference = /\bsrc\s*=/i.test(attributes) && inner === "";
+    if (isSafeExternalReference) continue;
     const isSafeJsonLd = /\btype\s*=\s*["']application\/ld\+json["']/i.test(attributes) && !inner.includes("<");
     if (isSafeJsonLd) continue;
     return true;

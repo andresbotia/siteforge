@@ -19,9 +19,20 @@ export type DesignerBusinessFacts = {
   snapshot: VerifiedFactSnapshot;
 };
 
+/**
+ * The five approved imagery-provenance categories for Designer Jobs. An
+ * image with no acceptable provenance must never be used -- see prompt.ts's
+ * IMAGERY PROVENANCE CONTRACT section, which the worker is instructed to
+ * follow exactly. "generated" covers a clearly illustrative AI-generated
+ * asset an operator has explicitly approved and attached here; the worker
+ * itself never generates or fetches imagery on its own.
+ */
+export const DESIGNER_IMAGE_PROVENANCE = ["customer_supplied", "operator_verified", "licensed", "generated", "template_illustrative"] as const;
+export type DesignerImageProvenance = (typeof DESIGNER_IMAGE_PROVENANCE)[number];
+
 export type DesignerImageAsset = {
   role: "hero" | "gallery" | "service" | "team" | "project";
-  sourceType: "template_illustrative" | "operator_verified" | "customer_supplied" | "licensed";
+  sourceType: DesignerImageProvenance;
   url: string;
   alt: string;
   note: string;
@@ -35,8 +46,9 @@ export type DesignerImageryManifest = {
 
 const NO_IMAGERY_POLICY =
   "No operator-approved imagery is attached to this job. Do not source, scrape, rehost, or invent images from " +
-  "Google, Yelp, Instagram, Facebook, TikTok, or any listing site. Design a strong CSS/typography-led composition " +
-  "that needs no photography, or leave clearly-labeled illustrative placeholder blocks only.";
+  "Google, Google Maps, Yelp, Instagram, Facebook, TikTok, business directories, or any other business's website. " +
+  "Design a strong CSS/typography-led or original-SVG-illustration composition that needs no photography, rather " +
+  "than an empty placeholder block.";
 
 export function businessFactsFromLead(
   lead: Pick<LeadRow, "business_name" | "industry" | "city" | "state" | "address" | "phone" | "website_url" | "google_rating" | "review_count" | "inspection_summary">,

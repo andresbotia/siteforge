@@ -151,17 +151,85 @@ export function runDesignerWorker(options: DesignerRunOptions): Promise<Designer
  * Fail-closed classification: any signal that the CLI wants to bill an API
  * key, needs authentication, or is capacity-limited must never be retried
  * automatically or silently treated as a generic failure.
+ *
+ * Prefers the CLI's own structured `--output-format json` result object
+ * (api_error_status, terminal_reason, result text) over prose text-matching
+ * wherever it parses -- discovered via a real run that hit the subscription
+ * session limit (HTTP 429, result: "You've hit your session limit · resets
+ * ..."): that phrasing contains none of "rate limit"/"usage limit"/
+ * "capacity"/"overloaded", so pure prose-matching alone classified it as
+ * "unknown" instead of "subscription_capacity_unavailable" -- exactly the
+ * fail-closed signal AGENTS.md requires this worker to never miss. Prose
+ * matching on the raw stderr+stdout text is kept as a fallback layer for
+ * non-JSON crash output (e.g. the CLI failing before it can emit any JSON).
  */
 function classifyFailure(stderr: string, stdout: string): DesignerFailureCode {
+  const structured = classifyFromStructuredResult(stdout);
+  if (structured) return structured;
+
   const text = `${stderr}\n${stdout}`.toLowerCase();
-  if (text.includes("not logged in") || text.includes("authentication") || text.includes("please run") && text.includes("login")) {
+  if (text.includes("not logged in") || text.includes("authentication") || (text.includes("please run") && text.includes("login"))) {
     return "auth_unavailable";
   }
   if (text.includes("api key") || text.includes("anthropic_api_key") || text.includes("billing")) {
     return "api_billing_required";
   }
-  if (text.includes("overloaded") || text.includes("rate limit") || text.includes("capacity") || text.includes("usage limit")) {
+  if (
+    text.includes("overloaded") ||
+    text.includes("rate limit") ||
+    text.includes("capacity") ||
+    text.includes("usage limit") ||
+    text.includes("session limit")
+  ) {
     return "subscription_capacity_unavailable";
   }
   return "unknown";
+}
+
+type ClaudeCliJsonResult = {
+  is_error?: boolean;
+  api_error_status?: number;
+  terminal_reason?: string;
+  result?: string;
+};
+
+function classifyFromStructuredResult(stdout: string): DesignerFailureCode | null {
+  const parsed = parseLastJsonObject(stdout);
+  if (!parsed) return null;
+  const resultText = typeof parsed.result === "string" ? parsed.result.toLowerCase() : "";
+
+  if (parsed.api_error_status === 429 || resultText.includes("session limit") || resultText.includes("rate limit")) {
+    return "subscription_capacity_unavailable";
+  }
+  if (parsed.api_error_status === 401 || parsed.api_error_status === 403 || resultText.includes("not logged in") || resultText.includes("authentication")) {
+    return "auth_unavailable";
+  }
+  if (resultText.includes("api key") || resultText.includes("billing")) {
+    return "api_billing_required";
+  }
+  if (parsed.terminal_reason === "api_error" || parsed.is_error === true) {
+    // A real structured API error we recognized but couldn't classify more
+    // specifically. Still better than silently guessing "unknown" -- treat
+    // it as capacity-adjacent so it fails closed rather than being retried
+    // as if it were an ordinary process crash.
+    return "subscription_capacity_unavailable";
+  }
+  return null;
+}
+
+/** The CLI writes one JSON object per invocation; tolerate trailing whitespace/newlines. */
+function parseLastJsonObject(stdout: string): ClaudeCliJsonResult | null {
+  const lines = stdout
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  for (let index = lines.length - 1; index >= 0; index -= 1) {
+    try {
+      const value: unknown = JSON.parse(lines[index]);
+      if (value && typeof value === "object") return value as ClaudeCliJsonResult;
+    } catch {
+      continue;
+    }
+  }
+  return null;
 }
