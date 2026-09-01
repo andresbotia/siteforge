@@ -12,6 +12,7 @@ import {
 import { buildBuilderToolCalls, buildGeneratedWebsiteInsert } from "@/lib/builder/persist";
 import { runBuilderPipeline } from "@/lib/builder/run";
 import { selectTemplate, templateLabel } from "@/lib/builder/templates";
+import { needsNewMasterTemplate } from "@/lib/builder/registry";
 import { mutateTable, readTable } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 import type { AgentRow, AgentRunRow, LeadRow, WebsiteRow } from "@/types/database";
@@ -44,6 +45,14 @@ export type BuilderCandidate = Lead & {
   recommendedTemplate: string;
   recommendedTemplateKey: ReturnType<typeof selectTemplate>;
   latestWebsiteId: string | null;
+  /**
+   * True when the template registry has no purpose-built master for this
+   * lead's industry (src/lib/builder/registry.ts:needsNewMasterTemplate).
+   * Builder still drafts a fallback so operators are never blocked, but this
+   * signal routes the lead toward a Designer Job instead of silently
+   * shipping a generic draft as if it were premium coverage.
+   */
+  coverageMissing: boolean;
 };
 
 export async function listEligibleLeadsForBuild(): Promise<BuilderCandidate[]> {
@@ -74,6 +83,7 @@ export async function listEligibleLeadsForBuild(): Promise<BuilderCandidate[]> {
       recommendedTemplate: templateLabel(key),
       recommendedTemplateKey: key,
       latestWebsiteId: latestSite.get(lead.id) ?? null,
+      coverageMissing: needsNewMasterTemplate(lead.industry),
     });
   }
   return withMeta.sort((a, b) => {

@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   Mail,
+  Palette,
   ReceiptText,
   Settings,
   ShieldCheck,
@@ -43,6 +44,7 @@ export const navSections: NavSection[] = [
     items: [
       { href: "/approvals", label: "Approvals", icon: ShieldCheck },
       { href: "/agents", label: "Agents", icon: Bot },
+      { href: "/agents/designer", label: "Designer", icon: Palette },
       { href: "/templates", label: "Templates", icon: LayoutTemplate },
     ],
   },

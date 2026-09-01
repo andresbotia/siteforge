@@ -581,7 +581,7 @@ function inspectFile(path: string, content: string, findings: ExternalSiteFindin
   if (shouldScanProviderLeak(category) && hasProviderEditorLeak(content)) {
     findings.push({ code: "provider_editor_leak", severity: "severe", message: "Provider editor links or metadata must not leak into imported source.", path });
   }
-  if (/<script\b(?![^>]*\btype=["']module["'][^>]*\bsrc=)[\s\S]*?>[\s\S]*?<\/script>/i.test(content)) {
+  if (hasDangerousInlineScript(content)) {
     findings.push({ code: "dangerous_inline_script", severity: "severe", message: "Inline script blocks are not allowed in imported external source.", path });
   }
   if (hasUnsafeJavascriptUrlReference(content)) {
@@ -602,6 +602,30 @@ function inspectFile(path: string, content: string, findings: ExternalSiteFindin
   if (/<script[^>]+src=["']https?:\/\//i.test(content)) {
     findings.push({ code: "external_script_reference", severity: "warning", message: "External scripts require manual operator review.", path });
   }
+}
+
+const SCRIPT_TAG = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
+
+/**
+ * Flags any inline <script> block except two narrow, non-executable-in-place
+ * cases: an external module script (type="module" with a src, already
+ * exempted before this function existed) and inline JSON-LD structured data
+ * (type="application/ld+json") -- the SEO pattern design-brief.ts itself
+ * tells every template/Designer Worker to emit -- whose content contains no
+ * `<` character at all, so it cannot smuggle a `</script>`-breakout payload
+ * regardless of whether it happens to also be syntactically valid JSON.
+ */
+function hasDangerousInlineScript(content: string): boolean {
+  for (const match of content.matchAll(SCRIPT_TAG)) {
+    const attributes = match[1] ?? "";
+    const inner = match[2] ?? "";
+    const isExternalModule = /\btype\s*=\s*["']module["']/i.test(attributes) && /\bsrc\s*=/i.test(attributes);
+    if (isExternalModule) continue;
+    const isSafeJsonLd = /\btype\s*=\s*["']application\/ld\+json["']/i.test(attributes) && !inner.includes("<");
+    if (isSafeJsonLd) continue;
+    return true;
+  }
+  return false;
 }
 
 function hasUnsafeJavascriptUrlReference(content: string): boolean {

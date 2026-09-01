@@ -188,6 +188,21 @@ export default async function AgentsPage() {
           );
         })}
       </div>
+
+      <div className="mt-4 rounded-lg border border-border bg-surface px-4 py-4">
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-medium">Designer</h2>
+          <Badge>Manual, local worker</Badge>
+        </div>
+        <p className="mt-1 max-w-2xl text-sm text-muted">
+          Creates premium visual candidates (new master templates or adaptations) for leads the Builder template
+          registry cannot confidently cover, using the operator&apos;s local Claude Code subscription session. It
+          never approves its own output, deploys, or contacts a business.{" "}
+          <Link href="/agents/designer" className="text-accent hover:underline">
+            Open Designer
+          </Link>
+        </p>
+      </div>
     </>
   );
 }

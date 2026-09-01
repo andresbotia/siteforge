@@ -10,7 +10,8 @@
     "test": "tsx --test src/lib/auth/*.test.ts src/lib/supabase/*.test.ts src/lib/ai/cost-controls.test.ts src/lib/prospects/*.test.ts src/lib/scout/*.test.ts src/lib/auditor/*.test.ts src/lib/builder/*.test.ts src/lib/previews/*.test.ts src/lib/sales/*.test.ts src/lib/email/*.test.ts src/lib/payments/*.test.ts src/lib/designer/*.test.ts",
     "test:builder": "tsx --test src/lib/builder/*.test.ts",
     "designer:worker": "tsx scripts/designer-worker.ts",
-    "designer:worker:once": "tsx scripts/designer-worker.ts --once"
+    "designer:worker:once": "tsx scripts/designer-worker.ts --once",
+    "designer:smoke-test": "tsx scripts/designer-smoke-test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",

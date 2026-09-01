@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { BuilderRunForm } from "@/components/builder/builder-run-form";
 import { ExternalSiteImportForm } from "@/components/builder/external-site-import-form";
+import { Badge } from "@/components/shared/badge";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { LeadStatusBadge } from "@/components/shared/status-badge";
@@ -106,6 +107,14 @@ export default async function BuilderPage() {
                       ? ` · opportunity ${lead.latestOpportunity}`
                       : ""}
                   </p>
+                  {lead.coverageMissing ? (
+                    <p className="mt-1 flex items-center gap-1.5 text-xs">
+                      <Badge tone="warning">no master template for this industry</Badge>
+                      <Link href="/agents/designer" className="text-accent hover:underline">
+                        Request a Designer Job
+                      </Link>
+                    </p>
+                  ) : null}
                 </div>
                 <LeadStatusBadge status={lead.status} />
               </li>
