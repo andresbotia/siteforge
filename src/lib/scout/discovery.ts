@@ -9,11 +9,24 @@ export type DiscoveryCost = {
   notes: string;
 };
 
+/**
+ * `diagnostic` carries a human-readable, non-throwing explanation for a
+ * partial or empty result (unsupported location, no category tag mapping,
+ * upstream rate limit, network error, or simply zero real matches) so the
+ * operator sees why a run returned little/nothing instead of it looking
+ * silently broken. `null` diagnostic with an empty array just means a real,
+ * clean zero-result search.
+ */
+export type DiscoveryResult = {
+  businesses: DiscoveredBusiness[];
+  diagnostic: string | null;
+};
+
 export type BusinessDiscoveryProvider = {
   id: string;
   label: string;
   cost: DiscoveryCost;
-  search(config: ScoutRunConfig): Promise<DiscoveredBusiness[]>;
+  search(config: ScoutRunConfig): Promise<DiscoveryResult>;
 };
 
 export const FREE_DISCOVERY_COST: DiscoveryCost = {

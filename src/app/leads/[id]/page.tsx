@@ -58,6 +58,8 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
     lead.discoverySource,
   );
   const isNoStandaloneWebsite = lead.websiteStatus === "no_standalone_website";
+  const commercialPotentialRaw = asRecord(lead.inspectionSummary).commercial_potential;
+  const commercialPotential = commercialPotentialRaw && typeof commercialPotentialRaw === "object" ? asRecord(commercialPotentialRaw) : null;
 
   return (
     <>
@@ -193,6 +195,31 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           ) : null}
         </CardBody>
       </Card>
+
+      {commercialPotential ? (
+        <Card className="mt-4">
+          <CardHeader
+            title="Commercial potential (Scout)"
+            description="Second-stage ranking on top of Scout's business/website scores. Not LLM-authored. Does not by itself invoke Designer or spend anything."
+          />
+          <CardBody className="grid gap-3 sm:grid-cols-2">
+            <Detail label="Commercial score" value={String(commercialPotential.score ?? "—")} />
+            <Detail label="Recommendation" value={String(commercialPotential.recommendation ?? "—")} />
+            <Detail label="Contactability" value={formatContactability(commercialPotential.contactability)} />
+            <Detail label="Designer coverage" value={String(commercialPotential.designer_coverage_level ?? "—")} />
+            {Array.isArray(commercialPotential.reasons) && commercialPotential.reasons.length > 0 ? (
+              <div className="sm:col-span-2">
+                <p className="text-[11px] text-muted-foreground uppercase">Reasons</p>
+                <ul className="mt-1 list-disc space-y-1 pl-4 text-sm text-muted">
+                  {commercialPotential.reasons.map((reason: unknown, index: number) => (
+                    <li key={index}>{String(reason)}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
 
       {isNoStandaloneWebsite ? (
         <Card className="mt-4">
@@ -388,6 +415,12 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
       </Card>
     </>
   );
+}
+
+function formatContactability(value: unknown): string {
+  const record = asRecord(value);
+  if (typeof record.score !== "number") return "—";
+  return `${record.score} (${record.verified ? "verified" : "unverified"})`;
 }
 
 function Detail({

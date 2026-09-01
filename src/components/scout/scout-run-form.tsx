@@ -12,15 +12,11 @@ import {
   SCOUT_DEFAULT_CANDIDATES,
   SCOUT_DISCOVERY_COST_USD,
   SCOUT_MAX_CANDIDATES,
-  SCOUT_PROVIDER_LABEL,
+  SCOUT_REAL_PROVIDER_LABEL,
 } from "@/lib/scout/limits";
+import { listSupportedScoutLocations } from "@/lib/scout/locations";
 
-const locations = [
-  "Fort Lauderdale, FL",
-  "Coconut Creek, FL",
-  "Boca Raton, FL",
-  "Pompano Beach, FL",
-];
+const locations = listSupportedScoutLocations();
 
 export function ScoutRunForm() {
   const [state, action, pending] = useActionState<ScoutActionState, FormData>(
@@ -30,12 +26,16 @@ export function ScoutRunForm() {
 
   return (
     <form action={action} className="grid gap-4">
-      <Field label="Location" htmlFor="scout-location">
+      <Field
+        label="Location"
+        htmlFor="scout-location"
+        hint="Scout V1 only covers a small set of South Florida locations -- see the list below. An unsupported location fails closed rather than guessing."
+      >
         <TextInput
           id="scout-location"
           name="location"
           list="scout-locations"
-          defaultValue="Fort Lauderdale, FL"
+          defaultValue={locations[0]}
           required
         />
         <datalist id="scout-locations">
@@ -72,7 +72,7 @@ export function ScoutRunForm() {
           Discovery cost: ${SCOUT_DISCOVERY_COST_USD.toFixed(2)}
         </p>
         <p className="mt-1 text-muted">
-          Provider: {SCOUT_PROVIDER_LABEL}. Paid AI: Not required.
+          Provider: {SCOUT_REAL_PROVIDER_LABEL}. Paid AI: Not required.
         </p>
       </div>
       <div className="flex justify-end">

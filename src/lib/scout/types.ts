@@ -28,6 +28,14 @@ export type DiscoveredBusiness = {
   reviewCount?: number | null;
   source: string;
   likelyChain?: boolean;
+  /** Only ever set from data a source directly and explicitly provided. Never guessed/inferred. */
+  email?: string | null;
+  instagramUrl?: string | null;
+  facebookUrl?: string | null;
+  hours?: string | null;
+  /** A public page a human can open to see the raw source record (e.g. the OSM object page). */
+  sourceUrl?: string | null;
+  sources?: DiscoverySource[];
 };
 
 export type NormalizedBusiness = DiscoveredBusiness & {

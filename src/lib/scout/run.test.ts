@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { createCatalogHttpClient, createMockCatalogProvider } from "./catalog";
 import { decidePersistence } from "./dedupe";
+import type { BusinessDiscoveryProvider } from "./discovery";
 import { SCOUT_SIDE_EFFECTS, denyDirectPaidAi, scoutPaidAiPath } from "./policy";
 import { runScoutPipeline } from "./run";
-import type { ExistingLeadRecord, NormalizedBusiness } from "./types";
+import type { DiscoveredBusiness, ExistingLeadRecord, NormalizedBusiness } from "./types";
 
 describe("duplicate detection", () => {
   it("matches an existing lead by domain and does not insert", () => {
@@ -72,6 +73,107 @@ describe("scout pipeline", () => {
     );
     assert.equal(harborline?.persist.action, "update");
     assert.notEqual(harborline?.persist.action, "insert");
+  });
+});
+
+function fakeDiscovery(businesses: DiscoveredBusiness[], diagnostic: string | null = null): BusinessDiscoveryProvider {
+  return {
+    id: "fake_provider",
+    label: "Fake provider",
+    cost: { usd: 0, paid: false, providerId: "fake_provider", providerLabel: "Fake", notes: "" },
+    async search() {
+      return { businesses, diagnostic };
+    },
+  };
+}
+
+function throwingDiscovery(): BusinessDiscoveryProvider {
+  return {
+    id: "fake_provider",
+    label: "Fake provider",
+    cost: { usd: 0, paid: false, providerId: "fake_provider", providerLabel: "Fake", notes: "" },
+    async search() {
+      throw new Error("network_down");
+    },
+  };
+}
+
+function fixtureBusiness(overrides: Partial<DiscoveredBusiness> = {}): DiscoveredBusiness {
+  return {
+    name: "Fixture Co",
+    categoryId: "landscapers",
+    industry: "Landscaping",
+    city: "Fort Lauderdale",
+    state: "FL",
+    source: "fake_provider",
+    ...overrides,
+  };
+}
+
+describe("scout pipeline: real-provider resilience and commercial ranking", () => {
+  it("does not crash the run when the discovery provider itself throws -- reports a diagnostic instead", async () => {
+    const result = await runScoutPipeline(
+      { location: "Fort Lauderdale, FL", categoryId: "landscapers", limit: 10, existingLeads: [] },
+      { discovery: throwingDiscovery(), http: createCatalogHttpClient() },
+    );
+    assert.equal(result.discovered, 0);
+    assert.match(result.discoveryDiagnostic ?? "", /discovery_failed/);
+  });
+
+  it("passes through a provider diagnostic (e.g. unsupported location) without treating it as a crash", async () => {
+    const result = await runScoutPipeline(
+      { location: "Fort Lauderdale, FL", categoryId: "landscapers", limit: 10, existingLeads: [] },
+      { discovery: fakeDiscovery([], "no_results_found: 0 named businesses matched"), http: createCatalogHttpClient() },
+    );
+    assert.equal(result.discovered, 0);
+    assert.match(result.discoveryDiagnostic ?? "", /no_results_found/);
+  });
+
+  it("one failed website inspection does not fail the whole run (fail soft, per-business)", async () => {
+    const businesses = [
+      fixtureBusiness({ name: "Good Co", websiteUrl: "https://oakandfrond.example.test" }),
+      fixtureBusiness({ name: "Bad Co", websiteUrl: "https://does-not-exist.invalid.test" }),
+    ];
+    const result = await runScoutPipeline(
+      { location: "Fort Lauderdale, FL", categoryId: "landscapers", limit: 10, existingLeads: [] },
+      { discovery: fakeDiscovery(businesses), http: createCatalogHttpClient() },
+    );
+    assert.equal(result.candidates.length, 2);
+  });
+
+  it("produces a BUILD/REVIEW/SKIP breakdown alongside the existing tier breakdown", async () => {
+    const result = await runScoutPipeline(
+      { location: "Fort Lauderdale, FL", categoryId: "landscapers", limit: 10, existingLeads: [] },
+      {
+        discovery: fakeDiscovery([fixtureBusiness({ phone: "(954) 555-0100", address: "1 Main St" })]),
+        http: createCatalogHttpClient(),
+      },
+    );
+    assert.equal(result.build + result.reviewCommercial + result.skip, result.candidates.length);
+    const [candidate] = result.candidates;
+    assert.ok(["BUILD", "REVIEW", "SKIP"].includes(candidate.commercial.recommendation));
+  });
+
+  it("bounds external requests with a per-run ceiling and reports partial results honestly", async () => {
+    const many = Array.from({ length: 60 }, (_, i) => fixtureBusiness({ name: `Co ${i}` }));
+    const result = await runScoutPipeline(
+      { location: "Fort Lauderdale, FL", categoryId: "landscapers", limit: 50, existingLeads: [] },
+      { discovery: fakeDiscovery(many), http: createCatalogHttpClient() },
+    );
+    assert.equal(result.discovered, 60);
+    if (result.ceilingReached) {
+      assert.ok(result.candidates.length < 60);
+      assert.equal(result.notInspectedDueToCeiling, 60 - result.candidates.length);
+    }
+  });
+
+  it("still performs no paid AI and no external side effects on the real-provider path", async () => {
+    const result = await runScoutPipeline(
+      { location: "Fort Lauderdale, FL", categoryId: "landscapers", limit: 10, existingLeads: [] },
+      { discovery: fakeDiscovery([fixtureBusiness()]), http: createCatalogHttpClient() },
+    );
+    assert.equal(result.paidAi, "not_required");
+    assert.equal(result.discoveryCostUsd, 0);
   });
 });
 

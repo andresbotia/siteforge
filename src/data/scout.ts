@@ -1,20 +1,22 @@
 import "server-only";
 
 import { recordActivityEvent } from "@/data/activity";
-import { createMockCatalogProvider, createCatalogHttpClient } from "@/lib/scout/catalog";
-import { SCOUT_DEFAULT_CANDIDATES, SCOUT_MAX_CANDIDATES, SCOUT_PROVIDER_ID } from "@/lib/scout/limits";
+import { createLiveHttpClient } from "@/lib/scout/inspector";
+import { createOverpassDiscoveryProvider } from "@/lib/scout/providers/overpass";
+import { SCOUT_DEFAULT_CANDIDATES, SCOUT_MAX_CANDIDATES, SCOUT_REAL_PROVIDER_ID } from "@/lib/scout/limits";
 import { buildExistingLeadScoutPatch } from "@/lib/scout/status";
 import { getScoutCategory, type ScoutCategoryId } from "@/lib/scout/categories";
-import { runScoutPipeline, type ScoutPipelineResult } from "@/lib/scout/run";
+import { runScoutPipeline, type EnrichedScoutCandidateResult, type ScoutPipelineResult } from "@/lib/scout/run";
 import { leadStatusForTier } from "@/lib/scout/scoring";
+import { websiteStatusLabel } from "@/lib/scout/website-status";
 import { mutateTable, readTable } from "@/lib/supabase/server";
 import type { Json } from "@/types/database";
 import type { AgentRow, AgentRunRow, LeadRow } from "@/types/database";
-import type { ExistingLeadRecord, ScoutCandidateResult } from "@/lib/scout/types";
+import type { ExistingLeadRecord } from "@/lib/scout/types";
 
 const SCOUT_AGENT_SLUG = "scout";
 
-function inspectionSummary(candidate: ScoutCandidateResult): Json {
+function inspectionSummary(candidate: EnrichedScoutCandidateResult): Json {
   const page = candidate.inspection.homepage;
   return {
     reachable: candidate.inspection.reachable,
@@ -30,6 +32,23 @@ function inspectionSummary(candidate: ScoutCandidateResult): Json {
     broken_links: candidate.inspection.linkChecks
       .filter((item) => !item.ok)
       .map((item) => ({ kind: item.kind, url: item.url, status: item.status })),
+    website_status: candidate.websiteStatus,
+    website_status_label: websiteStatusLabel(candidate.websiteStatus),
+    source_url: candidate.business.sourceUrl ?? null,
+    sources: candidate.business.sources ?? [],
+    contactability: {
+      score: candidate.contactability.score,
+      verified: candidate.contactability.verified,
+      channels: candidate.contactability.channels,
+    },
+    commercial_potential: {
+      score: candidate.commercial.commercialPotentialScore,
+      recommendation: candidate.commercial.recommendation,
+      components: candidate.commercial.components,
+      designer_coverage_level: candidate.commercial.designerCoverageLevel,
+      facts_completeness_count: candidate.commercial.factsCompletenessCount,
+      reasons: candidate.commercial.reasons,
+    },
   };
 }
 
@@ -92,7 +111,7 @@ export async function startScoutRun(input: {
         agent_id: agent.id,
         status: "running",
         trigger_type: "manual",
-        provider: SCOUT_PROVIDER_ID,
+        provider: SCOUT_REAL_PROVIDER_ID,
         purpose: `Scout ${category.label} in ${location}`,
         input: {
           location,
@@ -130,8 +149,8 @@ export async function startScoutRun(input: {
         existingLeads: (leads ?? []).map(asExisting),
       },
       {
-        discovery: createMockCatalogProvider(),
-        http: createCatalogHttpClient(),
+        discovery: createOverpassDiscoveryProvider(),
+        http: createLiveHttpClient(),
       },
     );
 
@@ -140,12 +159,13 @@ export async function startScoutRun(input: {
       category: category.id,
       limit,
     }, {
-      provider: SCOUT_PROVIDER_ID,
+      provider: SCOUT_REAL_PROVIDER_ID,
       count: pipeline.discovered,
       cost_usd: 0,
+      diagnostic: pipeline.discoveryDiagnostic,
     });
 
-    const persisted: ScoutCandidateResult[] = [];
+    const persisted: EnrichedScoutCandidateResult[] = [];
     for (const candidate of pipeline.candidates) {
       const leadId = await persistCandidate(candidate, run.id);
       persisted.push({ ...candidate, leadId });
@@ -153,8 +173,11 @@ export async function startScoutRun(input: {
 
     await recordToolCall(run.id, "inspect", "bounded_fetch", {
       pages_cap: 3,
+      concurrency: 4,
     }, {
       inspected: pipeline.inspected,
+      ceiling_reached: pipeline.ceilingReached,
+      not_inspected_due_to_ceiling: pipeline.notInspectedDueToCeiling,
     });
     await recordToolCall(run.id, "qualify", "deterministic_score", {
       paid_ai: "not_required",
@@ -162,6 +185,13 @@ export async function startScoutRun(input: {
       qualified: pipeline.qualified,
       review: pipeline.review,
       rejected: pipeline.rejected,
+    });
+    await recordToolCall(run.id, "commercial_rank", "deterministic_score", {
+      paid_ai: "not_required",
+    }, {
+      build: pipeline.build,
+      review: pipeline.reviewCommercial,
+      skip: pipeline.skip,
     });
 
     const output = {
@@ -171,23 +201,41 @@ export async function startScoutRun(input: {
       review: pipeline.review,
       rejected: pipeline.rejected,
       errors: pipeline.errors,
+      build: pipeline.build,
+      review_commercial: pipeline.reviewCommercial,
+      skip: pipeline.skip,
       discovery_cost_usd: 0,
+      discovery_provider: pipeline.discoveryProviderId,
+      discovery_diagnostic: pipeline.discoveryDiagnostic,
+      ceiling_reached: pipeline.ceilingReached,
+      not_inspected_due_to_ceiling: pipeline.notInspectedDueToCeiling,
       paid_ai: "not_required",
-      candidates: persisted.map((item) => ({
-        lead_id: item.leadId ?? null,
-        name: item.business.name,
-        category: item.business.industry,
-        city: item.business.city,
-        rating: item.business.rating,
-        reviews: item.business.reviewCount,
-        website: item.business.websiteUrl,
-        business_strength: item.score.businessStrengthScore,
-        website_opportunity: item.score.websiteOpportunityScore,
-        overall: item.score.overallQualificationScore,
-        tier: item.score.tier,
-        persist: item.persist.action,
-        reasons: item.score.reasons.slice(0, 8),
-      })),
+      candidates: persisted
+        .slice()
+        .sort((a, b) => b.commercial.commercialPotentialScore - a.commercial.commercialPotentialScore)
+        .map((item) => ({
+          lead_id: item.leadId ?? null,
+          name: item.business.name,
+          category: item.business.industry,
+          city: item.business.city,
+          rating: item.business.rating,
+          reviews: item.business.reviewCount,
+          website: item.business.websiteUrl,
+          website_status: item.websiteStatus,
+          business_strength: item.score.businessStrengthScore,
+          website_opportunity: item.score.websiteOpportunityScore,
+          overall: item.score.overallQualificationScore,
+          tier: item.score.tier,
+          commercial_score: item.commercial.commercialPotentialScore,
+          recommendation: item.commercial.recommendation,
+          contactability_score: item.contactability.score,
+          contactability_channels: item.contactability.channels.map((channel) => channel.type),
+          facts_completeness_count: item.commercial.factsCompletenessCount,
+          designer_coverage: item.commercial.designerCoverageLevel,
+          persist: item.persist.action,
+          reasons: item.score.reasons.slice(0, 8),
+          commercial_reasons: item.commercial.reasons.slice(0, 8),
+        })),
     };
 
     await mutateTable((client) =>
@@ -230,7 +278,7 @@ export async function startScoutRun(input: {
 }
 
 async function persistCandidate(
-  candidate: ScoutCandidateResult,
+  candidate: EnrichedScoutCandidateResult,
   runId: string,
 ): Promise<string | undefined> {
   const nextStatus = leadStatusForTier(candidate.score.tier);
@@ -248,6 +296,7 @@ async function persistCandidate(
           city: candidate.business.city,
           state: candidate.business.state,
           phone: candidate.business.phone ?? null,
+          email: candidate.business.email ?? null,
           website_url: candidate.business.websiteUrl ?? null,
           google_rating: candidate.business.rating ?? null,
           review_count: candidate.business.reviewCount ?? 0,
@@ -333,7 +382,7 @@ async function recordToolCall(
         request,
         response,
         status: "completed",
-        provider: SCOUT_PROVIDER_ID,
+        provider: SCOUT_REAL_PROVIDER_ID,
         estimated_cost_usd: 0,
         actual_cost_usd: 0,
         requires_approval: false,

@@ -20,7 +20,7 @@ export default async function ScoutPage() {
     <>
       <PageHeader
         title="Scout"
-        description="Manual lead discovery from a local public catalog. No paid API and no paid AI. Other agents stay disabled."
+        description="Real, $0 lead discovery from the public OpenStreetMap Overpass API. No paid API key and no paid AI. Stops at a ranked recommendation -- no outreach, no site generation, no deployment."
       />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         <Card>
@@ -55,6 +55,9 @@ export default async function ScoutPage() {
                       {run.status} · {formatDateTime(run.started_at ?? run.created_at)}
                       {typeof output.discovered === "number"
                         ? ` · ${output.discovered} discovered`
+                        : ""}
+                      {typeof output.build === "number"
+                        ? ` · ${output.build} build / ${output.review_commercial ?? 0} review / ${output.skip ?? 0} skip`
                         : ""}
                     </p>
                   </li>

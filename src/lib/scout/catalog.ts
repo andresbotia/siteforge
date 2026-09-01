@@ -222,7 +222,7 @@ export function createMockCatalogProvider(
         if (item.categoryId !== config.categoryId) return false;
         return locationMatches(item.city, item.state, location);
       });
-      return matches.slice(0, config.limit);
+      return { businesses: matches.slice(0, config.limit), diagnostic: null };
     },
   };
 }
