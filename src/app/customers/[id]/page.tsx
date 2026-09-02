@@ -10,6 +10,7 @@ import {
 } from "@/components/shared/status-badge";
 import { getCustomerById } from "@/data/customers";
 import { formatCurrency, formatDateTime } from "@/lib/format";
+import { centsToUsd } from "@/lib/payments/money";
 
 export const dynamic = "force-dynamic";
 
@@ -59,6 +60,15 @@ export default async function CustomerDetailPage({ params }: CustomerPageProps) 
               Converted: {customer.convertedAt ? formatDateTime(customer.convertedAt) : "N/A"}
             </p>
             <p className="text-muted">
+              Setup payment:{" "}
+              {customer.setupAmountCents !== null
+                ? formatCurrency(centsToUsd(customer.setupAmountCents))
+                : "N/A"}
+            </p>
+            <p className="text-muted">
+              Managed subscription: {customer.managedSubscriptionStatus ?? "None"}
+            </p>
+            <p className="text-muted">
               Monthly revenue:{" "}
               {customer.paymentEnvironment === "live"
                 ? formatCurrency(customer.monthlyRevenue)
@@ -66,7 +76,8 @@ export default async function CustomerDetailPage({ params }: CustomerPageProps) 
             </p>
             {customer.paymentEnvironment !== "live" && customer.grossMonthlyAmount > 0 ? (
               <p className="text-muted">
-                Mock monthly amount: {formatCurrency(customer.grossMonthlyAmount)}
+                {customer.paymentEnvironment === "test" ? "Stripe TEST" : "Mock"} monthly
+                amount (not real revenue): {formatCurrency(customer.grossMonthlyAmount)}
               </p>
             ) : null}
           </CardBody>

@@ -3,7 +3,13 @@ import "server-only";
 import { readTable } from "@/lib/supabase/server";
 import { inferPaymentEnvironment } from "@/lib/payments/conversion";
 import type { Customer, CustomerPlan, CustomerStatus } from "@/types";
-import type { CustomerRow, Json, StripeCheckoutSessionRow, SubscriptionRow } from "@/types/database";
+import type {
+  CommercialOfferRow,
+  CustomerRow,
+  Json,
+  StripeCheckoutSessionRow,
+  SubscriptionRow,
+} from "@/types/database";
 
 type CustomerSubscriptionSummary = Pick<
   SubscriptionRow,
@@ -19,7 +25,7 @@ function readSessionProvider(metadata: Json | null): string | null {
 }
 
 export async function listCustomers(): Promise<Customer[]> {
-  const [customers, subscriptions, sessions] = await Promise.all([
+  const [customers, subscriptions, sessions, offers] = await Promise.all([
     readTable<CustomerRow[]>((client) =>
       client
         .from("customers")
@@ -48,7 +54,12 @@ export async function listCustomers(): Promise<Customer[]> {
         )
         .order("created_at", { ascending: false }),
     ),
+    readTable<Pick<CommercialOfferRow, "id" | "setup_amount_cents">[]>((client) =>
+      client.from("commercial_offers").select("id, setup_amount_cents"),
+    ),
   ]);
+
+  const offerById = new Map((offers ?? []).map((offer) => [offer.id, offer]));
 
   return (customers ?? []).map((row) => {
     const sub = (subscriptions ?? []).find(
@@ -65,6 +76,7 @@ export async function listCustomers(): Promise<Customer[]> {
     });
     const grossMonthlyAmount = sub && sub.interval === "month" ? Number(sub.amount_usd) : 0;
     const monthlyRevenue = paymentEnvironment === "live" ? grossMonthlyAmount : 0;
+    const offer = row.commercial_offer_id ? offerById.get(row.commercial_offer_id) : null;
     return {
       id: row.id,
       leadId: row.lead_id ?? "",
@@ -74,6 +86,8 @@ export async function listCustomers(): Promise<Customer[]> {
       website: row.production_url ?? "",
       plan: (row.plan as CustomerPlan) ?? "website_only",
       status: (row.status as CustomerStatus) ?? "pending_setup",
+      setupAmountCents: offer?.setup_amount_cents ?? null,
+      managedSubscriptionStatus: sub?.status ?? null,
       monthlyRevenue,
       grossMonthlyAmount,
       paymentEnvironment,
@@ -92,7 +106,7 @@ export async function getCustomerById(id: string): Promise<CustomerDetail | null
     client.from("customers").select("*").eq("id", id).maybeSingle(),
   );
   if (!row) return null;
-  const [subscriptions, session] = await Promise.all([
+  const [subscriptions, session, offer] = await Promise.all([
     readTable<SubscriptionRow[]>((client) =>
       client
         .from("subscriptions")
@@ -118,6 +132,15 @@ export async function getCustomerById(id: string): Promise<CustomerDetail | null
         .limit(1)
         .maybeSingle(),
     ),
+    row.commercial_offer_id
+      ? readTable<Pick<CommercialOfferRow, "setup_amount_cents"> | null>((client) =>
+          client
+            .from("commercial_offers")
+            .select("setup_amount_cents")
+            .eq("id", row.commercial_offer_id!)
+            .maybeSingle(),
+        )
+      : Promise.resolve(null),
   ]);
   const active = (subscriptions ?? []).find((item) => item.status !== "cancelled");
   const paymentEnvironment = inferPaymentEnvironment({
@@ -139,6 +162,8 @@ export async function getCustomerById(id: string): Promise<CustomerDetail | null
     website: row.production_url ?? "",
     plan: (row.plan as CustomerPlan) ?? "website_only",
     status: (row.status as CustomerStatus) ?? "pending_setup",
+    setupAmountCents: offer?.setup_amount_cents ?? null,
+    managedSubscriptionStatus: active?.status ?? null,
     monthlyRevenue: paymentEnvironment === "live" ? grossMonthlyAmount : 0,
     grossMonthlyAmount,
     paymentEnvironment,

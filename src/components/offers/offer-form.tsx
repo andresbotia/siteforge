@@ -11,6 +11,7 @@ import { Button } from "@/components/shared/button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { Field, TextArea, TextInput } from "@/components/shared/field";
 import { CommercialOfferStatusBadge } from "@/components/shared/status-badge";
+import { PurchaseLinkPanel } from "@/components/offers/purchase-link-panel";
 import type { StripeMode } from "@/lib/payments/config";
 import type { CommercialOffer } from "@/types";
 
@@ -127,9 +128,14 @@ export function OfferEditor({ offer, stripeMode }: { offer: CommercialOffer; str
               <Button type="submit" variant="primary" disabled={creating}>
                 {creating ? "Creating..." : `Create Checkout (${MODE_LABEL[stripeMode]})`}
               </Button>
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                For internal testing. Customers should use the purchase link below.
+              </p>
               {checkoutState?.checkoutUrl ? (
-                <p className="mt-2 break-all text-xs text-accent">
-                  {checkoutState.checkoutUrl}
+                <p className="mt-2 text-xs">
+                  <a href={checkoutState.checkoutUrl} className="text-accent underline">
+                    Checkout session created — open for internal testing
+                  </a>
                 </p>
               ) : null}
               {checkoutState?.error ? (
@@ -137,6 +143,13 @@ export function OfferEditor({ offer, stripeMode }: { offer: CommercialOffer; str
               ) : null}
             </form>
           ) : null}
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader title="Customer purchase link" />
+        <CardBody>
+          <PurchaseLinkPanel offer={offer} />
         </CardBody>
       </Card>
     </div>

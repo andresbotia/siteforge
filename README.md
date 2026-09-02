@@ -80,6 +80,10 @@ Milestone 9 adds **Stripe Checkout + customer conversion**: manual commercial of
 - `checkout.session.completed` is idempotent by Stripe event ID, updates the checkout session, creates or updates a customer, creates a managed subscription only when selected, and advances the lead to `customer`.
 - No Stripe API call, real charge, production deployment, Resend call, email delivery, or paid AI/API call is part of Milestone 9.
 
+M9.6 adds real Stripe test/live mode alongside the mock provider, still uncredentialed by default. Mode is derived, not hand-set: with `STRIPE_ALLOW_LIVE_PAYMENTS` unset the provider stays mock; once it is `true`, the configured `STRIPE_SECRET_KEY`'s own `sk_test_`/`sk_live_` prefix decides TEST vs LIVE, so a key's prefix can never drift out of sync with a separately-set mode flag. Settings surfaces live Stripe config status (mode, key/webhook/price-ID presence, readiness) without ever exposing the secret value. `inferPaymentEnvironment` now distinguishes `mock` / `test` / `live` (previously any non-mock Stripe-shaped record was miscounted as `live`); only `live` counts as real revenue on the Customers pages, and a Stripe TEST payment is labeled and excluded from revenue like mock.
+
+M9.7 adds customer-facing purchase links so a customer can complete Checkout without admin involvement. Publishing an approved offer at `/offers/[id]` mints an opaque `sfb_` token (mirroring the `sfp_`/`sfo_` hash+hint philosophy — only a SHA-256 hash and short hint are persisted, on `commercial_offers.purchase_token_hash`/`purchase_token_hint`; the raw link is shown once, at publish time, and cannot be recovered afterward). The public, unauthenticated page at `/buy/[token]` resolves the token server-side, re-derives the exact Stripe checkout request from the already-approved offer row (never a client-supplied amount or price ID, via the same `buildCheckoutSessionRequest` helper the admin "Create Checkout" path uses), and lets the customer choose website-only or website-plus-managed before redirecting to Checkout. An invalid token, a revoked link, and a materially-edited offer (which resets status away from `approved`) all render an identical "unavailable" page so the token cannot be used to enumerate offers. Revoking a link blocks future lookups without touching payment history.
+
 Milestone 8 added **Sales Agent + email approval**: a manual, deterministic outreach workflow that drafts prospect email, requires human approval, uses a mock email provider, and attributes public preview activity back to the outreach record.
 
 - Sales is available at `/agents/sales`; outreach review lives at `/outreach` and `/outreach/[id]`.
@@ -142,11 +146,12 @@ Demo geography (configurable, not architecture): Fort Lauderdale, Coconut Creek,
 | Other agents | Disabled |
 | xAI provider layer | Implemented, mock-tested, live calls gated off |
 | Supabase database | Server-side reads/writes with a secret key after admin session check |
-| Vercel / Stripe APIs | Not connected |
+| Vercel API | Not connected |
+| Stripe API | Server-only provider integrated (mock/test/live); live/test creation gated behind `STRIPE_ALLOW_LIVE_PAYMENTS` and still uncredentialed by default |
 | Resend API | Server-only provider integrated; live sends gated off unless explicitly configured |
 | Authentication | Temporary single-admin env credentials. Not Supabase Auth. |
 | Email sending | Mock by default; guarded Resend path plus internal/operator test only |
-| Payments | M9 mock checkout workflow implemented and hosted-validated; live Stripe disabled |
+| Payments | M9 mock checkout workflow implemented and hosted-validated; M9.6 adds real Stripe test/live mode (uncredentialed by default); M9.7 adds admin-published, token-gated customer purchase links (`/buy/[token]`) reusing the same checkout policy |
 | Website generation and deploy | Internal drafts only; no customer production deploy |
 
 Restaurant Builder drafts use Restaurant Modern V2.1 behind the existing `restaurant-modern` template key. V2.1 treats dedicated structured facts as canonical: cuisine/category, rating, review count, daily hours, social profiles, menu/order/reservation links, and approved image assets are modeled separately from the public summary. Legacy combined summaries are defensively sanitized before visitor-facing rendering so labels such as `Cuisine/category:`, `Rating:`, `Review count:`, `Description:`, and `Hours:` do not leak into prospect copy. Daily hours render from structured rows when present, with legacy string hours kept only as a compatibility fallback.
@@ -264,7 +269,7 @@ src/
   lib/leads/        Cross-agent lead composites (e.g. Commercial Potential)
   lib/sales/        Deterministic outreach drafting, approval binding, attribution tokens
   lib/email/        Mock and guarded Resend provider, delivery policy, webhook verification
-  lib/payments/     Commercial offers, checkout policy, mock Stripe provider, webhook parsing
+  lib/payments/     Commercial offers, checkout policy, mock/test/live Stripe provider, webhook parsing, purchase-link tokens (sfb_)
   lib/supabase/     Server-only Supabase client
   lib/auth/         Temporary admin session
   agents/           Future agent packages (empty)
@@ -444,6 +449,7 @@ Schema and development seed live in:
 - `supabase/migrations/20260831125533_external_source_archive_storage.sql`
 - `supabase/migrations/20260901000000_designer_jobs.sql`
 - `supabase/migrations/20260901010000_designer_worker_provider.sql`
+- `supabase/migrations/20260901030000_commercial_offer_purchase_links.sql`
 
 Apply them to the hosted project with the Supabase CLI (after `supabase login` and `supabase link --project-ref afpjclfcajrcbpcrgzvd`):
 

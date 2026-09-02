@@ -46,6 +46,21 @@ export function nextLeadStatusAfterCheckout(current: LeadStatus): LeadStatus {
   return "customer";
 }
 
+/**
+ * M9.7 fix: previously this function only distinguished mock vs. "live"
+ * (anything real-Stripe-shaped and non-mock was called "live"), which
+ * silently miscounted every M9.6 Sandbox TEST-mode payment as real
+ * revenue -- exactly the bug this milestone's own requirements ("do not
+ * count Stripe TEST payments as real revenue") call out. Stripe Checkout
+ * Session IDs are the one Stripe object ID that reliably encodes its own
+ * mode in the ID text itself (cs_test_... vs cs_live_...); customer/
+ * payment-intent/subscription IDs do not. When a checkout session ID is
+ * available, its own prefix is authoritative. When it is not (an older
+ * record, or a customer joined only by customer/subscription ID), the
+ * residual "real Stripe object, mode unknown" bucket now defaults to
+ * "test" rather than "live" -- the conservative choice, since overclaiming
+ * revenue is the more harmful failure mode than underclaiming it.
+ */
 export function inferPaymentEnvironment(input: {
   stripeCustomerId?: string | null;
   stripeCheckoutSessionId?: string | null;
@@ -64,15 +79,16 @@ export function inferPaymentEnvironment(input: {
   ) {
     return "mock";
   }
+  if (input.stripeCheckoutSessionId?.startsWith("cs_test_")) return "test";
+  if (input.stripeCheckoutSessionId?.startsWith("cs_live_")) return "live";
   if (
     input.sessionProvider === "stripe" ||
     input.stripeCustomerId?.startsWith("cus_") ||
-    input.stripeCheckoutSessionId?.startsWith("cs_") ||
     input.stripePaymentIntentId?.startsWith("pi_") ||
     input.stripeSubscriptionId?.startsWith("sub_") ||
     input.subscriptionProviderId?.startsWith("sub_")
   ) {
-    return "live";
+    return "test";
   }
   return "unknown";
 }

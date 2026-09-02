@@ -102,7 +102,8 @@ const connectionTone = {
 } as const;
 
 const paymentEnvironmentTone = {
-  mock: "warning",
+  mock: "neutral",
+  test: "warning",
   live: "success",
   unknown: "neutral",
 } as const;
@@ -221,8 +222,10 @@ export function PaymentEnvironmentBadge({
   const label =
     environment === "live"
       ? "Live payment"
-      : environment === "mock"
-        ? "Mock payment"
-        : "Payment unknown";
+      : environment === "test"
+        ? "Stripe TEST payment"
+        : environment === "mock"
+          ? "Mock payment"
+          : "Payment unknown";
   return <Badge tone={paymentEnvironmentTone[environment]}>{label}</Badge>;
 }

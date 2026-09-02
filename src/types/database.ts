@@ -699,6 +699,10 @@ export type Database = {
           approved_at: string | null;
           expires_at: string | null;
           metadata: Json;
+          purchase_token_hash: string | null;
+          purchase_token_hint: string | null;
+          purchase_link_published_at: string | null;
+          purchase_link_revoked_at: string | null;
         } & Timestamps;
         Insert: {
           id?: string;
@@ -718,6 +722,10 @@ export type Database = {
           approved_at?: string | null;
           expires_at?: string | null;
           metadata?: Json;
+          purchase_token_hash?: string | null;
+          purchase_token_hint?: string | null;
+          purchase_link_published_at?: string | null;
+          purchase_link_revoked_at?: string | null;
         };
         Update: {
           generated_website_id?: string | null;
@@ -735,6 +743,10 @@ export type Database = {
           approved_at?: string | null;
           expires_at?: string | null;
           metadata?: Json;
+          purchase_token_hash?: string | null;
+          purchase_token_hint?: string | null;
+          purchase_link_published_at?: string | null;
+          purchase_link_revoked_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];

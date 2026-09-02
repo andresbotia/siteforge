@@ -9,7 +9,7 @@ import {
   PlanBadge,
 } from "@/components/shared/status-badge";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { customerPlanPrice } from "@/lib/labels";
+import { centsToUsd } from "@/lib/payments/money";
 
 export const dynamic = "force-dynamic";
 
@@ -24,16 +24,17 @@ export default async function CustomersPage() {
     <>
       <PageHeader
         title="Customers"
-        description="Mock pricing only: Website Only is $99 one time, Managed is $39/month. Payments are not implemented."
+        description="Website Setup is $99 one time; Managed Website is an optional $39/month. Payment provenance (MOCK / Stripe TEST / Stripe LIVE) is shown per customer -- only LIVE payments count as real revenue."
       />
-      <DataTable minWidth="min-w-[760px]">
+      <DataTable minWidth="min-w-[920px]">
         <THead>
           <tr>
             <Th>Business</Th>
-            <Th>Website</Th>
             <Th>Plan</Th>
-            <Th>Status</Th>
-            <Th>Monthly Revenue</Th>
+            <Th>Payment</Th>
+            <Th>Setup payment</Th>
+            <Th>Managed subscription</Th>
+            <Th>Fulfillment status</Th>
             <Th>Joined</Th>
           </tr>
         </THead>
@@ -41,7 +42,7 @@ export default async function CustomersPage() {
           {customers.length === 0 ? (
             <tr>
               <td
-                colSpan={6}
+                colSpan={7}
                 className="border-t border-border-subtle px-3 py-6 text-sm text-muted"
               >
                 No customers yet.
@@ -68,25 +69,28 @@ export default async function CustomersPage() {
                   </div>
                 ) : null}
               </Td>
-              <Td className="max-w-[240px] truncate text-xs text-muted">
-                {customer.website.replace("https://", "")}
+              <Td>
+                <PlanBadge plan={customer.plan} />
               </Td>
               <Td>
-                <div className="flex flex-col gap-1">
-                  <PlanBadge plan={customer.plan} />
-                  <PaymentEnvironmentBadge environment={customer.paymentEnvironment} />
-                  <span className="text-[11px] text-muted-foreground">
-                    {customerPlanPrice[customer.plan]}
-                  </span>
-                </div>
+                <PaymentEnvironmentBadge environment={customer.paymentEnvironment} />
+              </Td>
+              <Td className="tabular-nums text-sm">
+                {customer.setupAmountCents !== null
+                  ? `${formatCurrency(centsToUsd(customer.setupAmountCents))} paid`
+                  : "—"}
+              </Td>
+              <Td className="text-sm">
+                {customer.managedSubscriptionStatus
+                  ? `${customer.managedSubscriptionStatus}${
+                      customer.paymentEnvironment === "live"
+                        ? ` — ${formatCurrency(customer.grossMonthlyAmount, true)}/mo`
+                        : ""
+                    }`
+                  : "None"}
               </Td>
               <Td>
                 <CustomerStatusBadge status={customer.status} />
-              </Td>
-              <Td className="tabular-nums">
-                {customer.paymentEnvironment === "live"
-                  ? formatCurrency(customer.monthlyRevenue, true)
-                  : "Not real revenue"}
               </Td>
               <Td className="text-muted whitespace-nowrap">
                 {formatDate(customer.joinedAt)}

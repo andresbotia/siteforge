@@ -12,6 +12,7 @@ import {
   type CommercialOfferInput,
 } from "@/lib/payments/offers";
 import { getPaymentProvider } from "@/lib/payments/provider";
+import { createPurchaseToken, hashPurchaseToken, isPurchaseToken } from "@/lib/payments/purchase-tokens";
 import {
   normalizeStripeWebhookEvent,
   type NormalizedCheckoutCompleted,
@@ -20,7 +21,7 @@ import {
 import { mapStripeSubscriptionStatus, resolveCustomerPlan, shouldCreateManagedSubscription } from "@/lib/payments/conversion";
 import { resolveMonotonicLeadStatus } from "@/lib/scout/status";
 import { createServerSupabaseClient, mutateTable, readTable } from "@/lib/supabase/server";
-import type { CommercialOffer, CommercialOfferStatus, StripeCheckoutSession } from "@/types";
+import type { CommercialOffer, CommercialOfferStatus, PurchaseLinkStatus, StripeCheckoutSession } from "@/types";
 import type {
   ApprovalRow,
   CommercialOfferRow,
@@ -43,6 +44,12 @@ const offerStatuses = new Set<CommercialOfferStatus>([
   "expired",
   "cancelled",
 ]);
+
+function purchaseLinkStatusFromRow(row: Pick<CommercialOfferRow, "purchase_token_hash" | "purchase_link_revoked_at">): PurchaseLinkStatus {
+  if (!row.purchase_token_hash) return "not_published";
+  if (row.purchase_link_revoked_at) return "revoked";
+  return "active";
+}
 
 function mapOffer(row: CommercialOfferRow, businessName: string): CommercialOffer {
   return {
@@ -67,6 +74,8 @@ function mapOffer(row: CommercialOfferRow, businessName: string): CommercialOffe
     expiresAt: row.expires_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    purchaseLinkStatus: purchaseLinkStatusFromRow(row),
+    purchaseTokenHint: row.purchase_token_hint,
   };
 }
 
@@ -363,8 +372,45 @@ export async function approveCommercialOfferApproval(
   return { ok: true };
 }
 
+/**
+ * The one place a Stripe checkout-session request is assembled. Shared by
+ * the admin-triggered path (createCheckoutForApprovedOffer, below) and the
+ * public customer-triggered path (createPublicCheckoutFromToken) so the two
+ * auth contexts can never drift into two different Stripe request shapes --
+ * only the amounts/plan already recorded on the offer row and trusted
+ * SiteForge-controlled redirect URLs ever reach the provider, never a
+ * client-supplied amount or price ID.
+ */
+function buildCheckoutSessionRequest(
+  offer: Pick<CommercialOfferRow, "id" | "lead_id" | "currency" | "setup_amount_cents" | "managed_monthly_amount_cents" | "description">,
+  managedPlanSelected: boolean,
+  origin: string,
+) {
+  return {
+    offerId: offer.id,
+    leadId: offer.lead_id,
+    currency: offer.currency,
+    setupAmountCents: offer.setup_amount_cents,
+    managedMonthlyAmountCents: managedPlanSelected ? offer.managed_monthly_amount_cents : null,
+    managedPlanSelected,
+    description: offer.description,
+    successUrl: buildCheckoutSuccessUrl(origin, offer.id),
+    cancelUrl: buildCheckoutCancelUrl(origin, offer.id),
+  };
+}
+
+/**
+ * `managedPlanOverride`, when provided, replaces the offer's own
+ * `managed_plan_selected` default for this one checkout call -- this is
+ * how the public /buy/[token] purchase page lets a customer choose
+ * website-only even when the offer's default is managed, or vice versa,
+ * without touching the offer row itself. Omitting it (the internal admin
+ * "Create Checkout" button's call site) preserves the exact pre-M9.7
+ * behavior unchanged: the offer's own managed_plan_selected decides.
+ */
 export async function createCheckoutForApprovedOffer(
   offerId: string,
+  options?: { managedPlanOverride?: boolean },
 ): Promise<{ ok: true; sessionId: string; checkoutUrl: string } | { ok: false; error: string }> {
   const offer = await readTable<CommercialOfferRow | null>((client) =>
     client.from("commercial_offers").select("*").eq("id", offerId).maybeSingle(),
@@ -392,19 +438,14 @@ export async function createCheckoutForApprovedOffer(
   });
   if (!policy.ok) return policy;
 
+  const managedPlanSelected = options?.managedPlanOverride ?? offer.managed_plan_selected;
+  if (managedPlanSelected && offer.managed_monthly_amount_cents === null) {
+    return { ok: false, error: "This offer does not include a managed monthly plan." };
+  }
+
   const provider = getPaymentProvider();
   const origin = resolveAppOrigin();
-  const result = await provider.createCheckoutSession({
-    offerId: offer.id,
-    leadId: offer.lead_id,
-    currency: offer.currency,
-    setupAmountCents: offer.setup_amount_cents,
-    managedMonthlyAmountCents: offer.managed_monthly_amount_cents,
-    managedPlanSelected: offer.managed_plan_selected,
-    description: offer.description,
-    successUrl: buildCheckoutSuccessUrl(origin, offer.id),
-    cancelUrl: buildCheckoutCancelUrl(origin, offer.id),
-  });
+  const result = await provider.createCheckoutSession(buildCheckoutSessionRequest(offer, managedPlanSelected, origin));
   const session = await mutateTable<StripeCheckoutSessionRow | null>((client) =>
     client
       .from("stripe_checkout_sessions")
@@ -442,6 +483,239 @@ export async function createCheckoutForApprovedOffer(
     metadata: { commercial_offer_id: offer.id, checkout_session_id: session.id },
   });
   return { ok: true, sessionId: session.id, checkoutUrl: result.checkoutUrl };
+}
+
+/**
+ * Admin-gated. Mints a fresh sfb_ purchase token (see purchase-tokens.ts,
+ * mirroring the sfp_ preview-token / sfo_ outreach-token hash+hint
+ * philosophy) and stores only its hash + short hint -- the raw token is
+ * returned once, here, and is not recoverable from the database afterward.
+ * Only an approved offer can be published, so an unapproved or since-edited
+ * offer can never get a live public link.
+ */
+export async function publishPurchaseLink(
+  offerId: string,
+): Promise<{ ok: true; url: string; hint: string } | { ok: false; error: string }> {
+  const offer = await readTable<CommercialOfferRow | null>((client) =>
+    client.from("commercial_offers").select("*").eq("id", offerId).maybeSingle(),
+  );
+  if (!offer) return { ok: false, error: "Offer was not found." };
+  if (offer.status !== "approved") {
+    return { ok: false, error: "Only an approved offer can have a purchase link published." };
+  }
+
+  const purchaseToken = createPurchaseToken();
+  const updated = await mutateTable<Pick<CommercialOfferRow, "id"> | null>((client) =>
+    client
+      .from("commercial_offers")
+      .update({
+        purchase_token_hash: purchaseToken.hash,
+        purchase_token_hint: purchaseToken.hint,
+        purchase_link_published_at: new Date().toISOString(),
+        purchase_link_revoked_at: null,
+      })
+      .eq("id", offerId)
+      .select("id")
+      .maybeSingle(),
+  );
+  if (!updated) return { ok: false, error: "Could not publish the purchase link." };
+
+  await recordActivityEvent({
+    eventType: "purchase_link_published",
+    title: "Customer purchase link published",
+    description: `Purchase link ending ${purchaseToken.hint}`,
+    leadId: offer.lead_id,
+    metadata: { commercial_offer_id: offerId, token_hint: purchaseToken.hint },
+  });
+
+  const origin = resolveAppOrigin();
+  return { ok: true, url: `${origin}/buy/${purchaseToken.token}`, hint: purchaseToken.hint };
+}
+
+/**
+ * Admin-gated. Revoking clears no payment history -- it only blocks future
+ * lookups by this token (resolvePublicPurchaseOffer / createPublicCheckoutFromToken
+ * both check purchase_link_revoked_at first). A material edit to an approved
+ * offer already knocks status away from "approved" via updateCommercialOfferDraft,
+ * which independently makes the link unusable even without an explicit revoke.
+ */
+export async function revokePurchaseLink(offerId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  const updated = await mutateTable<Pick<CommercialOfferRow, "id"> | null>((client) =>
+    client
+      .from("commercial_offers")
+      .update({ purchase_link_revoked_at: new Date().toISOString() })
+      .eq("id", offerId)
+      .not("purchase_token_hash", "is", null)
+      .select("id")
+      .maybeSingle(),
+  );
+  if (!updated) return { ok: false, error: "No active purchase link to revoke." };
+
+  await recordActivityEvent({
+    eventType: "purchase_link_revoked",
+    title: "Customer purchase link revoked",
+    description: "The customer purchase link was revoked.",
+    metadata: { commercial_offer_id: offerId },
+  });
+  return { ok: true };
+}
+
+export type PublicPurchaseOfferSummary = {
+  businessName: string;
+  currency: string;
+  setupAmountCents: number;
+  managedMonthlyAmountCents: number | null;
+  managedPlanAvailable: boolean;
+};
+
+export type PublicPurchaseResolution =
+  | { kind: "available"; offer: PublicPurchaseOfferSummary }
+  | { kind: "already_purchased"; businessName: string }
+  | { kind: "unavailable" };
+
+/**
+ * Shared by resolvePublicPurchaseOffer and createPublicCheckoutFromToken.
+ * Deliberately unauthenticated (createServerSupabaseClient directly, not
+ * readTable/mutateTable) -- this is the same "public, token-gated instead
+ * of admin-session-gated" pattern already used by getPublicCheckoutStatus
+ * and the M7 preview-token lookups. A malformed token, an unknown hash, or
+ * a revoked link all resolve to null here so the caller cannot distinguish
+ * "no such token" from "link revoked" -- exactly the anti-enumeration
+ * behavior the public /buy/[token] page requires.
+ */
+async function loadPublicPurchaseOfferRow(
+  token: string,
+): Promise<{ client: Client; offer: CommercialOfferRow } | null> {
+  if (!isPurchaseToken(token)) return null;
+  const client = createServerSupabaseClient();
+  if (!client) return null;
+  const { data: offer } = await client
+    .from("commercial_offers")
+    .select("*")
+    .eq("purchase_token_hash", hashPurchaseToken(token))
+    .maybeSingle();
+  if (!offer) return null;
+  if (offer.purchase_link_revoked_at) return null;
+  return { client, offer };
+}
+
+/**
+ * Reuses canCreateCheckoutForOffer -- the same approval/content-hash/expiry/
+ * no-completed-checkout policy already enforced for the internal admin
+ * "Create Checkout" action -- so a material offer edit (which resets status
+ * away from "approved") or an expired/already-checked-out offer becomes
+ * unavailable here automatically, with no separate invalidation logic to
+ * keep in sync.
+ */
+async function isOfferCurrentlyPurchasable(client: Client, offer: CommercialOfferRow): Promise<boolean> {
+  const { data: completed } = await client
+    .from("stripe_checkout_sessions")
+    .select("id")
+    .eq("commercial_offer_id", offer.id)
+    .eq("status", "completed")
+    .maybeSingle();
+  const approval = offer.approval_id
+    ? (await client.from("approvals").select("*").eq("id", offer.approval_id).maybeSingle()).data
+    : null;
+  const policy = canCreateCheckoutForOffer({
+    status: offer.status,
+    currentContentHash: offer.content_hash,
+    approvedContentHash: asRecord(approval?.payload).content_hash as string | null,
+    expiresAt: offer.expires_at,
+    hasCompletedCheckout: Boolean(completed),
+  });
+  return policy.ok;
+}
+
+export async function resolvePublicPurchaseOffer(token: string): Promise<PublicPurchaseResolution | null> {
+  const loaded = await loadPublicPurchaseOfferRow(token);
+  if (!loaded) return null;
+  const { client, offer } = loaded;
+
+  const { data: lead } = await client.from("leads").select("business_name").eq("id", offer.lead_id).maybeSingle();
+  const businessName = lead?.business_name ?? "your business";
+
+  if (offer.status === "paid") {
+    return { kind: "already_purchased", businessName };
+  }
+
+  const purchasable = await isOfferCurrentlyPurchasable(client, offer);
+  if (!purchasable) return { kind: "unavailable" };
+
+  return {
+    kind: "available",
+    offer: {
+      businessName,
+      currency: offer.currency,
+      setupAmountCents: offer.setup_amount_cents,
+      managedMonthlyAmountCents: offer.managed_monthly_amount_cents,
+      managedPlanAvailable: offer.managed_monthly_amount_cents !== null,
+    },
+  };
+}
+
+export type PublicPlanChoice = "website_only" | "website_plus_managed";
+
+/**
+ * The public /buy/[token] checkout entry point. The browser supplies only
+ * the token and a plan choice between the two variants the offer itself
+ * allows -- never an amount, never a Stripe price ID. Everything else is
+ * re-derived server-side from the offer row via buildCheckoutSessionRequest,
+ * the same helper the admin-triggered path uses, so the two paths can never
+ * produce different Stripe requests for the same offer.
+ */
+export async function createPublicCheckoutFromToken(
+  token: string,
+  planChoice: PublicPlanChoice,
+): Promise<{ ok: true; checkoutUrl: string } | { ok: false; error: string }> {
+  const loaded = await loadPublicPurchaseOfferRow(token);
+  if (!loaded) return { ok: false, error: "This purchase link is not available." };
+  const { client, offer } = loaded;
+
+  const purchasable = await isOfferCurrentlyPurchasable(client, offer);
+  if (!purchasable) return { ok: false, error: "This purchase link is not available." };
+
+  const managedPlanSelected = planChoice === "website_plus_managed";
+  if (managedPlanSelected && offer.managed_monthly_amount_cents === null) {
+    return { ok: false, error: "This offer does not include a managed monthly plan." };
+  }
+
+  const provider = getPaymentProvider();
+  const origin = resolveAppOrigin();
+  const result = await provider.createCheckoutSession(buildCheckoutSessionRequest(offer, managedPlanSelected, origin));
+
+  const { data: session, error: sessionError } = await client
+    .from("stripe_checkout_sessions")
+    .insert({
+      commercial_offer_id: offer.id,
+      lead_id: offer.lead_id,
+      stripe_checkout_session_id: result.checkoutSessionId,
+      stripe_customer_id: result.customerId,
+      stripe_payment_intent_id: result.paymentIntentId,
+      stripe_subscription_id: result.subscriptionId,
+      mode: result.mode,
+      status: "created",
+      checkout_url: result.checkoutUrl,
+      amount_total_cents: result.amountTotalCents,
+      currency: result.currency,
+      expires_at: result.expiresAt,
+      metadata: { provider: result.provider, source: "public_purchase_page" },
+    })
+    .select("*")
+    .maybeSingle();
+  if (sessionError || !session) return { ok: false, error: "Could not start checkout." };
+
+  await client.from("commercial_offers").update({ status: "checkout_created" }).eq("id", offer.id);
+  await client.from("activity_events").insert({
+    event_type: "checkout_session_created",
+    actor_type: "public_purchase_page",
+    lead_id: offer.lead_id,
+    title: "Checkout session created",
+    description: `${result.provider} checkout session ${result.checkoutSessionId} (customer purchase page)`,
+    metadata: { commercial_offer_id: offer.id, checkout_session_id: session.id },
+  });
+
+  return { ok: true, checkoutUrl: result.checkoutUrl };
 }
 
 export type WebhookProcessingResult = { ok: boolean; duplicate?: boolean; ignored?: boolean; error?: string };

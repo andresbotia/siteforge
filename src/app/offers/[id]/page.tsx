@@ -57,19 +57,19 @@ export default async function OfferDetailPage({ params }: OfferPageProps) {
             <ul className="space-y-2">
               {offer.sessions.map((session) => (
                 <li key={session.id} className="rounded border border-border-subtle p-3 text-sm">
-                  <p className="font-mono text-xs">{session.stripeCheckoutSessionId}</p>
+                  <p className="font-mono text-xs text-muted-foreground">
+                    session …{session.stripeCheckoutSessionId.slice(-10)}
+                  </p>
                   <p className="mt-1 text-muted">
                     {session.status} - {session.mode} - created {formatDateTime(session.createdAt)}
                     {session.completedAt ? ` - completed ${formatDateTime(session.completedAt)}` : ""}
                   </p>
-                  {session.stripeCustomerId || session.stripeSubscriptionId ? (
-                    <p className="mt-1 space-x-2 font-mono text-[11px] text-muted-foreground">
-                      {session.stripeCustomerId ? <span>{session.stripeCustomerId}</span> : null}
-                      {session.stripeSubscriptionId ? <span>{session.stripeSubscriptionId}</span> : null}
+                  {session.checkoutUrl && session.status !== "completed" ? (
+                    <p className="mt-1 text-xs">
+                      <a href={session.checkoutUrl} className="text-accent underline">
+                        Open session (internal testing only)
+                      </a>
                     </p>
-                  ) : null}
-                  {session.checkoutUrl ? (
-                    <p className="mt-1 break-all text-xs text-accent">{session.checkoutUrl}</p>
                   ) : null}
                 </li>
               ))}

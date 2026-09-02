@@ -406,6 +406,8 @@ export type CommercialOfferStatus =
   | "expired"
   | "cancelled";
 
+export type PurchaseLinkStatus = "not_published" | "active" | "revoked";
+
 export interface CommercialOffer {
   id: string;
   leadId: string;
@@ -426,6 +428,8 @@ export interface CommercialOffer {
   expiresAt: string | null;
   createdAt: string;
   updatedAt: string;
+  purchaseLinkStatus: PurchaseLinkStatus;
+  purchaseTokenHint: string | null;
 }
 
 export type StripeCheckoutStatus =
@@ -457,7 +461,7 @@ export type CustomerPlan = "website_only" | "managed";
 
 export type CustomerStatus = "active" | "pending_setup" | "cancelled";
 
-export type PaymentEnvironment = "mock" | "live" | "unknown";
+export type PaymentEnvironment = "mock" | "test" | "live" | "unknown";
 
 export interface Customer {
   id: string;
@@ -468,6 +472,8 @@ export interface Customer {
   website: string;
   plan: CustomerPlan;
   status: CustomerStatus;
+  setupAmountCents: number | null;
+  managedSubscriptionStatus: string | null;
   monthlyRevenue: number;
   grossMonthlyAmount: number;
   paymentEnvironment: PaymentEnvironment;

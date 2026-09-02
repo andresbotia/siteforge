@@ -5,13 +5,19 @@ import { redirect } from "next/navigation";
 import {
   createCheckoutForApprovedOffer,
   createCommercialOffer,
+  publishPurchaseLink,
   requestCommercialOfferApproval,
+  revokePurchaseLink,
   updateCommercialOfferDraft,
 } from "@/data/payments";
 import { parseCents } from "@/lib/payments/money";
 
 export type OfferActionState =
   | { ok: boolean; error?: string; checkoutUrl?: string }
+  | null;
+
+export type PurchaseLinkActionState =
+  | { ok: boolean; error?: string; url?: string; hint?: string }
   | null;
 
 function boolFromForm(value: FormDataEntryValue | null): boolean {
@@ -98,6 +104,34 @@ export async function createCheckoutAction(
     revalidatePath(`/offers/${offerId}`);
     revalidatePath("/offers");
     return { ok: true, checkoutUrl: result.checkoutUrl };
+  }
+  return result;
+}
+
+export async function publishPurchaseLinkAction(
+  _prev: PurchaseLinkActionState,
+  formData: FormData,
+): Promise<PurchaseLinkActionState> {
+  const offerId = String(formData.get("offerId") ?? "");
+  if (!offerId) return { ok: false, error: "Missing offer." };
+  const result = await publishPurchaseLink(offerId);
+  if (result.ok) {
+    revalidatePath(`/offers/${offerId}`);
+    return { ok: true, url: result.url, hint: result.hint };
+  }
+  return result;
+}
+
+export async function revokePurchaseLinkAction(
+  _prev: PurchaseLinkActionState,
+  formData: FormData,
+): Promise<PurchaseLinkActionState> {
+  const offerId = String(formData.get("offerId") ?? "");
+  if (!offerId) return { ok: false, error: "Missing offer." };
+  const result = await revokePurchaseLink(offerId);
+  if (result.ok) {
+    revalidatePath(`/offers/${offerId}`);
+    return { ok: true };
   }
   return result;
 }
