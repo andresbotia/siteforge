@@ -11,9 +11,12 @@ import { Button } from "@/components/shared/button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { Field, TextArea, TextInput } from "@/components/shared/field";
 import { CommercialOfferStatusBadge } from "@/components/shared/status-badge";
+import type { StripeMode } from "@/lib/payments/config";
 import type { CommercialOffer } from "@/types";
 
-export function OfferEditor({ offer }: { offer: CommercialOffer }) {
+const MODE_LABEL: Record<StripeMode, string> = { mock: "Mock", test: "Stripe TEST mode", live: "Stripe LIVE mode -- real charge" };
+
+export function OfferEditor({ offer, stripeMode }: { offer: CommercialOffer; stripeMode: StripeMode }) {
   const [saveState, saveAction, saving] = useActionState<OfferActionState, FormData>(
     updateCommercialOfferAction,
     null,
@@ -96,6 +99,11 @@ export function OfferEditor({ offer }: { offer: CommercialOffer }) {
         <CardHeader title="Checkout gate" />
         <CardBody className="space-y-4">
           <CommercialOfferStatusBadge status={offer.status} />
+          <p
+            className={`text-xs font-semibold uppercase tracking-wide ${stripeMode === "live" ? "text-danger" : stripeMode === "test" ? "text-accent" : "text-muted"}`}
+          >
+            {MODE_LABEL[stripeMode]}
+          </p>
           <p className="break-all font-mono text-[11px] text-muted">
             {offer.contentHash}
           </p>
@@ -117,7 +125,7 @@ export function OfferEditor({ offer }: { offer: CommercialOffer }) {
             <form action={checkoutAction}>
               <input type="hidden" name="offerId" value={offer.id} />
               <Button type="submit" variant="primary" disabled={creating}>
-                {creating ? "Creating..." : "Create Mock Checkout"}
+                {creating ? "Creating..." : `Create Checkout (${MODE_LABEL[stripeMode]})`}
               </Button>
               {checkoutState?.checkoutUrl ? (
                 <p className="mt-2 break-all text-xs text-accent">

@@ -14,6 +14,33 @@ export function shouldCreateManagedSubscription(input: {
   return input.managedPlanSelected && input.managedMonthlyAmountCents !== null;
 }
 
+/**
+ * Maps Stripe's own subscription status vocabulary
+ * (active/trialing/past_due/unpaid/canceled/incomplete/incomplete_expired/paused)
+ * onto SiteForge's subscriptions.status column. `canceled` (Stripe's
+ * spelling) maps to the pre-existing `cancelled` value SiteForge's mock
+ * flow already used, rather than introducing a second, differently-spelled
+ * terminal state. Rare/edge Stripe statuses this session does not act on
+ * differently (incomplete, incomplete_expired, paused) fall through to
+ * `inactive` rather than growing the accepted-value list further.
+ */
+export function mapStripeSubscriptionStatus(stripeStatus: string): "active" | "trialing" | "past_due" | "unpaid" | "cancelled" | "inactive" {
+  switch (stripeStatus) {
+    case "active":
+      return "active";
+    case "trialing":
+      return "trialing";
+    case "past_due":
+      return "past_due";
+    case "unpaid":
+      return "unpaid";
+    case "canceled":
+      return "cancelled";
+    default:
+      return "inactive";
+  }
+}
+
 export function nextLeadStatusAfterCheckout(current: LeadStatus): LeadStatus {
   if (current === "rejected") return current;
   return "customer";

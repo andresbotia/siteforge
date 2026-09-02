@@ -8,6 +8,7 @@ import {
 } from "@/lib/auth/config";
 import { timingSafeEqual, verifySessionToken } from "@/lib/auth/session";
 import { isPublicResendWebhookPath } from "@/lib/email/routes";
+import { isPublicCheckoutStatusPath } from "@/lib/payments/routes";
 import {
   isPreviewEventPath,
   isPublicOutreachPreviewPath,
@@ -40,7 +41,8 @@ export async function proxy(request: NextRequest) {
     isPublicOutreachPreviewPath(pathname) ||
     isPreviewEventPath(pathname) ||
     isPublicResendWebhookPath(pathname) ||
-    isPublicStripeWebhookPath(pathname)
+    isPublicStripeWebhookPath(pathname) ||
+    isPublicCheckoutStatusPath(pathname)
   ) {
     return NextResponse.next();
   }

@@ -1,7 +1,9 @@
 import "server-only";
 
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordActivityEvent } from "@/data/activity";
 import { asRecord } from "@/lib/json";
+import { buildCheckoutCancelUrl, buildCheckoutSuccessUrl, resolveAppOrigin } from "@/lib/payments/checkout-urls";
 import { centsToUsd, isPaymentCurrency } from "@/lib/payments/money";
 import {
   buildCommercialOfferDraft,
@@ -10,8 +12,12 @@ import {
   type CommercialOfferInput,
 } from "@/lib/payments/offers";
 import { getPaymentProvider } from "@/lib/payments/provider";
-import { normalizeStripeWebhookEvent, type NormalizedCheckoutCompleted } from "@/lib/payments/webhook";
-import { resolveCustomerPlan, shouldCreateManagedSubscription } from "@/lib/payments/conversion";
+import {
+  normalizeStripeWebhookEvent,
+  type NormalizedCheckoutCompleted,
+  type NormalizedStripeWebhookEvent,
+} from "@/lib/payments/webhook";
+import { mapStripeSubscriptionStatus, resolveCustomerPlan, shouldCreateManagedSubscription } from "@/lib/payments/conversion";
 import { resolveMonotonicLeadStatus } from "@/lib/scout/status";
 import { createServerSupabaseClient, mutateTable, readTable } from "@/lib/supabase/server";
 import type { CommercialOffer, CommercialOfferStatus, StripeCheckoutSession } from "@/types";
@@ -19,11 +25,14 @@ import type {
   ApprovalRow,
   CommercialOfferRow,
   CustomerRow,
+  Database,
   Json,
   LeadRow,
   StripeCheckoutSessionRow,
   StripeWebhookEventRow,
 } from "@/types/database";
+
+type Client = SupabaseClient<Database>;
 
 const offerStatuses = new Set<CommercialOfferStatus>([
   "draft",
@@ -384,6 +393,7 @@ export async function createCheckoutForApprovedOffer(
   if (!policy.ok) return policy;
 
   const provider = getPaymentProvider();
+  const origin = resolveAppOrigin();
   const result = await provider.createCheckoutSession({
     offerId: offer.id,
     leadId: offer.lead_id,
@@ -392,6 +402,8 @@ export async function createCheckoutForApprovedOffer(
     managedMonthlyAmountCents: offer.managed_monthly_amount_cents,
     managedPlanSelected: offer.managed_plan_selected,
     description: offer.description,
+    successUrl: buildCheckoutSuccessUrl(origin, offer.id),
+    cancelUrl: buildCheckoutCancelUrl(origin, offer.id),
   });
   const session = await mutateTable<StripeCheckoutSessionRow | null>((client) =>
     client
@@ -432,12 +444,258 @@ export async function createCheckoutForApprovedOffer(
   return { ok: true, sessionId: session.id, checkoutUrl: result.checkoutUrl };
 }
 
-export async function processStripeWebhookPayload(input: {
-  payload: unknown;
-}): Promise<{ ok: boolean; duplicate?: boolean; ignored?: boolean; error?: string }> {
+export type WebhookProcessingResult = { ok: boolean; duplicate?: boolean; ignored?: boolean; error?: string };
+
+/**
+ * Single entry point the webhook route calls after signature verification.
+ * Dispatches on the normalized event's `kind`; every branch shares the same
+ * idempotency mechanism (recordWebhookEventOnce -- the unique
+ * stripe_webhook_events.stripe_event_id constraint is the real guard, this
+ * is just the shared insert-and-detect-duplicate helper).
+ */
+export async function processStripeWebhookPayload(input: { payload: unknown }): Promise<WebhookProcessingResult> {
   const event = normalizeStripeWebhookEvent(input.payload);
-  if (!event) return { ok: true, ignored: true };
-  return processCheckoutCompletedEvent(event);
+  switch (event.kind) {
+    case "checkout_completed":
+      return processCheckoutCompletedEvent(event);
+    case "checkout_async_payment_failed":
+      return processCheckoutAsyncPaymentFailedEvent(event);
+    case "subscription_updated":
+      return processSubscriptionUpdatedEvent(event);
+    case "subscription_deleted":
+      return processSubscriptionDeletedEvent(event);
+    case "invoice_paid":
+      return processInvoicePaidEvent(event);
+    case "invoice_payment_failed":
+      return processInvoicePaymentFailedEvent(event);
+    case "ignored":
+    default:
+      return { ok: true, ignored: true };
+  }
+}
+
+/**
+ * Shared idempotency insert. The unique constraint on stripe_event_id is
+ * the actual guard -- a duplicate delivery of the same Stripe event ID
+ * fails this insert (Postgres unique-violation), which we treat as
+ * "already handled" rather than an error. Never relies on in-memory state.
+ */
+async function recordWebhookEventOnce(
+  client: Client,
+  input: { eventId: string; eventType: string; objectId: string | null },
+): Promise<{ duplicate: true } | { duplicate: false; row: StripeWebhookEventRow } | { duplicate: false; row: null }> {
+  const { data, error } = await client
+    .from("stripe_webhook_events")
+    .insert({
+      stripe_event_id: input.eventId,
+      event_type: input.eventType,
+      object_id: input.objectId,
+      processing_status: "pending",
+      payload_metadata: {} as Json,
+    })
+    .select("*")
+    .maybeSingle();
+  if (error) return { duplicate: true };
+  return { duplicate: false, row: data };
+}
+
+async function processCheckoutAsyncPaymentFailedEvent(
+  event: Extract<NormalizedStripeWebhookEvent, { kind: "checkout_async_payment_failed" }>,
+): Promise<WebhookProcessingResult> {
+  const client = createServerSupabaseClient();
+  if (!client) return { ok: false, error: "Supabase is not configured." };
+  const recorded = await recordWebhookEventOnce(client, { eventId: event.eventId, eventType: event.eventType, objectId: event.checkoutSessionId });
+  if (recorded.duplicate) return { ok: true, duplicate: true };
+  if (!recorded.row) return { ok: false, error: "Webhook event could not be recorded." };
+
+  const { data: session } = await client
+    .from("stripe_checkout_sessions")
+    .select("*")
+    .eq("stripe_checkout_session_id", event.checkoutSessionId)
+    .maybeSingle();
+  if (!session) {
+    await markWebhook(client, recorded.row, "ignored", "checkout_session_not_found");
+    return { ok: true, ignored: true };
+  }
+
+  await client
+    .from("stripe_checkout_sessions")
+    .update({ status: "failed", last_event_at: new Date().toISOString() })
+    .eq("id", session.id);
+  await client.from("activity_events").insert({
+    event_type: "checkout_payment_failed",
+    actor_type: "stripe_webhook",
+    lead_id: session.lead_id,
+    title: "Checkout payment failed",
+    description: "An asynchronous payment method failed for this Checkout session.",
+    metadata: { checkout_session_id: session.id, stripe_event_id: event.eventId },
+  });
+  await markWebhook(client, recorded.row, "processed", null);
+  return { ok: true };
+}
+
+async function processSubscriptionUpdatedEvent(
+  event: Extract<NormalizedStripeWebhookEvent, { kind: "subscription_updated" }>,
+): Promise<WebhookProcessingResult> {
+  const client = createServerSupabaseClient();
+  if (!client) return { ok: false, error: "Supabase is not configured." };
+  const recorded = await recordWebhookEventOnce(client, { eventId: event.eventId, eventType: event.eventType, objectId: event.subscriptionId });
+  if (recorded.duplicate) return { ok: true, duplicate: true };
+  if (!recorded.row) return { ok: false, error: "Webhook event could not be recorded." };
+
+  const { data: subscription } = await client
+    .from("subscriptions")
+    .select("*")
+    .eq("provider_subscription_id", event.subscriptionId)
+    .maybeSingle();
+  if (!subscription) {
+    await markWebhook(client, recorded.row, "ignored", "subscription_not_found");
+    return { ok: true, ignored: true };
+  }
+
+  const status = mapStripeSubscriptionStatus(event.status);
+  await client
+    .from("subscriptions")
+    .update({ status, cancelled_at: status === "cancelled" ? new Date().toISOString() : subscription.cancelled_at })
+    .eq("id", subscription.id);
+  await markWebhook(client, recorded.row, "processed", null);
+  return { ok: true };
+}
+
+async function processSubscriptionDeletedEvent(
+  event: Extract<NormalizedStripeWebhookEvent, { kind: "subscription_deleted" }>,
+): Promise<WebhookProcessingResult> {
+  const client = createServerSupabaseClient();
+  if (!client) return { ok: false, error: "Supabase is not configured." };
+  const recorded = await recordWebhookEventOnce(client, { eventId: event.eventId, eventType: event.eventType, objectId: event.subscriptionId });
+  if (recorded.duplicate) return { ok: true, duplicate: true };
+  if (!recorded.row) return { ok: false, error: "Webhook event could not be recorded." };
+
+  const { data: subscription } = await client
+    .from("subscriptions")
+    .select("*")
+    .eq("provider_subscription_id", event.subscriptionId)
+    .maybeSingle();
+  if (!subscription) {
+    await markWebhook(client, recorded.row, "ignored", "subscription_not_found");
+    return { ok: true, ignored: true };
+  }
+
+  await client
+    .from("subscriptions")
+    .update({ status: "cancelled", cancelled_at: new Date().toISOString() })
+    .eq("id", subscription.id);
+  await markWebhook(client, recorded.row, "processed", null);
+  return { ok: true };
+}
+
+async function processInvoicePaidEvent(
+  event: Extract<NormalizedStripeWebhookEvent, { kind: "invoice_paid" }>,
+): Promise<WebhookProcessingResult> {
+  const client = createServerSupabaseClient();
+  if (!client) return { ok: false, error: "Supabase is not configured." };
+  if (!event.subscriptionId) return { ok: true, ignored: true };
+  const recorded = await recordWebhookEventOnce(client, { eventId: event.eventId, eventType: event.eventType, objectId: event.subscriptionId });
+  if (recorded.duplicate) return { ok: true, duplicate: true };
+  if (!recorded.row) return { ok: false, error: "Webhook event could not be recorded." };
+
+  const { data: subscription } = await client
+    .from("subscriptions")
+    .select("*")
+    .eq("provider_subscription_id", event.subscriptionId)
+    .maybeSingle();
+  if (!subscription) {
+    await markWebhook(client, recorded.row, "ignored", "subscription_not_found");
+    return { ok: true, ignored: true };
+  }
+
+  await client
+    .from("subscriptions")
+    .update({
+      status: "active",
+      current_period_start: event.periodStart ?? subscription.current_period_start,
+      current_period_end: event.periodEnd ?? subscription.current_period_end,
+    })
+    .eq("id", subscription.id);
+  await client.from("activity_events").insert({
+    event_type: "subscription_invoice_paid",
+    actor_type: "stripe_webhook",
+    customer_id: subscription.customer_id,
+    title: "Managed subscription invoice paid",
+    description: event.amountPaidCents !== null ? `$${centsToUsd(event.amountPaidCents).toFixed(2)} ${event.currency ?? ""}`.trim() : "Invoice paid",
+    metadata: { subscription_id: subscription.id, stripe_event_id: event.eventId },
+  });
+  await markWebhook(client, recorded.row, "processed", null);
+  return { ok: true };
+}
+
+async function processInvoicePaymentFailedEvent(
+  event: Extract<NormalizedStripeWebhookEvent, { kind: "invoice_payment_failed" }>,
+): Promise<WebhookProcessingResult> {
+  const client = createServerSupabaseClient();
+  if (!client) return { ok: false, error: "Supabase is not configured." };
+  if (!event.subscriptionId) return { ok: true, ignored: true };
+  const recorded = await recordWebhookEventOnce(client, { eventId: event.eventId, eventType: event.eventType, objectId: event.subscriptionId });
+  if (recorded.duplicate) return { ok: true, duplicate: true };
+  if (!recorded.row) return { ok: false, error: "Webhook event could not be recorded." };
+
+  const { data: subscription } = await client
+    .from("subscriptions")
+    .select("*")
+    .eq("provider_subscription_id", event.subscriptionId)
+    .maybeSingle();
+  if (!subscription) {
+    await markWebhook(client, recorded.row, "ignored", "subscription_not_found");
+    return { ok: true, ignored: true };
+  }
+
+  // Status itself is not forced here -- Stripe also emits
+  // customer.subscription.updated (status: past_due/unpaid), which is the
+  // authoritative status transition already handled above. This just
+  // records the failure as a visible, auditable event.
+  await client.from("activity_events").insert({
+    event_type: "subscription_invoice_payment_failed",
+    actor_type: "stripe_webhook",
+    customer_id: subscription.customer_id,
+    title: "Managed subscription invoice payment failed",
+    description: "Stripe reported a failed invoice payment for a managed subscription.",
+    metadata: { subscription_id: subscription.id, stripe_event_id: event.eventId },
+  });
+  await markWebhook(client, recorded.row, "processed", null);
+  return { ok: true };
+}
+
+export type PublicCheckoutStatus = {
+  businessName: string;
+  status: "pending" | "paid" | "expired" | "cancelled";
+  managedPlanSelected: boolean;
+  setupAmountCents: number;
+  managedMonthlyAmountCents: number | null;
+};
+
+/**
+ * Public, unauthenticated read for the Checkout success/cancel pages (see
+ * src/proxy.ts's isPublicCheckoutStatusPath). Deliberately returns only
+ * non-sensitive, already-public-to-the-customer fields -- no Stripe IDs, no
+ * lead contact details -- keyed by the unguessable commercial_offers.id
+ * UUID. Webhook state (offer.status) is authoritative; this never trusts a
+ * query parameter as proof of payment.
+ */
+export async function getPublicCheckoutStatus(offerId: string): Promise<PublicCheckoutStatus | null> {
+  const client = createServerSupabaseClient();
+  if (!client) return null;
+  const { data: offer } = await client.from("commercial_offers").select("*").eq("id", offerId).maybeSingle();
+  if (!offer) return null;
+  const { data: lead } = await client.from("leads").select("business_name").eq("id", offer.lead_id).maybeSingle();
+  const status: PublicCheckoutStatus["status"] =
+    offer.status === "paid" ? "paid" : offer.status === "expired" ? "expired" : offer.status === "cancelled" ? "cancelled" : "pending";
+  return {
+    businessName: lead?.business_name ?? "your business",
+    status,
+    managedPlanSelected: offer.managed_plan_selected,
+    setupAmountCents: offer.setup_amount_cents,
+    managedMonthlyAmountCents: offer.managed_monthly_amount_cents,
+  };
 }
 
 export async function processCheckoutCompletedEvent(

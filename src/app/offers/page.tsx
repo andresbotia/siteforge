@@ -19,7 +19,7 @@ export default async function OffersPage() {
     <>
       <PageHeader
         title="Commercial Offers"
-        description="Manual Stripe checkout offers with approval-bound mock payment execution."
+        description="Manual Stripe checkout offers with approval-bound payment execution. Checkout mode (mock/test/live) is shown on each offer."
       />
       <DataTable minWidth="min-w-[820px]">
         <THead>

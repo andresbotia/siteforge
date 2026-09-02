@@ -6,6 +6,7 @@ import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { getCommercialOfferById } from "@/data/payments";
 import { formatDateTime } from "@/lib/format";
+import { getStripeConfigStatus } from "@/lib/payments/config";
 
 export const dynamic = "force-dynamic";
 
@@ -23,12 +24,19 @@ export default async function OfferDetailPage({ params }: OfferPageProps) {
   const { id } = await params;
   const offer = await getCommercialOfferById(id);
   if (!offer) notFound();
+  const stripeStatus = getStripeConfigStatus();
 
   return (
     <>
       <PageHeader
         title={`Offer: ${offer.businessName}`}
-        description="Checkout remains mock-only until a later milestone explicitly enables live Stripe. Payment does not automatically deploy a customer website."
+        description={
+          stripeStatus.mode === "mock"
+            ? "Stripe is in MOCK mode -- no real Stripe API call is made. Payment does not automatically deploy a customer website."
+            : stripeStatus.mode === "test"
+              ? "Stripe TEST mode -- real Stripe API calls, test-mode card required, no real money moves. Payment does not automatically deploy a customer website."
+              : "Stripe LIVE mode -- checkout creation will charge a real card. Payment does not automatically deploy a customer website."
+        }
       />
       <div className="mb-4 flex flex-wrap gap-2 text-xs">
         <Link href="/offers" className="text-muted hover:text-foreground">Back to offers</Link>
@@ -39,7 +47,7 @@ export default async function OfferDetailPage({ params }: OfferPageProps) {
           </Link>
         ) : null}
       </div>
-      <OfferEditor offer={offer} />
+      <OfferEditor offer={offer} stripeMode={stripeStatus.mode} />
       <Card className="mt-4">
         <CardHeader title="Checkout sessions" />
         <CardBody>
@@ -52,7 +60,14 @@ export default async function OfferDetailPage({ params }: OfferPageProps) {
                   <p className="font-mono text-xs">{session.stripeCheckoutSessionId}</p>
                   <p className="mt-1 text-muted">
                     {session.status} - {session.mode} - created {formatDateTime(session.createdAt)}
+                    {session.completedAt ? ` - completed ${formatDateTime(session.completedAt)}` : ""}
                   </p>
+                  {session.stripeCustomerId || session.stripeSubscriptionId ? (
+                    <p className="mt-1 space-x-2 font-mono text-[11px] text-muted-foreground">
+                      {session.stripeCustomerId ? <span>{session.stripeCustomerId}</span> : null}
+                      {session.stripeSubscriptionId ? <span>{session.stripeSubscriptionId}</span> : null}
+                    </p>
+                  ) : null}
                   {session.checkoutUrl ? (
                     <p className="mt-1 break-all text-xs text-accent">{session.checkoutUrl}</p>
                   ) : null}

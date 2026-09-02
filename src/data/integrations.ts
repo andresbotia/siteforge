@@ -2,6 +2,7 @@ import "server-only";
 
 import { getAuthConfig } from "@/lib/auth/config";
 import { getEmailConnectionStatus, getEmailProviderStatus } from "@/lib/email/config";
+import { getStripeConfigStatus } from "@/lib/payments/config";
 import { getSupabaseServerConfigIssue } from "@/lib/supabase/config";
 import { readTable } from "@/lib/supabase/server";
 import type {
@@ -107,7 +108,7 @@ export function getReadinessIndicators(): ReadinessIndicator[] {
   );
   const authConfigured = Boolean(getAuthConfig());
   const liveAiEnabled = process.env.XAI_ALLOW_LIVE_INFERENCE === "true";
-  const liveStripeEnabled = process.env.STRIPE_ALLOW_LIVE_PAYMENTS === "true";
+  const stripeStatus = getStripeConfigStatus();
   const emailStatus = getEmailProviderStatus();
 
   return [
@@ -139,9 +140,18 @@ export function getReadinessIndicators(): ReadinessIndicator[] {
     },
     {
       id: "stripe",
-      label: "Stripe live payments",
-      status: liveStripeEnabled ? "Enabled" : "Disabled",
-      severity: liveStripeEnabled ? "attention" : "ok",
+      label: "Stripe mode",
+      status:
+        stripeStatus.mode === "mock"
+          ? "MOCK (no real Stripe calls)"
+          : stripeStatus.mode === "test"
+            ? stripeStatus.ready
+              ? "TEST -- ready"
+              : "TEST -- incomplete configuration (webhook secret / price IDs missing)"
+            : stripeStatus.ready
+              ? "LIVE -- ready (real charges will occur)"
+              : "LIVE -- incomplete configuration (webhook secret / price IDs missing)",
+      severity: stripeStatus.mode === "mock" ? "ok" : stripeStatus.mode === "live" ? "attention" : "attention",
     },
     {
       id: "email",

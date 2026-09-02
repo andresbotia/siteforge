@@ -1,15 +1,22 @@
 import { createHmac } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
   inferPaymentEnvironment,
+  mapStripeSubscriptionStatus,
   nextLeadStatusAfterCheckout,
   resolveCustomerPlan,
   shouldCreateManagedSubscription,
 } from "@/lib/payments/conversion";
+import { buildCheckoutCancelUrl, buildCheckoutSuccessUrl, resolveAppOrigin } from "@/lib/payments/checkout-urls";
+import { classifyStripeKeyMode, getStripeConfigStatus, getStripeSecretConfigFromEnv } from "@/lib/payments/config";
+import { DEFAULT_MANAGED_MONTHLY_AMOUNT_CENTS, DEFAULT_SETUP_AMOUNT_CENTS } from "@/lib/payments/limits";
 import { computeCommercialOfferContentHash } from "@/lib/payments/offer-hash";
 import { buildCommercialOfferDraft, buildDefaultCommercialOffer, canCreateCheckoutForOffer, validateCommercialOfferInput } from "@/lib/payments/offers";
-import { MockStripeProvider, createPaymentProviderFromEnv } from "@/lib/payments/provider-core";
+import { isPublicCheckoutStatusPath } from "@/lib/payments/routes";
+import { LiveStripeProvider, MockStripeProvider, createPaymentProviderFromEnv, type StripeCheckoutClient } from "@/lib/payments/provider-core";
 import { parseCents, validateAmountCents } from "@/lib/payments/money";
 import { normalizeStripeWebhookEvent, verifyStripeWebhookSignature } from "@/lib/payments/webhook";
 import type { Lead } from "@/types";
@@ -321,8 +328,16 @@ describe("stripe webhook parsing and verification", () => {
     assert.equal(normalized?.metadata.commercial_offer_id, "offer-1");
   });
 
-  it("ignores unsupported event types", () => {
-    assert.equal(normalizeStripeWebhookEvent({ id: "evt_1", type: "invoice.paid" }), null);
+  it("safely acknowledges an event type it does not act on, rather than returning null", () => {
+    const normalized = normalizeStripeWebhookEvent({ id: "evt_1", type: "payment_method.attached" });
+    assert.equal(normalized.kind, "ignored");
+    assert.equal(normalized.eventId, "evt_1");
+  });
+
+  it("never crashes on a malformed/incomplete payload -- falls through to ignored", () => {
+    assert.equal(normalizeStripeWebhookEvent({}).kind, "ignored");
+    assert.equal(normalizeStripeWebhookEvent(null).kind, "ignored");
+    assert.equal(normalizeStripeWebhookEvent({ id: "evt_1", type: "invoice.paid" }).kind, "ignored");
   });
 });
 
@@ -385,5 +400,401 @@ describe("customer conversion helpers", () => {
 
   it("keeps missing payment provenance unknown", () => {
     assert.equal(inferPaymentEnvironment({}), "unknown");
+  });
+});
+
+describe("mapStripeSubscriptionStatus", () => {
+  it("maps Stripe's real subscription statuses onto SiteForge's schema", () => {
+    assert.equal(mapStripeSubscriptionStatus("active"), "active");
+    assert.equal(mapStripeSubscriptionStatus("trialing"), "trialing");
+    assert.equal(mapStripeSubscriptionStatus("past_due"), "past_due");
+    assert.equal(mapStripeSubscriptionStatus("unpaid"), "unpaid");
+    assert.equal(mapStripeSubscriptionStatus("canceled"), "cancelled");
+  });
+
+  it("falls back to inactive for edge Stripe statuses it does not act on differently", () => {
+    assert.equal(mapStripeSubscriptionStatus("incomplete"), "inactive");
+    assert.equal(mapStripeSubscriptionStatus("incomplete_expired"), "inactive");
+    assert.equal(mapStripeSubscriptionStatus("paused"), "inactive");
+    assert.equal(mapStripeSubscriptionStatus("some_future_stripe_status"), "inactive");
+  });
+});
+
+describe("Stripe mode/config status", () => {
+  it("is mock whenever the live gate is not exactly \"true\", regardless of other Stripe env vars being set", () => {
+    assert.equal(getStripeConfigStatus({}).mode, "mock");
+    assert.equal(getStripeConfigStatus({ STRIPE_SECRET_KEY: "sk_live_x" }).mode, "mock");
+    assert.equal(getStripeConfigStatus({ STRIPE_ALLOW_LIVE_PAYMENTS: "yes" }).mode, "mock");
+  });
+
+  it("classifies test vs live from the secret key's own prefix, not a separate hand-set variable", () => {
+    assert.equal(classifyStripeKeyMode("sk_test_abc"), "test");
+    assert.equal(classifyStripeKeyMode("sk_live_abc"), "live");
+    assert.equal(classifyStripeKeyMode("not_a_stripe_key"), "unknown");
+  });
+
+  it("is test mode when the live gate is enabled with a test-prefixed key", () => {
+    const status = getStripeConfigStatus({ STRIPE_ALLOW_LIVE_PAYMENTS: "true", STRIPE_SECRET_KEY: "sk_test_abc" });
+    assert.equal(status.mode, "test");
+    assert.equal(status.secretKeyMode, "test");
+  });
+
+  it("is live mode only when the live gate is enabled with a live-prefixed key", () => {
+    const status = getStripeConfigStatus({ STRIPE_ALLOW_LIVE_PAYMENTS: "true", STRIPE_SECRET_KEY: "sk_live_abc" });
+    assert.equal(status.mode, "live");
+  });
+
+  it("reports readiness only once webhook secret and both price IDs are present for a non-mock mode", () => {
+    const partial = getStripeConfigStatus({ STRIPE_ALLOW_LIVE_PAYMENTS: "true", STRIPE_SECRET_KEY: "sk_test_abc" });
+    assert.equal(partial.ready, false);
+    const full = getStripeConfigStatus({
+      STRIPE_ALLOW_LIVE_PAYMENTS: "true",
+      STRIPE_SECRET_KEY: "sk_test_abc",
+      STRIPE_WEBHOOK_SECRET: "whsec_abc",
+      STRIPE_SITE_SETUP_PRICE_ID: "price_setup",
+      STRIPE_MANAGED_MONTHLY_PRICE_ID: "price_managed",
+    });
+    assert.equal(full.ready, true);
+  });
+
+  it("mock mode is always ready (nothing further required to test the flow)", () => {
+    assert.equal(getStripeConfigStatus({}).ready, true);
+  });
+
+  it("getStripeConfigStatus never returns the secret key value itself, only presence/mode", () => {
+    const status = getStripeConfigStatus({ STRIPE_SECRET_KEY: "sk_test_should_never_appear" }) as Record<string, unknown>;
+    assert.equal(JSON.stringify(status).includes("should_never_appear"), false);
+  });
+
+  it("getStripeSecretConfigFromEnv returns null when the secret key is absent", () => {
+    assert.equal(getStripeSecretConfigFromEnv({}), null);
+  });
+});
+
+describe("checkout success/cancel URL construction", () => {
+  it("resolves a local origin by default, honors SITEFORGE_APP_URL, and falls back to VERCEL_URL", () => {
+    assert.equal(resolveAppOrigin({}), "http://localhost:3000");
+    assert.equal(resolveAppOrigin({ SITEFORGE_APP_URL: "https://siteforge.example.com/" }), "https://siteforge.example.com");
+    assert.equal(resolveAppOrigin({ VERCEL_URL: "siteforge-abc123.vercel.app" }), "https://siteforge-abc123.vercel.app");
+  });
+
+  it("builds a success URL bound to the offer id, preserving Stripe's literal session-id template token", () => {
+    const url = buildCheckoutSuccessUrl("https://siteforge.example.com", "offer-123");
+    assert.equal(url, "https://siteforge.example.com/checkout/success?offer=offer-123&session_id={CHECKOUT_SESSION_ID}");
+  });
+
+  it("builds a cancel URL bound to the offer id", () => {
+    assert.equal(buildCheckoutCancelUrl("https://siteforge.example.com", "offer-123"), "https://siteforge.example.com/checkout/cancel?offer=offer-123");
+  });
+
+  it("URL-encodes the offer id so it cannot be used to inject an arbitrary query/path", () => {
+    const url = buildCheckoutSuccessUrl("https://siteforge.example.com", "abc?evil=1&x=2");
+    assert.doesNotMatch(url, /offer=abc\?evil/);
+  });
+});
+
+describe("checkout status public route allowlist", () => {
+  it("only matches the two exact checkout status paths", () => {
+    assert.equal(isPublicCheckoutStatusPath("/checkout/success"), true);
+    assert.equal(isPublicCheckoutStatusPath("/checkout/cancel"), true);
+    assert.equal(isPublicCheckoutStatusPath("/checkout/success/extra"), false);
+    assert.equal(isPublicCheckoutStatusPath("/offers"), false);
+    assert.equal(isPublicCheckoutStatusPath("/api/stripe/webhook"), false);
+  });
+});
+
+function fakeStripeClient(create: StripeCheckoutClient["checkout"]["sessions"]["create"]): StripeCheckoutClient {
+  return { checkout: { sessions: { create } } };
+}
+
+const liveConfig = {
+  secretKey: "sk_test_fake",
+  webhookSecret: "whsec_fake",
+  setupPriceId: "price_setup_123",
+  managedMonthlyPriceId: "price_managed_123",
+};
+
+const baseRequest = {
+  offerId: "offer-1",
+  leadId: "lead-1",
+  currency: "usd",
+  setupAmountCents: DEFAULT_SETUP_AMOUNT_CENTS,
+  managedMonthlyAmountCents: null as number | null,
+  managedPlanSelected: false,
+  description: "Website rebuild",
+  successUrl: "https://siteforge.example.com/checkout/success?offer=offer-1",
+  cancelUrl: "https://siteforge.example.com/checkout/cancel?offer=offer-1",
+};
+
+describe("LiveStripeProvider: price authority and Checkout modeling", () => {
+  it("website-only uses mode:payment with a single line item referencing the configured setup Price ID -- never a raw amount", async () => {
+    let capturedParams: unknown;
+    const provider = new LiveStripeProvider(liveConfig, () =>
+      fakeStripeClient(async (params) => {
+        capturedParams = params;
+        return { id: "cs_test_1", customer: "cus_1", payment_intent: "pi_1", subscription: null, url: "https://checkout.stripe.com/cs_test_1", mode: "payment", amount_total: 9900, currency: "usd", expires_at: 1893456000 } as never;
+      }),
+    );
+    const result = await provider.createCheckoutSession(baseRequest);
+    assert.equal(result.provider, "stripe");
+    assert.equal(result.mode, "payment");
+    const params = capturedParams as { mode: string; line_items: Array<{ price: string }> };
+    assert.equal(params.mode, "payment");
+    assert.equal(params.line_items.length, 1);
+    assert.equal(params.line_items[0].price, "price_setup_123");
+  });
+
+  it("website+managed uses mode:subscription with BOTH the one-time setup Price and the recurring monthly Price as line items in one session", async () => {
+    let capturedParams: unknown;
+    const provider = new LiveStripeProvider(liveConfig, () =>
+      fakeStripeClient(async (params) => {
+        capturedParams = params;
+        return { id: "cs_test_2", customer: "cus_1", payment_intent: null, subscription: "sub_1", url: "https://checkout.stripe.com/cs_test_2", mode: "subscription", amount_total: 9900, currency: "usd", expires_at: null } as never;
+      }),
+    );
+    const result = await provider.createCheckoutSession({
+      ...baseRequest,
+      managedPlanSelected: true,
+      managedMonthlyAmountCents: DEFAULT_MANAGED_MONTHLY_AMOUNT_CENTS,
+    });
+    assert.equal(result.mode, "subscription");
+    assert.equal(result.subscriptionId, "sub_1");
+    const params = capturedParams as { mode: string; line_items: Array<{ price: string }> };
+    assert.equal(params.mode, "subscription");
+    assert.deepEqual(
+      params.line_items.map((item) => item.price),
+      ["price_setup_123", "price_managed_123"],
+    );
+  });
+
+  it("the optional managed plan remains optional -- website-only checkout never includes the managed price", async () => {
+    let capturedParams: unknown;
+    const provider = new LiveStripeProvider(liveConfig, () => fakeStripeClient(async (params) => {
+      capturedParams = params;
+      return { id: "cs_test_3", customer: null, payment_intent: "pi_2", subscription: null, url: "https://checkout.stripe.com/cs_test_3", mode: "payment", amount_total: 9900, currency: "usd", expires_at: null } as never;
+    }));
+    await provider.createCheckoutSession(baseRequest);
+    const params = capturedParams as { line_items: Array<{ price: string }> };
+    assert.equal(params.line_items.some((item) => item.price === "price_managed_123"), false);
+  });
+
+  it("binds trusted server-side metadata (offer id, lead id, purchase option) to the session", async () => {
+    let capturedParams: unknown;
+    const provider = new LiveStripeProvider(liveConfig, () => fakeStripeClient(async (params) => {
+      capturedParams = params;
+      return { id: "cs_test_4", customer: null, payment_intent: "pi_3", subscription: null, url: "https://checkout.stripe.com/cs_test_4", mode: "payment", amount_total: 9900, currency: "usd", expires_at: null } as never;
+    }));
+    await provider.createCheckoutSession(baseRequest);
+    const params = capturedParams as { metadata: Record<string, string>; client_reference_id: string; success_url: string; cancel_url: string };
+    assert.equal(params.metadata.offer_id, "offer-1");
+    assert.equal(params.metadata.lead_id, "lead-1");
+    assert.equal(params.metadata.purchase_option, "website_only");
+    assert.equal(params.client_reference_id, "lead-1");
+    assert.equal(params.success_url, baseRequest.successUrl);
+    assert.equal(params.cancel_url, baseRequest.cancelUrl);
+  });
+
+  it("refuses to create a session when the offer's setup amount has drifted from the locked $99 price -- browser/offer input never becomes the authoritative charge", async () => {
+    const provider = new LiveStripeProvider(liveConfig, () => fakeStripeClient(async () => {
+      throw new Error("must not call Stripe when the price is not locked");
+    }));
+    await assert.rejects(
+      () => provider.createCheckoutSession({ ...baseRequest, setupAmountCents: 4900 }),
+      /stripe_setup_amount_does_not_match_locked_price/,
+    );
+  });
+
+  it("refuses to create a managed session when the monthly amount has drifted from the locked $39 price", async () => {
+    const provider = new LiveStripeProvider(liveConfig, () => fakeStripeClient(async () => {
+      throw new Error("must not call Stripe when the price is not locked");
+    }));
+    await assert.rejects(
+      () =>
+        provider.createCheckoutSession({
+          ...baseRequest,
+          managedPlanSelected: true,
+          managedMonthlyAmountCents: 999,
+        }),
+      /stripe_managed_amount_does_not_match_locked_price/,
+    );
+  });
+
+  it("fails closed when the setup Price ID is not configured", async () => {
+    const provider = new LiveStripeProvider({ ...liveConfig, setupPriceId: null }, () => fakeStripeClient(async () => {
+      throw new Error("must not call Stripe without a configured price");
+    }));
+    await assert.rejects(() => provider.createCheckoutSession(baseRequest), /stripe_setup_price_id_missing/);
+  });
+
+  it("fails closed when the managed monthly Price ID is not configured but the managed plan was selected", async () => {
+    const provider = new LiveStripeProvider({ ...liveConfig, managedMonthlyPriceId: null }, () => fakeStripeClient(async () => {
+      throw new Error("must not call Stripe without a configured price");
+    }));
+    await assert.rejects(
+      () => provider.createCheckoutSession({ ...baseRequest, managedPlanSelected: true, managedMonthlyAmountCents: DEFAULT_MANAGED_MONTHLY_AMOUNT_CENTS }),
+      /stripe_managed_monthly_price_id_missing/,
+    );
+  });
+});
+
+describe("stripe webhook event normalization: new event kinds", () => {
+  it("normalizes checkout.session.async_payment_succeeded the same way as checkout.session.completed", () => {
+    const normalized = normalizeStripeWebhookEvent({
+      id: "evt_2",
+      type: "checkout.session.async_payment_succeeded",
+      data: { object: { object: "checkout.session", id: "cs_test_2", customer: "cus_1" } },
+    });
+    assert.equal(normalized.kind, "checkout_completed");
+  });
+
+  it("normalizes checkout.session.async_payment_failed", () => {
+    const normalized = normalizeStripeWebhookEvent({
+      id: "evt_3",
+      type: "checkout.session.async_payment_failed",
+      data: { object: { object: "checkout.session", id: "cs_test_3" } },
+    });
+    assert.deepEqual(normalized, { kind: "checkout_async_payment_failed", eventId: "evt_3", eventType: "checkout.session.async_payment_failed", checkoutSessionId: "cs_test_3" });
+  });
+
+  it("normalizes customer.subscription.updated with its status", () => {
+    const normalized = normalizeStripeWebhookEvent({
+      id: "evt_4",
+      type: "customer.subscription.updated",
+      data: { object: { object: "subscription", id: "sub_1", customer: "cus_1", status: "past_due" } },
+    });
+    assert.deepEqual(normalized, { kind: "subscription_updated", eventId: "evt_4", eventType: "customer.subscription.updated", subscriptionId: "sub_1", customerId: "cus_1", status: "past_due" });
+  });
+
+  it("normalizes customer.subscription.deleted", () => {
+    const normalized = normalizeStripeWebhookEvent({
+      id: "evt_5",
+      type: "customer.subscription.deleted",
+      data: { object: { object: "subscription", id: "sub_1", customer: "cus_1" } },
+    });
+    assert.equal(normalized.kind, "subscription_deleted");
+  });
+
+  it("normalizes invoice.paid with period and amount", () => {
+    const normalized = normalizeStripeWebhookEvent({
+      id: "evt_6",
+      type: "invoice.paid",
+      data: {
+        object: {
+          object: "invoice",
+          subscription: "sub_1",
+          customer: "cus_1",
+          period_start: 1893456000,
+          period_end: 1896134400,
+          amount_paid: 3900,
+          currency: "usd",
+        },
+      },
+    });
+    assert.equal(normalized.kind, "invoice_paid");
+    if (normalized.kind === "invoice_paid") {
+      assert.equal(normalized.amountPaidCents, 3900);
+      assert.equal(normalized.periodStart, new Date(1893456000 * 1000).toISOString());
+    }
+  });
+
+  it("normalizes invoice.payment_failed", () => {
+    const normalized = normalizeStripeWebhookEvent({
+      id: "evt_7",
+      type: "invoice.payment_failed",
+      data: { object: { object: "invoice", subscription: "sub_1", customer: "cus_1" } },
+    });
+    assert.equal(normalized.kind, "invoice_payment_failed");
+  });
+
+  it("safely ignores customer.subscription.created -- not separately handled, since checkout_completed already creates the subscription record", () => {
+    const normalized = normalizeStripeWebhookEvent({
+      id: "evt_8",
+      type: "customer.subscription.created",
+      data: { object: { object: "subscription", id: "sub_1", customer: "cus_1", status: "active" } },
+    });
+    assert.equal(normalized.kind, "ignored");
+  });
+
+  it("every normalized event carries no card/PAN/CVC-shaped fields", () => {
+    const normalized = normalizeStripeWebhookEvent({
+      id: "evt_9",
+      type: "checkout.session.completed",
+      data: { object: { object: "checkout.session", id: "cs_test_9", customer: "cus_1" } },
+    });
+    const serialized = JSON.stringify(normalized).toLowerCase();
+    for (const forbidden of ["card_number", "cvc", "pan", "cardnumber"]) {
+      assert.equal(serialized.includes(forbidden), false);
+    }
+  });
+});
+
+describe("boundary isolation (source scans, matching the existing repo pattern)", () => {
+  function readSource(...segments: string[]): string {
+    return readFileSync(join(process.cwd(), ...segments), "utf8");
+  }
+
+  it("Scout cannot invoke payments -- no Scout module imports payments code", () => {
+    const scoutDir = join(process.cwd(), "src", "lib", "scout");
+    function scan(dir: string): void {
+      for (const entry of readdirSync(dir, { withFileTypes: true })) {
+        const full = join(dir, entry.name);
+        if (entry.isDirectory()) {
+          scan(full);
+          continue;
+        }
+        if (!entry.name.endsWith(".ts") || entry.name.endsWith(".test.ts")) continue;
+        const source = readFileSync(full, "utf8");
+        assert.doesNotMatch(source, /@\/(lib\/payments|data\/payments)/, `${full} must not import payments code`);
+      }
+    }
+    scan(scoutDir);
+  });
+
+  it("Sales cannot change pricing -- no Sales module imports the offers/pricing seam", () => {
+    const salesSource = readSource("src", "lib", "sales", "run.ts");
+    assert.doesNotMatch(salesSource, /@\/(lib\/payments|data\/payments)/);
+  });
+
+  it("no refund-creating code exists anywhere in the payments module (no autonomous refund path to gate)", () => {
+    for (const file of ["provider-core.ts", "conversion.ts", "webhook.ts", "offers.ts"]) {
+      const source = readSource("src", "lib", "payments", file);
+      assert.doesNotMatch(source, /refunds\.create|\.refund\(/i);
+    }
+  });
+
+  it("the webhook route verifies against the raw request body, never a re-parsed/re-serialized JSON round-trip, before trusting the payload", () => {
+    const routeSource = readSource("src", "app", "api", "stripe", "webhook", "route.ts");
+    assert.match(routeSource, /request\.text\(\)/);
+    // Real (non-mock) verification must run on the raw text, not JSON.parse output.
+    const realBranchIndex = routeSource.indexOf("constructEventAsync");
+    assert.ok(realBranchIndex > -1);
+    assert.match(routeSource.slice(0, realBranchIndex), /rawBody/);
+  });
+
+  it("the checkout success page never treats a query parameter as proof of payment -- only the looked-up offer status", () => {
+    const pageSource = readSource("src", "app", "checkout", "success", "page.tsx");
+    assert.doesNotMatch(pageSource, /searchParams\.session_id/);
+    assert.match(pageSource, /getPublicCheckoutStatus/);
+  });
+
+  it("checkout success/cancel URLs are only ever constructed from the trusted app origin, never from client-supplied form/query input", () => {
+    const dataSource = readSource("src", "data", "payments.ts");
+    assert.match(dataSource, /resolveAppOrigin\(\)/);
+    assert.doesNotMatch(dataSource, /formData\.get\(["']success_url["']\)/);
+    assert.doesNotMatch(dataSource, /formData\.get\(["']cancel_url["']\)/);
+  });
+
+  it("checkout creation still runs behind the existing admin-session-gated data helpers, not a bypass path", () => {
+    const dataSource = readSource("src", "data", "payments.ts");
+    assert.match(dataSource, /export async function createCheckoutForApprovedOffer/);
+    // createCheckoutForApprovedOffer reads the offer via readTable and persists via mutateTable,
+    // both of which call requireAdminSession() internally (src/lib/supabase/server.ts) -- this
+    // module was not changed to bypass that gate.
+    assert.doesNotMatch(dataSource, /SITEFORGE_.*_WORKER.*true/);
+  });
+
+  it("no deployment/DNS/production-site code is invoked from webhook payment processing", () => {
+    const dataSource = readSource("src", "data", "payments.ts");
+    assert.doesNotMatch(dataSource, /deployToVercel|updateDns|createProductionDeployment/i);
   });
 });
