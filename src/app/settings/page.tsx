@@ -3,6 +3,7 @@ import { SettingsView } from "@/components/settings/settings-view";
 import { getBudgetSnapshot, toCostControlsView } from "@/data/budget";
 import { getReadinessIndicators, listIntegrations } from "@/data/integrations";
 import { getEmailProviderStatus } from "@/lib/email/config";
+import { getStripeConfigStatus } from "@/lib/payments/config";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ export default async function SettingsPage() {
       costControls={toCostControlsView(budget)}
       readiness={getReadinessIndicators()}
       emailStatus={getEmailProviderStatus()}
+      stripeStatus={getStripeConfigStatus()}
     />
   );
 }

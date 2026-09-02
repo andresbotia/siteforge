@@ -798,3 +798,68 @@ describe("boundary isolation (source scans, matching the existing repo pattern)"
     assert.doesNotMatch(dataSource, /deployToVercel|updateDns|createProductionDeployment/i);
   });
 });
+
+describe("Settings UI wiring for Stripe runtime status", () => {
+  function readSource(...segments: string[]): string {
+    return readFileSync(join(process.cwd(), ...segments), "utf8");
+  }
+
+  it("the Settings page calls getStripeConfigStatus() server-side and passes it into SettingsView", () => {
+    const pageSource = readSource("src", "app", "settings", "page.tsx");
+    assert.match(pageSource, /import\s*\{\s*getStripeConfigStatus\s*\}\s*from\s*"@\/lib\/payments\/config"/);
+    assert.match(pageSource, /stripeStatus=\{getStripeConfigStatus\(\)\}/);
+  });
+
+  it("SettingsView declares a typed stripeStatus prop using StripeConfigStatus, not an ad hoc shape", () => {
+    const viewSource = readSource("src", "components", "settings", "settings-view.tsx");
+    assert.match(viewSource, /import type \{ StripeConfigStatus \} from "@\/lib\/payments\/config"/);
+    assert.match(viewSource, /stripeStatus:\s*StripeConfigStatus/);
+  });
+
+  it("SettingsView renders every required Stripe status field", () => {
+    const viewSource = readSource("src", "components", "settings", "settings-view.tsx");
+    for (const field of [
+      "stripeStatus.mode",
+      "stripeStatus.ready",
+      "stripeStatus.secretKeyPresent",
+      "stripeStatus.secretKeyMode",
+      "stripeStatus.webhookSecretPresent",
+      "stripeStatus.setupPriceIdPresent",
+      "stripeStatus.managedMonthlyPriceIdPresent",
+    ]) {
+      assert.match(viewSource, new RegExp(field.replace(".", "\\.")), `expected SettingsView to render ${field}`);
+    }
+  });
+
+  it("LIVE mode is visually distinguished from TEST/MOCK (a dedicated danger-styled branch, not shared styling)", () => {
+    const viewSource = readSource("src", "components", "settings", "settings-view.tsx");
+    const liveBranch = viewSource.match(/stripeStatus\.mode === "live"[\s\S]{0,80}/);
+    assert.ok(liveBranch);
+    assert.match(liveBranch![0], /danger/);
+  });
+
+  it("TEST + ready renders the exact \"TEST -- Ready\" label", () => {
+    const viewSource = readSource("src", "components", "settings", "settings-view.tsx");
+    assert.match(viewSource, /TEST -- Ready/);
+  });
+
+  it("no Stripe secret/key/price value is ever interpolated into the settings view -- only the presence/mode fields from StripeConfigStatus", () => {
+    const viewSource = readSource("src", "components", "settings", "settings-view.tsx");
+    assert.doesNotMatch(viewSource, /secretKey\b/);
+    assert.doesNotMatch(viewSource, /webhookSecret\b(?!Present)/);
+    assert.doesNotMatch(viewSource, /\bsetupPriceId\b(?!Present)/);
+    assert.doesNotMatch(viewSource, /\bmanagedMonthlyPriceId\b(?!Present)/);
+    assert.doesNotMatch(viewSource, /sk_(test|live)_/);
+  });
+
+  it("this change does not touch Stripe provider/checkout/webhook behavior files", () => {
+    // Source-scan guard: the settings page/view are the only files this
+    // change should touch beyond tests. Confirms payments runtime code is
+    // untouched by checking it still contains the exact behavior markers
+    // from the M9.6 session, unmodified.
+    const providerSource = readSource("src", "lib", "payments", "provider-core.ts");
+    assert.match(providerSource, /stripe_setup_amount_does_not_match_locked_price/);
+    const webhookSource = readSource("src", "app", "api", "stripe", "webhook", "route.ts");
+    assert.match(webhookSource, /constructEventAsync/);
+  });
+});

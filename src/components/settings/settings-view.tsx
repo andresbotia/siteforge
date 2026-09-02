@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { ConnectionBadge } from "@/components/shared/status-badge";
 import { settingsDefaults } from "@/lib/constants";
 import { cn } from "@/lib/cn";
+import type { StripeConfigStatus } from "@/lib/payments/config";
 import type {
   AiCostControlsView,
   EmailProviderStatus,
@@ -34,11 +35,13 @@ export function SettingsView({
   costControls,
   readiness,
   emailStatus,
+  stripeStatus,
 }: {
   integrations: IntegrationStatus[];
   costControls: AiCostControlsView;
   readiness: ReadinessIndicator[];
   emailStatus: EmailProviderStatus;
+  stripeStatus: StripeConfigStatus;
 }) {
   const [tab, setTab] = useState<Tab>("General");
   const [settings, setSettings] = useState(settingsDefaults);
@@ -297,28 +300,70 @@ export function SettingsView({
       ) : null}
 
       {tab === "Billing" ? (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-4">
           <Card>
-            <CardHeader title="Website setup" description="Mock one-time price." />
-            <CardBody>
-              <p className="text-2xl font-semibold tabular-nums">
-                ${settings.billing.websiteSetup}
-              </p>
-              <p className="mt-1 text-sm text-muted">One time · UI only</p>
+            <CardHeader
+              title="Stripe status"
+              description="Server-derived configuration presence and mode only. Secret values are never sent to the browser."
+            />
+            <CardBody className="space-y-3">
+              <div
+                className={cn(
+                  "rounded-md border px-3 py-2 text-sm font-semibold uppercase tracking-wide",
+                  stripeStatus.mode === "live"
+                    ? "border-danger bg-danger/10 text-danger"
+                    : stripeStatus.mode === "test"
+                      ? "border-accent bg-accent/10 text-accent"
+                      : "border-border text-muted",
+                )}
+              >
+                {stripeStatus.mode === "live"
+                  ? "LIVE -- real charges will occur"
+                  : stripeStatus.mode === "test"
+                    ? stripeStatus.ready
+                      ? "TEST -- Ready"
+                      : "TEST -- Not Ready"
+                    : "MOCK"}
+              </div>
+              <StripeStatusRow label="Ready" ready={stripeStatus.ready} />
+              <StripeStatusRow label="Secret key present" ready={stripeStatus.secretKeyPresent} />
+              <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm">
+                <span>Key mode</span>
+                <span className="text-right text-xs font-medium text-muted">
+                  {stripeStatus.secretKeyMode ?? "—"}
+                </span>
+              </div>
+              <StripeStatusRow label="Webhook secret present" ready={stripeStatus.webhookSecretPresent} />
+              <StripeStatusRow label="Setup price ID present" ready={stripeStatus.setupPriceIdPresent} />
+              <StripeStatusRow
+                label="Managed monthly price ID present"
+                ready={stripeStatus.managedMonthlyPriceIdPresent}
+              />
             </CardBody>
           </Card>
-          <Card>
-            <CardHeader title="Managed plan" description="Mock monthly price." />
-            <CardBody>
-              <p className="text-2xl font-semibold tabular-nums">
-                ${settings.billing.managedPlan}
-                <span className="text-sm font-normal text-muted">/month</span>
-              </p>
-              <p className="mt-1 text-sm text-muted">
-                Payments are not implemented.
-              </p>
-            </CardBody>
-          </Card>
+          <div className="grid gap-3 md:grid-cols-2">
+            <Card>
+              <CardHeader title="Website setup" description="$99.00 one-time price (locked)." />
+              <CardBody>
+                <p className="text-2xl font-semibold tabular-nums">
+                  ${settings.billing.websiteSetup}
+                </p>
+                <p className="mt-1 text-sm text-muted">One time</p>
+              </CardBody>
+            </Card>
+            <Card>
+              <CardHeader title="Managed plan" description="$39.00/month optional recurring price (locked)." />
+              <CardBody>
+                <p className="text-2xl font-semibold tabular-nums">
+                  ${settings.billing.managedPlan}
+                  <span className="text-sm font-normal text-muted">/month</span>
+                </p>
+                <p className="mt-1 text-sm text-muted">
+                  Optional -- a customer can buy the website without subscribing.
+                </p>
+              </CardBody>
+            </Card>
+          </div>
         </div>
       ) : null}
 
@@ -413,6 +458,17 @@ function EmailStatusRow({ label, ready }: { label: string; ready: boolean }) {
       <span>{label}</span>
       <span className={cn("text-xs font-medium", ready ? "text-success" : "text-muted")}>
         {ready ? "Configured" : "Not configured"}
+      </span>
+    </div>
+  );
+}
+
+function StripeStatusRow({ label, ready }: { label: string; ready: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2 text-sm">
+      <span>{label}</span>
+      <span className={cn("text-xs font-medium", ready ? "text-success" : "text-muted")}>
+        {ready ? "Yes" : "No"}
       </span>
     </div>
   );
