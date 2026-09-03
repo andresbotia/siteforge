@@ -4,6 +4,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AuditRunButton } from "@/components/auditor/audit-run-button";
 import { BuildRunButton } from "@/components/builder/build-run-button";
+import { LeadLifecyclePanel } from "@/components/leads/lead-lifecycle-panel";
 import { VerifiedPublicFactsForm } from "@/components/leads/verified-public-facts-form";
 import { CreateOfferForm } from "@/components/offers/create-offer-form";
 import { listActivityForLead } from "@/data/activity";
@@ -130,6 +131,16 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           <ScoreRing value={lead.leadScore} label="Lead score" />
         </Card>
       </div>
+
+      <Card className="mt-4">
+        <CardHeader
+          title="Lifecycle"
+          description="Operator-set lead status and the optional example domain used in cold outreach copy."
+        />
+        <CardBody>
+          <LeadLifecyclePanel lead={lead} />
+        </CardBody>
+      </Card>
 
       <Card className="mt-4">
         <CardHeader

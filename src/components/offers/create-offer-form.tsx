@@ -1,10 +1,9 @@
 import { createCommercialOfferAction } from "@/app/actions/offers";
 import { Button } from "@/components/shared/button";
-import { Field, TextArea, TextInput } from "@/components/shared/field";
-import {
-  DEFAULT_MANAGED_MONTHLY_AMOUNT_CENTS,
-  DEFAULT_SETUP_AMOUNT_CENTS,
-} from "@/lib/payments/limits";
+import { Field, TextArea } from "@/components/shared/field";
+import { formatCurrency } from "@/lib/format";
+import { centsToUsd } from "@/lib/payments/money";
+import { OFFER_PLANS } from "@/lib/payments/plans";
 import type { GeneratedWebsite, Lead } from "@/types";
 
 export function CreateOfferForm({
@@ -22,27 +21,34 @@ export function CreateOfferForm({
       <input type="hidden" name="generatedWebsiteId" value={website?.id ?? ""} />
       <input type="hidden" name="outreachId" value={outreachId ?? ""} />
       <input type="hidden" name="currency" value="usd" />
-      <Field label="Setup amount, cents" htmlFor="new-setup-amount">
-        <TextInput
-          id="new-setup-amount"
-          name="setupAmountCents"
-          inputMode="numeric"
-          defaultValue={DEFAULT_SETUP_AMOUNT_CENTS}
-          required
-        />
-      </Field>
-      <Field label="Managed monthly amount, cents" htmlFor="new-monthly-amount">
-        <TextInput
-          id="new-monthly-amount"
-          name="managedMonthlyAmountCents"
-          inputMode="numeric"
-          defaultValue={DEFAULT_MANAGED_MONTHLY_AMOUNT_CENTS}
-        />
-      </Field>
-      <label className="flex items-center gap-2 text-sm text-muted">
-        <input type="checkbox" name="managedPlanSelected" />
-        Include managed monthly service
-      </label>
+      <fieldset className="grid gap-2">
+        <legend className="pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          Plan
+        </legend>
+        {OFFER_PLANS.map((plan, index) => (
+          <label
+            key={plan.key}
+            className="flex items-start gap-2 rounded border border-border-subtle p-3 text-sm"
+          >
+            <input
+              type="radio"
+              name="planKey"
+              value={plan.key}
+              defaultChecked={index === 0}
+              className="mt-1"
+            />
+            <span>
+              <span className="font-medium text-foreground">{plan.label}</span>
+              <span className="block text-xs text-muted">
+                {formatCurrency(centsToUsd(plan.setupAmountCents))} setup
+                {plan.managedPlanSelected && plan.managedMonthlyAmountCents !== null
+                  ? ` + ${formatCurrency(centsToUsd(plan.managedMonthlyAmountCents))}/month`
+                  : ""}
+              </span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
       <Field label="Description" htmlFor="new-offer-description">
         <TextArea
           id="new-offer-description"

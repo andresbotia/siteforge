@@ -36,6 +36,7 @@ const leadTone = {
   interested: "success",
   customer: "success",
   rejected: "danger",
+  archived: "neutral",
 } as const;
 
 const websiteTone = {

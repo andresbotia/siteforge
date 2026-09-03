@@ -84,6 +84,8 @@ M9.6 adds real Stripe test/live mode alongside the mock provider, still uncreden
 
 M9.7 adds customer-facing purchase links so a customer can complete Checkout without admin involvement. Publishing an approved offer at `/offers/[id]` mints an opaque `sfb_` token (mirroring the `sfp_`/`sfo_` hash+hint philosophy — only a SHA-256 hash and short hint are persisted, on `commercial_offers.purchase_token_hash`/`purchase_token_hint`; the raw link is shown once, at publish time, and cannot be recovered afterward). The public, unauthenticated page at `/buy/[token]` resolves the token server-side, re-derives the exact Stripe checkout request from the already-approved offer row (never a client-supplied amount or price ID, via the same `buildCheckoutSessionRequest` helper the admin "Create Checkout" path uses), and lets the customer choose website-only or website-plus-managed before redirecting to Checkout. An invalid token, a revoked link, and a materially-edited offer (which resets status away from `approved`) all render an identical "unavailable" page so the token cannot be used to enumerate offers. Revoking a link blocks future lookups without touching payment history.
 
+M9.9 adds **lifecycle states and the payment follow-up email**. Lead status transitions now live in exactly one explicit allowed-transitions table (`src/lib/leads/lifecycle.ts`) that Scout, Auditor, the outreach send path, the Stripe webhook and the operator UI all resolve through. Status was monotonic before; it is broken deliberately in two places only — `archived` (which always requires a reason) is reachable from every state, and `interested -> contacted` is allowed for a prospect who went quiet. `rejected` is unchanged and still reachable only from `discovered`; `archived` is terminal. Offer drafting no longer accepts a typed amount: `/offers/[id]` selects between two configured plans (`$99` setup, or `$99` setup + `$39`/month) and the server re-derives amounts from `src/lib/payments/plans.ts`, while `LiveStripeProvider`'s independent price-lock check stays untouched as the last line of defense. Outreach gained a second kind, `follow_up`, for the post-intent email carrying a purchase link: it reuses the same approval, suppression, duplicate-send, provider-readiness and live-email-gate machinery as the cold email — there is no second send path — but binds recipient, subject, body, commercial offer id and purchase token hash instead of the preview/`sfo_` bindings, and its send requires an `interested` lead, an approved offer, an active non-revoked purchase link, and offer amounts matching the configured Stripe Prices. Duplicate-send blocking is per kind, so a cold email never blocks a follow-up. The raw `sfb_` link is still never persisted: the body carries a placeholder and the operator pastes the real link at send time, which the backend verifies against the bound hash. Leads also gained an operator-supplied `suggested_domain`, referenced in cold copy strictly as an example — SiteForge performs no availability check and never claims one — and cold copy now states the `$99`/`$39` pricing plus opt-out language. A read-only roadmap lives at `/roadmap`, sourced from `src/lib/roadmap/roadmap.ts` with git history as its audit trail (no table, no CRUD).
+
 Milestone 8 added **Sales Agent + email approval**: a manual, deterministic outreach workflow that drafts prospect email, requires human approval, uses a mock email provider, and attributes public preview activity back to the outreach record.
 
 - Sales is available at `/agents/sales`; outreach review lives at `/outreach` and `/outreach/[id]`.
@@ -267,6 +269,8 @@ src/
   lib/previews/     Public preview tokens, policy, and tracking helpers
   lib/designer/     Designer Job worker: CLI discovery, sandboxing, prompt generation, output contract
   lib/leads/        Cross-agent lead composites (e.g. Commercial Potential)
+                    lifecycle.ts     The single allowed-transitions table for lead status
+  lib/roadmap/      Typed read-only milestone roadmap rendered at /roadmap
   lib/sales/        Deterministic outreach drafting, approval binding, attribution tokens
   lib/email/        Mock and guarded Resend provider, delivery policy, webhook verification
   lib/payments/     Commercial offers, checkout policy, mock/test/live Stripe provider, webhook parsing, purchase-link tokens (sfb_)
@@ -450,6 +454,7 @@ Schema and development seed live in:
 - `supabase/migrations/20260901000000_designer_jobs.sql`
 - `supabase/migrations/20260901010000_designer_worker_provider.sql`
 - `supabase/migrations/20260901030000_commercial_offer_purchase_links.sql`
+- `supabase/migrations/20260902000000_lead_lifecycle_and_follow_up_outreach.sql`
 
 Apply them to the hosted project with the Supabase CLI (after `supabase login` and `supabase link --project-ref afpjclfcajrcbpcrgzvd`):
 

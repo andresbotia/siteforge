@@ -29,6 +29,7 @@ export const leadStatusLabel: Record<LeadStatus, string> = {
   interested: "Interested",
   customer: "Customer",
   rejected: "Rejected",
+  archived: "Archived",
 };
 
 export const websiteStatusLabel: Record<GeneratedWebsiteStatus, string> = {

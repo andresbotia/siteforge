@@ -1,5 +1,6 @@
 ﻿import assert from "node:assert/strict";
 import test, { describe } from "node:test";
+import { hasUnsubscribeLanguage } from "@/lib/email/delivery-policy";
 import { MockEmailProvider } from "@/lib/email/mock";
 import {
   createOutreachAttributionToken,
@@ -85,6 +86,53 @@ const mockPreview: SalesPreviewInput = {
     "9087a2d9de2a4a2a9c8ef2aca3f2688cdfa144931d6f00c7c791d3ba1ba79077",
   attributionTokenHint: "GHIJKLMNO",
 };
+
+describe("Sales Agent: M9.9 cold email additions", () => {
+  test("states the $99 setup and optional $39/month managed plan", () => {
+    const draft = composeSalesDraft(mockLead, mockAudit, mockWebsite, mockPreview);
+    assert.match(draft.body, /\$99 one time/);
+    assert.match(draft.body, /optional \$39 per month/);
+    assert.match(draft.body, /The monthly plan is optional/);
+  });
+
+  test("includes opt-out language so a real send is not blocked by the delivery policy", () => {
+    const draft = composeSalesDraft(mockLead, mockAudit, mockWebsite, mockPreview);
+    assert.equal(hasUnsubscribeLanguage(draft.body), true);
+  });
+
+  test("omits any domain sentence when the operator supplied no suggested domain", () => {
+    const draft = composeSalesDraft(mockLead, mockAudit, mockWebsite, mockPreview);
+    assert.doesNotMatch(draft.body, /its own domain/);
+  });
+
+  test("references an operator-supplied domain strictly as an example, never as available", () => {
+    const draft = composeSalesDraft(
+      { ...mockLead, suggestedDomain: "atlanticdrainplumbing.com" },
+      mockAudit,
+      mockWebsite,
+      mockPreview,
+    );
+    assert.match(draft.body, /atlanticdrainplumbing\.com/);
+    assert.match(draft.body, /just as an example/);
+    assert.match(draft.body, /We have not registered or reserved anything/);
+    // SiteForge performs no availability check anywhere, so the copy must
+    // never assert or imply the domain is free to take.
+    assert.doesNotMatch(draft.body, /\bavailable\b/i);
+    assert.doesNotMatch(draft.body, /\bunclaimed\b|\bis free\b|\byou can claim\b/i);
+  });
+
+  test("records the example domain and pricing as sourced evidence", () => {
+    const draft = composeSalesDraft(
+      { ...mockLead, suggestedDomain: "atlanticdrainplumbing.com" },
+      mockAudit,
+      mockWebsite,
+      mockPreview,
+    );
+    const texts = draft.evidence.map((item) => item.text).join(" | ");
+    assert.match(texts, /availability not checked by SiteForge/);
+    assert.match(texts, /\$99 setup, optional \$39\/month/);
+  });
+});
 
 describe("Sales Agent: eligibility", () => {
   test("accepts lead with valid website and active approved preview", () => {

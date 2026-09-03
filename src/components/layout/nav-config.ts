@@ -6,6 +6,7 @@ import {
   LayoutDashboard,
   LayoutTemplate,
   Mail,
+  Map,
   Palette,
   ReceiptText,
   Settings,
@@ -51,6 +52,7 @@ export const navSections: NavSection[] = [
   {
     items: [
       { href: "/analytics", label: "Analytics", icon: BarChart3 },
+      { href: "/roadmap", label: "Roadmap", icon: Map },
       { href: "/settings", label: "Settings", icon: Settings },
     ],
   },

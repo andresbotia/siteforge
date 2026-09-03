@@ -1,4 +1,5 @@
-import { computeOutreachContentHash } from "@/lib/sales/content-hash";
+import { computeOutreachBindingHash } from "@/lib/sales/content-hash";
+import { OUTREACH_APPROVAL_ACTION, toOutreachKind, type OutreachKind } from "@/lib/sales/kinds";
 import { asRecord } from "@/lib/json";
 import type { ApprovalRow, OutreachEventRow, OutreachRow } from "@/types/database";
 import { isValidEmail } from "./validation";
@@ -17,16 +18,38 @@ export type ApprovalCheckResult =
   | { ok: true; contentHash: string }
   | { ok: false; error: string };
 
+type ApprovalBindableOutreach = Pick<
+  OutreachRow,
+  | "kind"
+  | "subject"
+  | "body"
+  | "recipient_email"
+  | "preview_deployment_id"
+  | "attribution_token_hash"
+  | "commercial_offer_id"
+  | "purchase_token_hash"
+  | "content_version"
+>;
+
+/**
+ * One approval-binding check for both outreach kinds -- there is no second
+ * send path and no second verifier.
+ *
+ * A cold_outreach approval binds: action=send_outreach_email, content hash
+ * (subject + body + recipient + preview + attribution token), attribution
+ * token hash, preview deployment, content version. Unchanged from M8.
+ *
+ * A follow_up approval binds: action=send_follow_up_email, content hash
+ * (subject + body + recipient + commercial offer + purchase token hash),
+ * commercial offer id, purchase token hash, content version. Editing any of
+ * those invalidates the approval, exactly as an edit does on the cold path,
+ * because the recomputed hash stops matching the bound one.
+ *
+ * The per-kind approval action also means an approval granted for one kind
+ * can never authorize a send of the other.
+ */
 export function verifyApprovedOutreachContent(
-  outreach: Pick<
-    OutreachRow,
-    | "subject"
-    | "body"
-    | "recipient_email"
-    | "preview_deployment_id"
-    | "attribution_token_hash"
-    | "content_version"
-  >,
+  outreach: ApprovalBindableOutreach,
   approval: Pick<ApprovalRow, "status" | "approval_type" | "payload"> | null,
 ): ApprovalCheckResult {
   if (!approval || (approval.status !== "executed" && approval.status !== "approved")) {
@@ -36,26 +59,74 @@ export function verifyApprovedOutreachContent(
     return { ok: false, error: "Send approval is not an email approval." };
   }
 
+  const kind = toOutreachKind(outreach.kind);
   const payload = asRecord(approval.payload);
-  const currentHash = computeOutreachContentHash({
+  const currentHash = computeOutreachBindingHash({
+    kind,
     subject: outreach.subject ?? "",
     body: outreach.body ?? "",
     recipient: outreach.recipient_email ?? "",
     previewDeploymentId: outreach.preview_deployment_id,
     attributionTokenHash: outreach.attribution_token_hash,
+    commercialOfferId: outreach.commercial_offer_id,
+    purchaseTokenHash: outreach.purchase_token_hash,
   });
 
   if (
-    payload.action !== "send_outreach_email" ||
+    payload.action !== OUTREACH_APPROVAL_ACTION[kind] ||
     payload.content_hash !== currentHash ||
-    payload.attribution_token_hash !== outreach.attribution_token_hash ||
-    payload.preview_deployment_id !== outreach.preview_deployment_id ||
     payload.content_version !== outreach.content_version
   ) {
     return { ok: false, error: "Approved content no longer matches this outreach draft." };
   }
 
+  if (kind === "follow_up") {
+    if (
+      payload.commercial_offer_id !== outreach.commercial_offer_id ||
+      payload.purchase_token_hash !== outreach.purchase_token_hash
+    ) {
+      return { ok: false, error: "Approved offer or purchase link no longer matches this follow-up." };
+    }
+  } else if (
+    payload.attribution_token_hash !== outreach.attribution_token_hash ||
+    payload.preview_deployment_id !== outreach.preview_deployment_id
+  ) {
+    return { ok: false, error: "Approved content no longer matches this outreach draft." };
+  }
+
   return { ok: true, contentHash: currentHash };
+}
+
+/**
+ * Duplicate-send blocking is per lead PER KIND: an already-sent cold email
+ * must not block the payment follow-up to the same lead, and a second
+ * follow-up to a lead that already received one must still be blocked. The
+ * outreach row's own `sent` status remains the primary guard; the sibling
+ * scan generalizes the previous implicit "one outreach per lead" assumption
+ * instead of bypassing it.
+ */
+export function isDuplicateSendBlocked(input: {
+  outreach: Pick<OutreachRow, "id" | "lead_id" | "kind" | "status">;
+  siblings: Array<Pick<OutreachRow, "id" | "lead_id" | "kind" | "status">>;
+}): { blocked: boolean; reason: string } {
+  if (input.outreach.status === "sent") {
+    return { blocked: true, reason: "This outreach has already been sent." };
+  }
+  const kind: OutreachKind = toOutreachKind(input.outreach.kind);
+  const duplicate = input.siblings.find(
+    (row) =>
+      row.id !== input.outreach.id &&
+      row.lead_id === input.outreach.lead_id &&
+      toOutreachKind(row.kind) === kind &&
+      row.status === "sent",
+  );
+  if (duplicate) {
+    return {
+      blocked: true,
+      reason: `A ${kind === "follow_up" ? "payment follow-up" : "cold outreach"} email has already been sent to this lead.`,
+    };
+  }
+  return { blocked: false, reason: "No completed send recorded for this lead and outreach kind." };
 }
 
 export function isRecipientSuppressed(

@@ -6,6 +6,7 @@ import {
   revokePurchaseLinkAction,
   type PurchaseLinkActionState,
 } from "@/app/actions/offers";
+import { startFollowUpDraftAction, type SalesActionState } from "@/app/actions/sales";
 import { Button } from "@/components/shared/button";
 import type { CommercialOffer } from "@/types";
 
@@ -26,6 +27,10 @@ export function PurchaseLinkPanel({ offer }: { offer: CommercialOffer }) {
     PurchaseLinkActionState,
     FormData
   >(revokePurchaseLinkAction, null);
+  const [followUpState, followUpAction, drafting] = useActionState<SalesActionState, FormData>(
+    startFollowUpDraftAction,
+    null,
+  );
   const [copied, setCopied] = useState(false);
 
   const justPublished =
@@ -94,6 +99,24 @@ export function PurchaseLinkPanel({ offer }: { offer: CommercialOffer }) {
         <p className="text-xs text-danger">{publishState.error}</p>
       ) : null}
       {revokeState?.error ? <p className="text-xs text-danger">{revokeState.error}</p> : null}
+
+      {offer.purchaseLinkStatus === "active" ? (
+        <div className="space-y-2 border-t border-border-subtle pt-3">
+          <p className="text-xs text-muted">
+            Draft the payment follow-up email that carries this link. It still requires human
+            send approval, and the lead must be marked interested before it can go out.
+          </p>
+          <form action={followUpAction}>
+            <input type="hidden" name="offerId" value={offer.id} />
+            <Button type="submit" variant="secondary" size="sm" disabled={drafting}>
+              {drafting ? "Drafting..." : "Draft payment follow-up"}
+            </Button>
+          </form>
+          {followUpState?.error ? (
+            <p className="text-xs text-danger">{followUpState.error}</p>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }

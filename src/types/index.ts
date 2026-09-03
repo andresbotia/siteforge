@@ -7,7 +7,8 @@ export type LeadStatus =
   | "contacted"
   | "interested"
   | "customer"
-  | "rejected";
+  | "rejected"
+  | "archived";
 
 export type Industry =
   | "Plumbing"
@@ -52,6 +53,10 @@ export interface Lead {
   websiteScore: number;
   leadScore: number;
   status: LeadStatus;
+  archivedReason: string | null;
+  archivedAt: string | null;
+  /** Operator-supplied example domain (M9.9). Never an availability claim -- see src/lib/sales/draft.ts. */
+  suggestedDomain: string | null;
   createdAt: string;
   qualificationTier: QualificationTier | null;
   businessStrengthScore: number | null;
@@ -364,8 +369,12 @@ export type OutreachStatus =
   | "declined"
   | "unsubscribed";
 
+export type OutreachKind = "cold_outreach" | "follow_up";
+
 export interface Outreach {
   id: string;
+  kind: OutreachKind;
+  commercialOfferId: string | null;
   leadId: string;
   generatedWebsiteId: string | null;
   previewDeploymentId: string | null;

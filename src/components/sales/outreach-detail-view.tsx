@@ -15,6 +15,8 @@ import { Field, TextArea, TextInput } from "@/components/shared/field";
 import { OutreachStatusBadge } from "@/components/shared/status-badge";
 import type { OutreachDetail } from "@/data/outreach";
 import { formatDateTime } from "@/lib/format";
+import { FOLLOW_UP_LINK_PLACEHOLDER } from "@/lib/sales/follow-up";
+import { OUTREACH_KIND_LABEL } from "@/lib/sales/kinds";
 
 export function OutreachDetailView({
   outreach,
@@ -38,6 +40,7 @@ export function OutreachDetailView({
   const [body, setBody] = useState(outreach.body);
   const [recipientEmail, setRecipientEmail] = useState(outreach.recipient);
 
+  const isFollowUp = outreach.kind === "follow_up";
   const isSent = outreach.status === "sent";
   const isAwaiting = outreach.status === "awaiting_approval";
   const isApproved = outreach.status === "approved";
@@ -79,7 +82,16 @@ export function OutreachDetailView({
         </div>
 
         <div className="flex items-center gap-2">
-          {outreach.previewDeployment ? (
+          <Badge tone={isFollowUp ? "info" : "neutral"}>
+            {OUTREACH_KIND_LABEL[outreach.kind]}
+          </Badge>
+          {isFollowUp ? (
+            <Badge tone={outreach.commercialOffer ? "accent" : "danger"}>
+              {outreach.commercialOffer
+                ? `Offer: ${outreach.commercialOffer.status}`
+                : "No offer bound"}
+            </Badge>
+          ) : outreach.previewDeployment ? (
             <Badge tone={previewActive ? "accent" : "danger"}>
               Preview: {previewActive ? "Active" : "Invalid"} (ending {outreach.tokenHint})
             </Badge>
@@ -182,9 +194,11 @@ export function OutreachDetailView({
                       <p className="text-xs text-muted">
                         {!isSendable
                           ? "Enter a valid recipient email above before requesting approval."
-                          : !previewActive
-                            ? "Associated preview deployment is not active."
-                            : "Creates a pending approval request for a human operator."}
+                          : isFollowUp
+                            ? "Binds the exact recipient, subject, body, offer, and purchase link hash."
+                            : !previewActive
+                              ? "Associated preview deployment is not active."
+                              : "Creates a pending approval request for a human operator."}
                       </p>
                     </div>
                     <form action={requestAction}>
@@ -192,7 +206,7 @@ export function OutreachDetailView({
                       <Button
                         type="submit"
                         variant="primary"
-                        disabled={requesting || !isSendable || !previewActive}
+                        disabled={requesting || !isSendable || (!isFollowUp && !previewActive)}
                       >
                         {requesting ? "Requesting..." : "Request Send Approval"}
                       </Button>
@@ -226,17 +240,35 @@ export function OutreachDetailView({
               {/* Approved state: execute send */}
               {isApproved ? (
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <form action={sendAction} className="space-y-3">
+                    <input type="hidden" name="outreachId" value={outreach.id} />
                     <div>
                       <p className="text-sm font-medium text-emerald-300">
-                        Outreach Approved for Sending
+                        {isFollowUp
+                          ? "Payment Follow-up Approved for Sending"
+                          : "Outreach Approved for Sending"}
                       </p>
                       <p className="mt-1 text-xs text-emerald-200/80">
                         Approved by human operator. Ready for backend send execution.
                       </p>
                     </div>
-                    <form action={sendAction}>
-                      <input type="hidden" name="outreachId" value={outreach.id} />
+                    {isFollowUp ? (
+                      <Field label="Customer purchase link" htmlFor="purchase-url">
+                        <TextInput
+                          id="purchase-url"
+                          name="purchaseUrl"
+                          placeholder="https://.../buy/sfb_..."
+                          required
+                        />
+                        <p className="mt-1 text-[11px] text-emerald-200/70">
+                          Paste the link you copied when publishing it. SiteForge stores only its
+                          hash, so it cannot rebuild the link -- the backend verifies your paste
+                          against the exact hash this approval bound, then substitutes it for{" "}
+                          {FOLLOW_UP_LINK_PLACEHOLDER}.
+                        </p>
+                      </Field>
+                    ) : null}
+                    <div className="flex justify-end">
                       <Button type="submit" variant="primary" disabled={sending || !outreach.sendReadiness.ready}>
                         {sending
                           ? "Sending..."
@@ -244,10 +276,12 @@ export function OutreachDetailView({
                             ? "Send REAL External Email"
                             : "Send Approved Email"}
                       </Button>
-                    </form>
-                  </div>
+                    </div>
+                  </form>
                   <div className="mt-3 rounded border border-emerald-500/20 bg-emerald-950/40 p-2.5 text-xs text-emerald-200/70">
-                    Backend execution revalidates approval, content hash, preview validity, live-email gate, provider configuration, duplicate sends, and suppression status.
+                    {isFollowUp
+                      ? "Backend execution revalidates approval, content hash, offer approval, purchase-link validity, lead status, configured prices, live-email gate, provider configuration, duplicate sends, and suppression status."
+                      : "Backend execution revalidates approval, content hash, preview validity, live-email gate, provider configuration, duplicate sends, and suppression status."}
                   </div>
                   {sendState?.error ? (
                     <p className="mt-2 text-xs text-danger">{sendState.error}</p>

@@ -10,7 +10,7 @@ import {
   revokePurchaseLink,
   updateCommercialOfferDraft,
 } from "@/data/payments";
-import { parseCents } from "@/lib/payments/money";
+import { resolveOfferPlan } from "@/lib/payments/plans";
 
 export type OfferActionState =
   | { ok: boolean; error?: string; checkoutUrl?: string }
@@ -20,22 +20,17 @@ export type PurchaseLinkActionState =
   | { ok: boolean; error?: string; url?: string; hint?: string }
   | null;
 
-function boolFromForm(value: FormDataEntryValue | null): boolean {
-  return value === "on" || value === "true";
-}
-
+/**
+ * M9.9: the browser submits a plan KEY, never an amount. Both amounts and
+ * the managed-plan flag are re-derived server-side from the configured plan
+ * catalog (`src/lib/payments/plans.ts`), which is locked to the same two
+ * amounts the Stripe Price IDs are configured for. An unrecognized key falls
+ * back to the first configured plan rather than to a client-supplied number,
+ * so no request shape can produce an offer that LiveStripeProvider would
+ * later refuse on its price-lock check.
+ */
 function offerInput(formData: FormData) {
-  const setupAmountCents = parseCents(formData.get("setupAmountCents"));
-  const managedMonthlyRaw = String(formData.get("managedMonthlyAmountCents") ?? "").trim();
-  const managedMonthlyAmountCents = managedMonthlyRaw
-    ? parseCents(managedMonthlyRaw)
-    : null;
-  if (setupAmountCents === null) {
-    return { ok: false as const, error: "Enter setup amount in whole cents." };
-  }
-  if (managedMonthlyRaw && managedMonthlyAmountCents === null) {
-    return { ok: false as const, error: "Enter monthly amount in whole cents." };
-  }
+  const plan = resolveOfferPlan(String(formData.get("planKey") ?? ""));
   return {
     ok: true as const,
     input: {
@@ -43,9 +38,9 @@ function offerInput(formData: FormData) {
       generatedWebsiteId: String(formData.get("generatedWebsiteId") ?? "") || null,
       outreachId: String(formData.get("outreachId") ?? "") || null,
       currency: String(formData.get("currency") ?? "usd"),
-      setupAmountCents,
-      managedMonthlyAmountCents,
-      managedPlanSelected: boolFromForm(formData.get("managedPlanSelected")),
+      setupAmountCents: plan.setupAmountCents,
+      managedMonthlyAmountCents: plan.managedMonthlyAmountCents,
+      managedPlanSelected: plan.managedPlanSelected,
       description: String(formData.get("description") ?? ""),
     },
   };
@@ -53,7 +48,6 @@ function offerInput(formData: FormData) {
 
 export async function createCommercialOfferAction(formData: FormData) {
   const parsed = offerInput(formData);
-  if (!parsed.ok) return;
   const result = await createCommercialOffer(parsed.input);
   if (result.ok) {
     revalidatePath("/offers");
@@ -67,9 +61,8 @@ export async function updateCommercialOfferAction(
   formData: FormData,
 ): Promise<OfferActionState> {
   const offerId = String(formData.get("offerId") ?? "");
-  const parsed = offerInput(formData);
   if (!offerId) return { ok: false, error: "Missing offer." };
-  if (!parsed.ok) return parsed;
+  const parsed = offerInput(formData);
   const result = await updateCommercialOfferDraft({ ...parsed.input, offerId });
   if (result.ok) {
     revalidatePath(`/offers/${offerId}`);

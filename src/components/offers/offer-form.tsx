@@ -9,10 +9,13 @@ import {
 } from "@/app/actions/offers";
 import { Button } from "@/components/shared/button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
-import { Field, TextArea, TextInput } from "@/components/shared/field";
+import { Field, TextArea } from "@/components/shared/field";
 import { CommercialOfferStatusBadge } from "@/components/shared/status-badge";
 import { PurchaseLinkPanel } from "@/components/offers/purchase-link-panel";
+import { formatCurrency } from "@/lib/format";
 import type { StripeMode } from "@/lib/payments/config";
+import { centsToUsd } from "@/lib/payments/money";
+import { OFFER_PLANS, offerPlanKeyFromAmounts } from "@/lib/payments/plans";
 import type { CommercialOffer } from "@/types";
 
 const MODE_LABEL: Record<StripeMode, string> = { mock: "Mock", test: "Stripe TEST mode", live: "Stripe LIVE mode -- real charge" };
@@ -30,6 +33,7 @@ export function OfferEditor({ offer, stripeMode }: { offer: CommercialOffer; str
     createCheckoutAction,
     null,
   );
+  const currentPlanKey = offerPlanKeyFromAmounts(offer);
   const locked = offer.status === "paid" || offer.status === "checkout_created";
   const canRequest = offer.status === "draft" || offer.status === "expired";
   const canCheckout = offer.status === "approved";
@@ -48,34 +52,49 @@ export function OfferEditor({ offer, stripeMode }: { offer: CommercialOffer; str
             <input type="hidden" name="generatedWebsiteId" value={offer.generatedWebsiteId ?? ""} />
             <input type="hidden" name="outreachId" value={offer.outreachId ?? ""} />
             <input type="hidden" name="currency" value={offer.currency} />
-            <Field label="Setup amount, cents" htmlFor="setup-amount">
-              <TextInput
-                id="setup-amount"
-                name="setupAmountCents"
-                inputMode="numeric"
-                defaultValue={offer.setupAmountCents}
-                disabled={locked}
-                required
-              />
-            </Field>
-            <Field label="Managed monthly amount, cents" htmlFor="monthly-amount">
-              <TextInput
-                id="monthly-amount"
-                name="managedMonthlyAmountCents"
-                inputMode="numeric"
-                defaultValue={offer.managedMonthlyAmountCents ?? ""}
-                disabled={locked}
-              />
-            </Field>
-            <label className="flex items-center gap-2 text-sm text-muted">
-              <input
-                type="checkbox"
-                name="managedPlanSelected"
-                defaultChecked={offer.managedPlanSelected}
-                disabled={locked}
-              />
-              Include managed monthly service
-            </label>
+            <fieldset className="grid gap-2" disabled={locked}>
+              <legend className="pb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Plan
+              </legend>
+              {OFFER_PLANS.map((plan) => (
+                <label
+                  key={plan.key}
+                  className="flex items-start gap-2 rounded border border-border-subtle p-3 text-sm"
+                >
+                  <input
+                    type="radio"
+                    name="planKey"
+                    value={plan.key}
+                    defaultChecked={plan.key === (currentPlanKey ?? "website_only")}
+                    className="mt-1"
+                  />
+                  <span>
+                    <span className="font-medium text-foreground">{plan.label}</span>
+                    <span className="block text-xs text-muted">
+                      {formatCurrency(centsToUsd(plan.setupAmountCents))} setup
+                      {plan.managedPlanSelected && plan.managedMonthlyAmountCents !== null
+                        ? ` + ${formatCurrency(centsToUsd(plan.managedMonthlyAmountCents))}/month`
+                        : ""}
+                    </span>
+                  </span>
+                </label>
+              ))}
+              <p className="text-[11px] text-muted-foreground">
+                Amounts are fixed server-side to the configured Stripe Prices. Stripe refuses
+                any checkout whose offer amounts do not match them.
+              </p>
+              {currentPlanKey === null ? (
+                <p className="text-xs text-danger">
+                  This offer&apos;s recorded amounts (
+                  {formatCurrency(centsToUsd(offer.setupAmountCents))}
+                  {offer.managedMonthlyAmountCents !== null
+                    ? ` + ${formatCurrency(centsToUsd(offer.managedMonthlyAmountCents))}/month`
+                    : ""}
+                  ) do not match either configured plan and would be refused at checkout. Saving
+                  will reset them to the plan selected above.
+                </p>
+              ) : null}
+            </fieldset>
             <Field label="Description" htmlFor="offer-description">
               <TextArea
                 id="offer-description"

@@ -16,6 +16,11 @@ import {
   canAddToM95DFirstCampaign,
   M95D_FIRST_CAMPAIGN_ID,
 } from "@/lib/sales/campaign";
+import {
+  composeFollowUpDraft,
+  FOLLOW_UP_CONTENT_VERSION,
+} from "@/lib/sales/follow-up";
+import { offerAmountsMatchConfiguredPrices } from "@/lib/payments/plans";
 import { buildOutreachInsert, buildSalesToolCalls } from "@/lib/sales/persist";
 import { runSalesPipeline } from "@/lib/sales/run";
 import { mutateTable, readTable } from "@/lib/supabase/server";
@@ -23,6 +28,7 @@ import type { Lead, WebsiteAudit } from "@/types";
 import type {
   AgentRow,
   AgentRunRow,
+  CommercialOfferRow,
   Json,
   LeadRow,
   OutreachRow,
@@ -248,6 +254,7 @@ export async function startSalesDraftRun(input: {
         websiteUrl: lead.website_url,
         websiteStatus: noStandaloneWebsite ? "no_standalone_website" : lead.website_url ? "has_website" : "unknown",
         status: lead.status as Lead["status"],
+        suggestedDomain: lead.suggested_domain,
       },
       toSalesAudit(audit, noStandaloneWebsite),
       {
@@ -368,6 +375,136 @@ export async function startSalesDraftRun(input: {
     );
     return { ok: false, error: "Sales draft run failed." };
   }
+}
+
+/**
+ * M9.9 payment follow-up draft. Deterministic and $0 like every other Sales
+ * draft: it reads the already-approved offer row and composes fixed copy.
+ * No paid AI, no invented facts, and no external side effect -- the row is
+ * created as a `draft` and still has to pass the same approval and send
+ * gates as a cold email.
+ *
+ * The raw purchase link is deliberately NOT read or stored here: the draft
+ * body carries a placeholder and binds only the offer's purchase token HASH,
+ * preserving the M9.7 rule that a raw sfb_ token is shown once at publish
+ * time and never persisted.
+ */
+export async function startFollowUpDraftRun(input: {
+  offerId: string;
+  recipientEmailOverride?: string;
+  senderName?: string;
+  senderEmail?: string;
+}): Promise<{ ok: true; outreachId: string } | { ok: false; error: string }> {
+  const offerId = input.offerId.trim();
+  if (!offerId) return { ok: false, error: "An offer is required." };
+
+  const offer = await readTable<CommercialOfferRow | null>((client) =>
+    client.from("commercial_offers").select("*").eq("id", offerId).maybeSingle(),
+  );
+  if (!offer) return { ok: false, error: "Offer was not found." };
+
+  const [lead, agent] = await Promise.all([
+    readTable<LeadRow | null>((client) =>
+      client.from("leads").select("*").eq("id", offer.lead_id).maybeSingle(),
+    ),
+    readTable<Pick<AgentRow, "id"> | null>((client) =>
+      client.from("agents").select("id").eq("slug", SALES_AGENT_SLUG).maybeSingle(),
+    ),
+  ]);
+  if (!lead) return { ok: false, error: "Lead was not found." };
+  if (!agent) return { ok: false, error: "Sales agent record was not found." };
+
+  if (offer.status !== "approved") {
+    return { ok: false, error: "Only an approved offer can get a payment follow-up draft." };
+  }
+  if (!offer.purchase_token_hash || offer.purchase_link_revoked_at) {
+    return {
+      ok: false,
+      error: "Publish an active customer purchase link for this offer before drafting the follow-up.",
+    };
+  }
+  if (
+    !offerAmountsMatchConfiguredPrices({
+      setupAmountCents: offer.setup_amount_cents,
+      managedMonthlyAmountCents: offer.managed_monthly_amount_cents,
+      managedPlanSelected: offer.managed_plan_selected,
+    })
+  ) {
+    return {
+      ok: false,
+      error: "This offer's amounts do not match the configured Stripe Prices; Stripe would refuse the checkout.",
+    };
+  }
+
+  const recipientEmail = (input.recipientEmailOverride || lead.email || "").trim();
+  const draft = composeFollowUpDraft(
+    {
+      id: offer.id,
+      businessName: lead.business_name,
+      setupAmountCents: offer.setup_amount_cents,
+      managedMonthlyAmountCents: offer.managed_monthly_amount_cents,
+      managedPlanSelected: offer.managed_plan_selected,
+      purchaseTokenHash: offer.purchase_token_hash,
+    },
+    {
+      recipientEmail,
+      senderName: input.senderName,
+      senderEmail: input.senderEmail,
+    },
+  );
+
+  const outreach = await mutateTable<OutreachRow | null>((client) =>
+    client
+      .from("outreach")
+      .insert({
+        kind: "follow_up",
+        lead_id: lead.id,
+        commercial_offer_id: offer.id,
+        purchase_token_hash: draft.purchaseTokenHash,
+        generated_website_id: offer.generated_website_id,
+        subject: draft.subject,
+        body: draft.body,
+        recipient_email: draft.recipientEmail || null,
+        sender_name: draft.senderName,
+        sender_email: draft.senderEmail,
+        content_hash: draft.contentHash,
+        content_version: FOLLOW_UP_CONTENT_VERSION,
+        status: "draft",
+        provider: "mock",
+        metadata: {
+          version: FOLLOW_UP_CONTENT_VERSION,
+          evidence: draft.evidence as unknown as Json,
+          paid_ai: "not_required",
+          cost_usd: 0,
+        },
+      })
+      .select("*")
+      .maybeSingle(),
+  );
+  if (!outreach) return { ok: false, error: "Could not create the payment follow-up draft." };
+
+  await mutateTable((client) =>
+    client.from("outreach_events").insert({
+      outreach_id: outreach.id,
+      event_type: "draft_created",
+      payload: {
+        kind: "follow_up",
+        commercial_offer_id: offer.id,
+        has_recipient: Boolean(draft.recipientEmail),
+      },
+    }),
+  );
+
+  await recordActivityEvent({
+    eventType: "follow_up_draft_created",
+    title: "Payment follow-up draft created",
+    description: `${lead.business_name}: "${draft.subject}"`,
+    actorType: "admin",
+    leadId: lead.id,
+    metadata: { outreach_id: outreach.id, commercial_offer_id: offer.id },
+  });
+
+  return { ok: true, outreachId: outreach.id };
 }
 
 function toSalesAudit(audit: WebsiteAudit | null, noStandaloneWebsite = false) {

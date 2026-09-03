@@ -1,4 +1,9 @@
-﻿import { computeOutreachContentHash } from "./content-hash";
+﻿import {
+  DEFAULT_MANAGED_MONTHLY_AMOUNT_CENTS,
+  DEFAULT_SETUP_AMOUNT_CENTS,
+} from "@/lib/payments/limits";
+import { centsToUsd } from "@/lib/payments/money";
+import { computeOutreachContentHash } from "./content-hash";
 import type {
   SalesAuditInput,
   SalesDraft,
@@ -13,6 +18,11 @@ export type DraftOptions = {
   senderEmail?: string;
   recipientEmailOverride?: string;
 };
+
+function money(cents: number): string {
+  const usd = centsToUsd(cents);
+  return Number.isInteger(usd) ? `$${usd}` : `$${usd.toFixed(2)}`;
+}
 
 export function composeSalesDraft(
   lead: SalesLeadInput,
@@ -103,6 +113,27 @@ export function composeSalesDraft(
     source: "preview_deployments",
   });
 
+  // M9.9: an operator-supplied example domain. SiteForge performs no
+  // availability check anywhere, so the copy must never assert or imply the
+  // domain is free -- it is phrased strictly as an example, and the operator
+  // is responsible for having checked before entering it.
+  const suggestedDomain = (lead.suggestedDomain ?? "").trim();
+  if (suggestedDomain) {
+    evidence.push({
+      type: "business_fact",
+      text: `Operator-supplied example domain: ${suggestedDomain} (availability not checked by SiteForge)`,
+      source: "leads.suggested_domain",
+    });
+  }
+
+  // M9.9: pricing is stated from the same locked constants the offer and the
+  // Stripe Price IDs use -- never a number invented by the draft.
+  evidence.push({
+    type: "business_fact",
+    text: `Pricing: ${money(DEFAULT_SETUP_AMOUNT_CENTS)} setup, optional ${money(DEFAULT_MANAGED_MONTHLY_AMOUNT_CENTS)}/month managed plan`,
+    source: "lib/payments/limits",
+  });
+
   const body = [
     `Hi ${businessName} team,`,
     "",
@@ -116,12 +147,22 @@ export function composeSalesDraft(
     "",
     `You can view the live interactive preview here:`,
     "{{OUTREACH_PREVIEW_LINK}}",
+    ...(suggestedDomain
+      ? [
+          "",
+          `A site like this would sit on its own domain — something along the lines of ${suggestedDomain}, just as an example of the kind of address that would suit you. We have not registered or reserved anything, and you would choose the final domain yourself.`,
+        ]
+      : []),
+    "",
+    `Pricing is straightforward: ${money(DEFAULT_SETUP_AMOUNT_CENTS)} one time to build and set up the site, plus an optional ${money(DEFAULT_MANAGED_MONTHLY_AMOUNT_CENTS)} per month if you would like us to manage it after it is live. The monthly plan is optional — the website does not depend on it.`,
     "",
     `If you like the direction or have any questions about how it works, just reply directly to this email.`,
     "",
     `Best,`,
     `${senderName}`,
     `SiteForge`,
+    "",
+    `If you would prefer not to hear from us, reply with "unsubscribe" and we will not contact you again.`,
   ].join("\n");
 
   const contentHash = computeOutreachContentHash({

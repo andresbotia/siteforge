@@ -1,10 +1,16 @@
-import { leadStatuses } from "@/lib/constants";
+import {
+  isLeadStatus as isLifecycleLeadStatus,
+  resolveLeadStatusTransition,
+} from "@/lib/leads/lifecycle";
 import type { LeadStatus } from "@/types";
 import type { Json } from "@/types/database";
 
 /**
  * Authoritative Scout workflow order. Matches src/types LeadStatus.
- * rejected is terminal/off-path and is never overwritten by rediscovery.
+ * rejected/archived are terminal/off-path and are never overwritten by
+ * rediscovery. The transition RULES themselves live in one place --
+ * `src/lib/leads/lifecycle.ts` -- and this order is retained only for
+ * Scout's own display/ranking use.
  */
 export const LEAD_PIPELINE_ORDER: readonly LeadStatus[] = [
   "discovered",
@@ -18,10 +24,9 @@ export const LEAD_PIPELINE_ORDER: readonly LeadStatus[] = [
 ];
 
 const PIPELINE = new Set<string>(LEAD_PIPELINE_ORDER);
-const KNOWN = new Set<string>(leadStatuses);
 
 export function isLeadStatus(value: string): value is LeadStatus {
-  return KNOWN.has(value);
+  return isLifecycleLeadStatus(value);
 }
 
 export function leadPipelineRank(status: string): number | null {
@@ -30,9 +35,14 @@ export function leadPipelineRank(status: string): number | null {
 }
 
 /**
- * Existing lead status is monotonic across Scout and Auditor.
- * Early-stage leads may advance; later pipeline statuses never move backward.
- * rejected stays rejected. Unknown statuses are preserved.
+ * Existing lead status for automated writers (Scout, Auditor, outreach send,
+ * Stripe webhook). Since M9.9 the rules are not implemented here -- this
+ * delegates to the single allowed-transitions table in
+ * `src/lib/leads/lifecycle.ts`. Behavior for every pre-M9.9 case is
+ * unchanged: early-stage leads may advance (including skipping stages),
+ * later pipeline statuses never move backward, `rejected` is only reachable
+ * from `discovered` and then stays rejected, unknown statuses are preserved.
+ * `archived` is additionally never set by an automated writer.
  */
 export function resolveMonotonicLeadStatus(
   current: string | null | undefined,
@@ -45,18 +55,7 @@ export function resolveScoutLeadStatus(
   current: string | null | undefined,
   proposed: string,
 ): string {
-  if (!current) return proposed;
-  if (current === "rejected") return current;
-  if (!isLeadStatus(current)) return current;
-
-  const currentRank = leadPipelineRank(current);
-  const proposedRank = leadPipelineRank(proposed);
-
-  if (proposed === "rejected") {
-    return currentRank === 0 ? proposed : current;
-  }
-  if (currentRank === null || proposedRank === null) return current;
-  return proposedRank > currentRank ? proposed : current;
+  return resolveLeadStatusTransition(current, proposed);
 }
 
 export type ExistingLeadScoutPatch = {

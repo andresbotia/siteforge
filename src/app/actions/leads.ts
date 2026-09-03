@@ -2,7 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createManualPublicProspect, updateLeadVerifiedPublicFacts } from "@/data/leads";
+import {
+  createManualPublicProspect,
+  updateLeadLifecycleStatus,
+  updateLeadSuggestedDomain,
+  updateLeadVerifiedPublicFacts,
+} from "@/data/leads";
 import { requireAdminSession } from "@/lib/auth/guard";
 import {
   buildManualPublicProspectFailureState,
@@ -29,6 +34,48 @@ export async function importManualPublicProspectAction(
   revalidatePath("/leads");
   revalidatePath(`/leads/${result.leadId}`);
   redirect(`/leads/${result.leadId}`);
+}
+
+export type LeadLifecycleActionState = { ok: boolean; error?: string } | null;
+
+/** M9.9. The allowed-transitions table is re-checked server-side in updateLeadLifecycleStatus. */
+export async function updateLeadStatusAction(
+  _previousState: LeadLifecycleActionState,
+  formData: FormData,
+): Promise<LeadLifecycleActionState> {
+  await requireAdminSession();
+
+  const leadId = String(formData.get("leadId") ?? "").trim();
+  const nextStatus = String(formData.get("nextStatus") ?? "").trim();
+  const archivedReason = String(formData.get("archivedReason") ?? "");
+  if (!leadId) return { ok: false, error: "Missing lead." };
+  if (!nextStatus) return { ok: false, error: "Choose a status." };
+
+  const result = await updateLeadLifecycleStatus({ leadId, nextStatus, archivedReason });
+  if (!result.ok) return result;
+
+  revalidatePath(`/leads/${leadId}`);
+  revalidatePath("/leads");
+  return { ok: true };
+}
+
+export async function updateLeadSuggestedDomainAction(
+  _previousState: LeadLifecycleActionState,
+  formData: FormData,
+): Promise<LeadLifecycleActionState> {
+  await requireAdminSession();
+
+  const leadId = String(formData.get("leadId") ?? "").trim();
+  if (!leadId) return { ok: false, error: "Missing lead." };
+
+  const result = await updateLeadSuggestedDomain({
+    leadId,
+    suggestedDomain: String(formData.get("suggestedDomain") ?? ""),
+  });
+  if (!result.ok) return result;
+
+  revalidatePath(`/leads/${leadId}`);
+  return { ok: true };
 }
 
 export type VerifiedPublicFactsActionState =

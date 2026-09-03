@@ -2,6 +2,59 @@
 
 For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5B real-prospect preparation and Auditor calibration are locked, with the M9.5B Auditor Calibration lock at `1358caad47c46b9832f875ec1e62d5834043906b`. M9.5C guarded real email integration/internal send is complete: Resend is configured server-side, the sending domain was verified externally, the live-email gate was exercised for one operator-only test, and the test delivered without prospect/customer funnel mutation. M9.5D first controlled prospect campaign preparation is current. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live payment use, or broader production operation. This is NOT M10.
 
+## Session: M9.9 -- lifecycle states and the payment follow-up email
+
+Session start commit `918ea4e` (M9.7 customer purchase links, prior session). One additive-only migration created (`supabase/migrations/20260902000000_lead_lifecycle_and_follow_up_outreach.sql`), **not applied** to the hosted project by this session -- the Supabase CLI is not installed in this environment and applying schema to the shared hosted database is an operator action. No live Stripe call, no live email send, no paid AI, no deployment, no DNS, no prospect contacted. Mock providers only.
+
+### Task 1 -- lead lifecycle states
+
+The transition rules now live in exactly one place, `src/lib/leads/lifecycle.ts`, as an explicit `LEAD_LIFECYCLE_TRANSITIONS` table rather than scattered guards. `src/lib/scout/status.ts` keeps its public API (`resolveMonotonicLeadStatus`/`resolveScoutLeadStatus`/`isLeadStatus`) but now delegates to that table, so Scout, Auditor, the outreach send path and the Stripe webhook all resolve through the same rules. Every pre-M9.9 behavior is preserved and directly asserted by tests (forward jumps that skip stages still work -- the send path moves `audited` straight to `contacted`, the webhook moves `contacted` straight to `customer`).
+
+Monotonicity is broken deliberately in exactly two places: `archived` is reachable from every state (including `customer` and `rejected`) and always requires a non-null reason, and `interested -> contacted` is allowed for a prospect who went quiet. `rejected` was deliberately **not** widened -- it stays reachable only from `discovered`, exactly as Scout always treated it; `archived` is the new general-purpose exit that covers later stages. `archived` is terminal: nothing transitions out of it. That is a literal reading of "every other transition stays monotonic," and it means an accidental archive cannot be undone from the console -- see "Open questions" below.
+
+`interested` needed no schema or type change; it was already an allowed lead status before this milestone. Only `archived` is genuinely new. Operator UI is a small Lifecycle card on `/leads/[id]` that offers exactly the table's allowed targets and requires a reason when archiving; the server action re-checks the table independently, and `leads_archived_reason_check` enforces the reason in Postgres as well.
+
+### Task 2 -- offer amount lock
+
+`/offers/[id]` and the create-offer form no longer accept a typed cent amount. Both submit a plan KEY, and `src/app/actions/offers.ts` re-derives amounts and the managed-plan flag server-side from `src/lib/payments/plans.ts` (`website_only` = $99 setup; `website_plus_managed` = $99 setup + $39/month). An unrecognized key falls back to a configured plan, never to a client number, so no request shape can create the drift that would hard-fail at checkout. `LiveStripeProvider`'s own price-lock check is **untouched** and remains the last line of defense; `offerAmountsMatchConfiguredPrices()` mirrors its predicate (without importing the Stripe SDK) so an operator is warned before an email goes out rather than after a customer clicks a dead link. An existing offer whose amounts already drifted renders an explicit warning on the offer page.
+
+### Task 3 -- payment follow-up outreach kind
+
+`outreach.kind` (`cold_outreach` | `follow_up`, default `cold_outreach`) plus `commercial_offer_id` and `purchase_token_hash`, with a CHECK that a follow-up carries both bindings and a cold email carries neither. There is **no second send path**: `requestOutreachSendApproval`, `approveOutreachSendApproval` and `sendApprovedOutreach` are kind-aware, and `verifyApprovedOutreachContent` is one verifier for both kinds. `computeOutreachContentHash` is byte-identical for cold outreach, so hashes already stored on existing rows and inside already-granted approvals stay valid; `computeFollowUpContentHash` uses a domain-separated input so the two kinds can never collide or be swapped past each other's approval.
+
+A follow_up approval binds recipient, subject, body, commercial offer id, purchase token hash, content version, and a distinct payload action (`send_follow_up_email`). Editing any bound field recomputes the hash and invalidates the approval, exactly as on the cold path.
+
+The raw `sfb_` purchase link is still never persisted. The draft body carries a `{{PURCHASE_LINK}}` placeholder (mirroring the cold path's `{{OUTREACH_PREVIEW_LINK}}`), the approval binds only the token HASH, and the operator pastes the real link at send time -- the backend verifies `hashPurchaseToken(pasted)` against the bound hash before substituting it. This keeps the M9.7 invariant intact at the cost of one extra operator paste.
+
+Duplicate-send blocking generalized the previous implicit "one outreach per lead" assumption instead of bypassing it: `isDuplicateSendBlocked()` blocks the row's own re-send and any sibling of the SAME kind already sent to that lead, so an earlier cold email never blocks a follow-up but a second follow-up is blocked.
+
+One real bug this surfaced: the post-send lead advance (`resolveMonotonicLeadStatus(lead.status, "contacted")`) is now scoped to cold outreach only. A follow-up goes to a lead that is already `interested`, and the new table legitimately allows `interested -> contacted`, so leaving it unscoped would have silently walked leads backwards after every follow-up send.
+
+### Task 4 -- cold email additions
+
+`leads.suggested_domain`, filled manually by an operator on the lead detail page and shape-validated (`src/lib/prospects/suggested-domain.ts` -- bare domain only, no scheme/path/port; a malformed value is rejected rather than silently cleaned). SiteForge performs no registry/WHOIS/DNS lookup anywhere, and the cold copy phrases the domain strictly as an example ("just as an example... We have not registered or reserved anything"), asserted by a test that the word "available" never appears in the body. Cold copy now also states the $99 setup and optional $39/month plan, read from the same locked constants the offer and Stripe Prices use.
+
+Also added (beyond the literal ask, flagged deliberately): opt-out language in the cold body. `hasUnsubscribeLanguage()` has always been a hard gate on real sends, but `composeSalesDraft` never emitted any -- every cold draft would have failed that check at send time. Task 4 asks the follow-up to carry "the same unsubscribe/opt-out language the cold path requires," which only means something if the cold path actually emits it.
+
+### Task 5 -- roadmap surface
+
+`src/lib/roadmap/roadmap.ts` exports a typed `ROADMAP` array (id, title, status, goal, exit criteria, notes) covering M1-M9.7 as done, M9.8/M9.9 current, M10 Operator Console and M10.5 Visual System Pass next, then M11 Live Payment Rehearsal, M12 First Campaign, M13 First Customer, plus a backlog section (Manager agent, production deployment and DNS, Scout scaling, reply detection, refund handling, design master materialization, Supabase Auth). Rendered read-only at `/roadmap` behind the existing admin session. No table, no CRUD -- git history is the audit trail. One nav item was added; navigation was otherwise untouched, and no dashboard or styling work was done (that is M10/M10.5).
+
+### Validation
+
+`npx tsc --noEmit`, `npm test` (622/622, up from 565), `npm run lint`, `npm run build`, `git diff --check` all clean. 57 new tests: the transition table (coverage of every status, archived-from-anywhere, archive-requires-reason, the single backward edge, no other backward edge, forward jumps, archived terminal, rejected unchanged, no-op transitions, and Scout-behavior preservation), follow-up approval binding and per-field invalidation, cross-kind approval refusal and hash-domain separation, per-kind duplicate-send blocking, follow-up send-eligibility refusal for each condition including a non-interested lead, the offer plan lock's agreement with the provider price lock, and the cold email's domain/pricing/opt-out copy.
+
+### Operator action required
+
+- Apply `supabase/migrations/20260902000000_lead_lifecycle_and_follow_up_outreach.sql` with the normal `supabase db push` flow before using lifecycle states or drafting a follow-up. It is additive only (two new lead columns, `suggested_domain`, three new outreach columns, widened `leads_status_check`, three new CHECK constraints, two indexes); nothing is renamed, dropped, or rewritten.
+- Sending a payment follow-up requires pasting the customer purchase link at send time. Copy it when you publish the link -- if it is lost, revoke and republish, which correctly invalidates any follow-up approval bound to the old hash.
+
+### Open questions / deliberately not done
+
+- **Archived is terminal.** An accidental archive cannot be reversed in the console. That follows the instruction literally, but it conflicts with the repo's "prefer reversible actions" rule. Un-archiving would need one more explicit table edge (e.g. `archived -> contacted`, or restoring to the pre-archive status recorded at archive time) and an operator decision about which.
+- Lead status is still set entirely by hand; reply detection (backlog) is what would make `interested` a real signal rather than operator bookkeeping.
+- No live payment rehearsal was performed, so the follow-up path has not been exercised against real Stripe behavior end to end. That is M11.
+
 ## Session: M9.6 -- real Stripe integration (test/live mode, still not credentialed)
 
 Session start commit `4b363f8` (prior session, above). One commit, pushed. One additive-only migration created and committed but **not applied** to the hosted Supabase project (no destructive/renaming change; safe to apply whenever the operator is ready). No paid Stripe API call occurred -- `STRIPE_SECRET_KEY` was not present in this environment.

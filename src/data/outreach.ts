@@ -7,6 +7,7 @@ import { validateWebsiteSpec } from "@/lib/builder/validate";
 import { getEmailConfig, getEmailProviderStatus } from "@/lib/email/config";
 import {
   hasUnsubscribeLanguage,
+  isDuplicateSendBlocked,
   isRecipientSuppressed,
   liveEmailAllowed,
   validateProspectSendPreview,
@@ -14,13 +15,20 @@ import {
 } from "@/lib/email/delivery-policy";
 import { getEmailProvider, isValidEmail } from "@/lib/email/provider";
 import { asRecord } from "@/lib/json";
+import { hashPurchaseToken, isPurchaseToken } from "@/lib/payments/purchase-tokens";
 import {
   createOutreachAttributionToken,
   hashOutreachAttributionToken,
   isOutreachAttributionToken,
   renderOutreachBody,
 } from "@/lib/sales/attribution";
-import { computeOutreachContentHash } from "@/lib/sales/content-hash";
+import { computeOutreachBindingHash } from "@/lib/sales/content-hash";
+import {
+  evaluateFollowUpEligibility,
+  FOLLOW_UP_LINK_PLACEHOLDER,
+  type FollowUpEligibilityCheck,
+} from "@/lib/sales/follow-up";
+import { OUTREACH_APPROVAL_ACTION, toOutreachKind } from "@/lib/sales/kinds";
 import {
   classifyBot,
   classifyBrowser,
@@ -36,6 +44,7 @@ import { createServerSupabaseClient, mutateTable, readTable } from "@/lib/supaba
 import type { EmailProviderStatus, Outreach, OutreachStatus, WebsiteAudit } from "@/types";
 import type {
   ApprovalRow,
+  CommercialOfferRow,
   LeadRow,
   OutreachEventRow,
   OutreachRow,
@@ -114,6 +123,8 @@ export async function listOutreach(): Promise<Outreach[]> {
 
     return {
       id: row.id,
+      kind: toOutreachKind(row.kind),
+      commercialOfferId: row.commercial_offer_id,
       leadId: row.lead_id,
       generatedWebsiteId: row.generated_website_id,
       previewDeploymentId: row.preview_deployment_id,
@@ -151,6 +162,7 @@ export type OutreachDetail = Outreach & {
   lead: LeadRow | null;
   website: WebsiteRow | null;
   previewDeployment: PreviewDeploymentRow | null;
+  commercialOffer: CommercialOfferRow | null;
   approval: ApprovalRow | null;
   auditSummary: Pick<WebsiteAudit, "id" | "overallScore" | "redesignOpportunityScore" | "summary"> | null;
   sendReadiness: ProspectSendReadiness;
@@ -174,7 +186,7 @@ export async function getOutreachById(id: string): Promise<OutreachDetail | null
   );
   if (!row) return null;
 
-  const [lead, website, preview, approval, events, attributedPreviewEvents, latestAudit] = await Promise.all([
+  const [lead, website, preview, commercialOffer, approval, events, attributedPreviewEvents, latestAudit] = await Promise.all([
     readTable<LeadRow | null>((client) =>
       client.from("leads").select("*").eq("id", row.lead_id).maybeSingle(),
     ),
@@ -186,6 +198,11 @@ export async function getOutreachById(id: string): Promise<OutreachDetail | null
     row.preview_deployment_id
       ? readTable<PreviewDeploymentRow | null>((client) =>
           client.from("preview_deployments").select("*").eq("id", row.preview_deployment_id!).maybeSingle(),
+        )
+      : null,
+    row.commercial_offer_id
+      ? readTable<CommercialOfferRow | null>((client) =>
+          client.from("commercial_offers").select("*").eq("id", row.commercial_offer_id!).maybeSingle(),
         )
       : null,
     row.approval_id
@@ -220,17 +237,25 @@ export async function getOutreachById(id: string): Promise<OutreachDetail | null
     : [];
 
   const hint = preview?.token_hint ?? null;
-  const recipientEvents = await getRecipientSuppressionEvents(row);
+  const [recipientEvents, siblings] = await Promise.all([
+    getRecipientSuppressionEvents(row),
+    getLeadOutreachSiblings(row.lead_id),
+  ]);
   const sendReadiness = buildProspectSendReadiness({
     outreach: row,
     preview,
+    lead,
+    commercialOffer,
     approval,
     recipientEvents,
+    siblings,
     emailStatus: getEmailProviderStatus(),
   });
 
   return {
     id: row.id,
+    kind: toOutreachKind(row.kind),
+    commercialOfferId: row.commercial_offer_id,
     leadId: row.lead_id,
     generatedWebsiteId: row.generated_website_id,
     previewDeploymentId: row.preview_deployment_id,
@@ -263,6 +288,7 @@ export async function getOutreachById(id: string): Promise<OutreachDetail | null
     lead,
     website,
     previewDeployment: preview,
+    commercialOffer,
     approval,
     auditSummary: latestAudit
       ? {
@@ -277,6 +303,16 @@ export async function getOutreachById(id: string): Promise<OutreachDetail | null
     attributedPreviewEvents: attributedPreviewEvents ?? [],
     evidence,
   };
+}
+
+/** Every other outreach row for the same lead, for per-kind duplicate-send blocking. */
+async function getLeadOutreachSiblings(
+  leadId: string,
+): Promise<Array<Pick<OutreachRow, "id" | "lead_id" | "kind" | "status">>> {
+  const rows = await readTable<Pick<OutreachRow, "id" | "lead_id" | "kind" | "status">[]>((client) =>
+    client.from("outreach").select("id, lead_id, kind, status").eq("lead_id", leadId),
+  );
+  return rows ?? [];
 }
 
 async function getRecipientSuppressionEvents(
@@ -300,18 +336,23 @@ async function getRecipientSuppressionEvents(
 function buildProspectSendReadiness(input: {
   outreach: OutreachRow;
   preview: PreviewDeploymentRow | null;
+  lead: LeadRow | null;
+  commercialOffer: CommercialOfferRow | null;
   approval: ApprovalRow | null;
   recipientEvents: OutreachEventRow[];
+  siblings: Array<Pick<OutreachRow, "id" | "lead_id" | "kind" | "status">>;
   emailStatus: EmailProviderStatus;
 }): ProspectSendReadiness {
-  const { outreach, preview, approval, recipientEvents, emailStatus } = input;
+  const { outreach, preview, lead, commercialOffer, approval, recipientEvents, siblings, emailStatus } = input;
+  const kind = toOutreachKind(outreach.kind);
+  const isFollowUp = kind === "follow_up";
   const recipientValid = Boolean(outreach.recipient_email && isValidEmail(outreach.recipient_email));
   const previewEligibility = validateProspectSendPreview(outreach, preview);
   const approvalCheck = verifyApprovedOutreachContent(outreach, approval);
   const suppressed = outreach.recipient_email
     ? isRecipientSuppressed(outreach.recipient_email, recipientEvents)
     : true;
-  const duplicateBlocked = outreach.status !== "sent";
+  const duplicate = isDuplicateSendBlocked({ outreach, siblings });
   const liveAllowed = liveEmailAllowed({
     allowLiveEmail: emailStatus.liveEmailGateEnabled,
     providerKeyPresent: emailStatus.providerKeyPresent,
@@ -319,6 +360,21 @@ function buildProspectSendReadiness(input: {
     replyToConfigured: emailStatus.replyToConfigured,
   });
   const unsubscribeOk = hasUnsubscribeLanguage(outreach.body);
+  const followUp = isFollowUp
+    ? evaluateFollowUpEligibility({
+        leadStatus: lead?.status ?? "",
+        offer: commercialOffer
+          ? {
+              status: commercialOffer.status,
+              setupAmountCents: commercialOffer.setup_amount_cents,
+              managedMonthlyAmountCents: commercialOffer.managed_monthly_amount_cents,
+              managedPlanSelected: commercialOffer.managed_plan_selected,
+              purchaseTokenHash: commercialOffer.purchase_token_hash,
+              purchaseLinkRevokedAt: commercialOffer.purchase_link_revoked_at,
+            }
+          : null,
+      })
+    : null;
 
   const items = [
     {
@@ -327,23 +383,40 @@ function buildProspectSendReadiness(input: {
       ok: recipientValid,
       detail: recipientValid ? outreach.recipient_email ?? "" : "Missing or invalid recipient email",
     },
-    {
-      id: "preview",
-      label: "Tracked preview",
-      ok: previewEligibility.ok,
-      detail: previewEligibility.ok ? `Active public preview ending ${preview?.token_hint ?? ""}` : previewEligibility.error,
-    },
+    // A follow-up is bound to an offer and a purchase link, not to a preview
+    // deployment; its equivalent bindings are checked by followUp below.
+    ...(isFollowUp
+      ? (followUp?.checks ?? []).map((check: FollowUpEligibilityCheck) => ({
+          id: check.id,
+          label: check.label,
+          ok: check.ok,
+          detail: check.detail,
+        }))
+      : [
+          {
+            id: "preview",
+            label: "Tracked preview",
+            ok: previewEligibility.ok,
+            detail: previewEligibility.ok
+              ? `Active public preview ending ${preview?.token_hint ?? ""}`
+              : previewEligibility.error,
+          },
+        ]),
     {
       id: "approval",
       label: "Exact-content approval",
       ok: approvalCheck.ok,
-      detail: approvalCheck.ok ? "Approval matches recipient, content, version, preview, and attribution" : approvalCheck.error,
+      detail: approvalCheck.ok
+        ? isFollowUp
+          ? "Approval matches recipient, content, version, offer, and purchase link hash"
+          : "Approval matches recipient, content, version, preview, and attribution"
+        : approvalCheck.error,
     },
     {
       id: "duplicate",
       label: "Duplicate send",
-      ok: duplicateBlocked,
-      detail: duplicateBlocked ? "No completed send recorded for this outreach" : "This outreach has already been sent",
+      ok: !duplicate.blocked,
+      detail: duplicate.reason,
     },
     {
       id: "suppression",
@@ -395,13 +468,22 @@ export async function updateOutreachDraft(input: {
 
   if (!subject) return { ok: false, error: "Subject cannot be empty." };
   if (!body) return { ok: false, error: "Email body cannot be empty." };
+  if (toOutreachKind(current.kind) === "follow_up" && !body.includes(FOLLOW_UP_LINK_PLACEHOLDER)) {
+    return {
+      ok: false,
+      error: `A payment follow-up body must keep the ${FOLLOW_UP_LINK_PLACEHOLDER} placeholder; the real purchase link is substituted at send time.`,
+    };
+  }
 
-  const contentHash = computeOutreachContentHash({
+  const contentHash = computeOutreachBindingHash({
+    kind: toOutreachKind(current.kind),
     subject,
     body,
     recipient,
     previewDeploymentId: current.preview_deployment_id,
     attributionTokenHash: current.attribution_token_hash,
+    commercialOfferId: current.commercial_offer_id,
+    purchaseTokenHash: current.purchase_token_hash,
   });
 
   // If status was awaiting_approval or approved, reset approval reference because content changed
@@ -461,29 +543,73 @@ export async function requestOutreachSendApproval(
     return { ok: false, error: "A valid recipient email address is required before requesting send approval." };
   }
 
-  if (!outreach.attribution_token_hash) {
-    return { ok: false, error: "Outreach is missing a valid attribution link." };
-  }
-
-  const preview = outreach.preview_deployment_id
-    ? await readTable<PreviewDeploymentRow | null>((client) =>
-        client.from("preview_deployments").select("*").eq("id", outreach.preview_deployment_id!).maybeSingle(),
-      )
-    : null;
-  const previewEligibility = validateProspectSendPreview(outreach, preview);
-  if (!previewEligibility.ok) return { ok: false, error: `${previewEligibility.error} Approvals require an active public preview.` };
-  if (!preview) return { ok: false, error: "The associated preview deployment was not found." };
-
-  const lead = await readTable<Pick<LeadRow, "business_name"> | null>((client) =>
-    client.from("leads").select("business_name").eq("id", outreach.lead_id).maybeSingle(),
+  const kind = toOutreachKind(outreach.kind);
+  const lead = await readTable<LeadRow | null>((client) =>
+    client.from("leads").select("*").eq("id", outreach.lead_id).maybeSingle(),
   );
 
-  const contentHash = computeOutreachContentHash({
+  // Kind-specific binding prerequisites. Everything after this point --
+  // approval row shape, content hash, event and activity recording -- is
+  // shared by both kinds.
+  let preview: PreviewDeploymentRow | null = null;
+  let commercialOffer: CommercialOfferRow | null = null;
+  let description: string;
+
+  if (kind === "follow_up") {
+    if (!outreach.commercial_offer_id || !outreach.purchase_token_hash) {
+      return { ok: false, error: "This payment follow-up is not bound to an offer and purchase link." };
+    }
+    commercialOffer = await readTable<CommercialOfferRow | null>((client) =>
+      client.from("commercial_offers").select("*").eq("id", outreach.commercial_offer_id!).maybeSingle(),
+    );
+    const eligibility = evaluateFollowUpEligibility({
+      leadStatus: lead?.status ?? "",
+      offer: commercialOffer
+        ? {
+            status: commercialOffer.status,
+            setupAmountCents: commercialOffer.setup_amount_cents,
+            managedMonthlyAmountCents: commercialOffer.managed_monthly_amount_cents,
+            managedPlanSelected: commercialOffer.managed_plan_selected,
+            purchaseTokenHash: commercialOffer.purchase_token_hash,
+            purchaseLinkRevokedAt: commercialOffer.purchase_link_revoked_at,
+          }
+        : null,
+    });
+    if (!eligibility.ok) {
+      const failed = eligibility.checks.find((check) => !check.ok);
+      return { ok: false, error: failed?.detail ?? "This payment follow-up is not eligible to send." };
+    }
+    if (commercialOffer?.purchase_token_hash !== outreach.purchase_token_hash) {
+      return {
+        ok: false,
+        error: "The offer's purchase link changed after this follow-up was drafted. Draft it again.",
+      };
+    }
+    description = `Payment follow-up for ${lead?.business_name ?? "prospect"} carrying the purchase link for offer ${outreach.commercial_offer_id}.`;
+  } else {
+    if (!outreach.attribution_token_hash) {
+      return { ok: false, error: "Outreach is missing a valid attribution link." };
+    }
+    preview = outreach.preview_deployment_id
+      ? await readTable<PreviewDeploymentRow | null>((client) =>
+          client.from("preview_deployments").select("*").eq("id", outreach.preview_deployment_id!).maybeSingle(),
+        )
+      : null;
+    const previewEligibility = validateProspectSendPreview(outreach, preview);
+    if (!previewEligibility.ok) return { ok: false, error: `${previewEligibility.error} Approvals require an active public preview.` };
+    if (!preview) return { ok: false, error: "The associated preview deployment was not found." };
+    description = `Personalized website pitch for ${lead?.business_name ?? "prospect"} referencing preview ${preview.token_hint}.`;
+  }
+
+  const contentHash = computeOutreachBindingHash({
+    kind,
     subject: outreach.subject ?? "",
     body: outreach.body ?? "",
     recipient: outreach.recipient_email,
     previewDeploymentId: outreach.preview_deployment_id,
     attributionTokenHash: outreach.attribution_token_hash,
+    commercialOfferId: outreach.commercial_offer_id,
+    purchaseTokenHash: outreach.purchase_token_hash,
   });
 
   const approvalRows = await mutateTable<ApprovalRow[] | null>((client) =>
@@ -494,10 +620,14 @@ export async function requestOutreachSendApproval(
         agent_run_id: outreach.agent_run_id,
         approval_type: "external_email",
         status: "pending",
-        title: `Send outreach email to ${outreach.recipient_email}`,
-        description: `Personalized website pitch for ${lead?.business_name ?? "prospect"} referencing preview ${preview.token_hint}.`,
+        title:
+          kind === "follow_up"
+            ? `Send payment follow-up email to ${outreach.recipient_email}`
+            : `Send outreach email to ${outreach.recipient_email}`,
+        description,
         payload: {
-          action: "send_outreach_email",
+          action: OUTREACH_APPROVAL_ACTION[kind],
+          outreach_kind: kind,
           outreach_id: outreach.id,
           recipient_email: outreach.recipient_email,
           subject: outreach.subject,
@@ -505,6 +635,8 @@ export async function requestOutreachSendApproval(
           content_version: outreach.content_version,
           preview_deployment_id: outreach.preview_deployment_id,
           attribution_token_hash: outreach.attribution_token_hash,
+          commercial_offer_id: outreach.commercial_offer_id,
+          purchase_token_hash: outreach.purchase_token_hash,
           agent_slug: "sales",
           risk_level: "high",
         },
@@ -568,9 +700,6 @@ export async function approveOutreachSendApproval(
   }
 
   const payload = asRecord(approval.payload);
-  if (payload.action !== "send_outreach_email") {
-    return { ok: false, error: "Approval payload action does not match email outreach." };
-  }
   const outreachId = typeof payload.outreach_id === "string" ? payload.outreach_id : "";
   const expectedHash = typeof payload.content_hash === "string" ? payload.content_hash : "";
 
@@ -579,12 +708,20 @@ export async function approveOutreachSendApproval(
   );
   if (!outreach) return { ok: false, error: "Associated outreach record not found." };
 
-  const currentHash = computeOutreachContentHash({
+  const kind = toOutreachKind(outreach.kind);
+  if (payload.action !== OUTREACH_APPROVAL_ACTION[kind]) {
+    return { ok: false, error: "Approval payload action does not match this outreach kind." };
+  }
+
+  const currentHash = computeOutreachBindingHash({
+    kind,
     subject: outreach.subject ?? "",
     body: outreach.body ?? "",
     recipient: outreach.recipient_email ?? "",
     previewDeploymentId: outreach.preview_deployment_id,
     attributionTokenHash: outreach.attribution_token_hash,
+    commercialOfferId: outreach.commercial_offer_id,
+    purchaseTokenHash: outreach.purchase_token_hash,
   });
 
   if (currentHash !== expectedHash) {
@@ -593,14 +730,23 @@ export async function approveOutreachSendApproval(
       error: "Outreach content was modified after approval was requested. Please request approval again.",
     };
   }
-  if (payload.attribution_token_hash !== outreach.attribution_token_hash) {
-    return { ok: false, error: "Outreach attribution link changed after approval was requested. Please request approval again." };
+  if (payload.content_version !== outreach.content_version) {
+    return { ok: false, error: "Outreach content version changed after approval was requested. Please request approval again." };
   }
-  if (
-    payload.preview_deployment_id !== outreach.preview_deployment_id ||
-    payload.content_version !== outreach.content_version
-  ) {
-    return { ok: false, error: "Outreach preview or content version changed after approval was requested. Please request approval again." };
+  if (kind === "follow_up") {
+    if (
+      payload.commercial_offer_id !== outreach.commercial_offer_id ||
+      payload.purchase_token_hash !== outreach.purchase_token_hash
+    ) {
+      return { ok: false, error: "Follow-up offer or purchase link changed after approval was requested. Please request approval again." };
+    }
+  } else {
+    if (payload.attribution_token_hash !== outreach.attribution_token_hash) {
+      return { ok: false, error: "Outreach attribution link changed after approval was requested. Please request approval again." };
+    }
+    if (payload.preview_deployment_id !== outreach.preview_deployment_id) {
+      return { ok: false, error: "Outreach preview changed after approval was requested. Please request approval again." };
+    }
   }
 
   const now = new Date().toISOString();
@@ -640,8 +786,22 @@ export async function approveOutreachSendApproval(
   return { ok: true };
 }
 
+/**
+ * The single outreach send path, shared by both kinds. Every gate below --
+ * approval binding, suppression, duplicate blocking, provider readiness,
+ * live-email gate, opt-out language -- applies identically; only the
+ * kind-specific link binding differs.
+ *
+ * `options.purchaseUrl` is required for (and only for) a payment follow-up:
+ * the raw sfb_ purchase link is never persisted (M9.7 keeps only its hash +
+ * hint), so the operator supplies it here and the backend verifies its hash
+ * against the exact hash the approval bound before substituting it into the
+ * body. This mirrors how the cold path re-derives its sfo_ link at send time
+ * rather than storing it.
+ */
 export async function sendApprovedOutreach(
   outreachId: string,
+  options: { purchaseUrl?: string } = {},
 ): Promise<{ ok: boolean; error?: string; messageId?: string; simulated?: boolean }> {
   const outreach = await readTable<OutreachRow | null>((client) =>
     client.from("outreach").select("*").eq("id", outreachId).maybeSingle(),
@@ -657,19 +817,56 @@ export async function sendApprovedOutreach(
     return { ok: false, error: "A valid recipient email address is required to send." };
   }
   const recipientEmail = outreach.recipient_email;
+  const kind = toOutreachKind(outreach.kind);
 
-  if (!outreach.attribution_token_hash || !outreach.attribution_token_created_at) {
-    return { ok: false, error: "Outreach is missing a valid attribution link." };
-  }
+  const siblings = await getLeadOutreachSiblings(outreach.lead_id);
+  const duplicate = isDuplicateSendBlocked({ outreach, siblings });
+  if (duplicate.blocked) return { ok: false, error: duplicate.reason };
 
-  const preview = outreach.preview_deployment_id
-    ? await readTable<PreviewDeploymentRow | null>((client) =>
-        client.from("preview_deployments").select("*").eq("id", outreach.preview_deployment_id!).maybeSingle(),
-      )
-    : null;
-  const previewEligibility = validateProspectSendPreview(outreach, preview);
-  if (!previewEligibility.ok) {
-    return { ok: false, error: `${previewEligibility.error} Cannot send outreach with invalid preview.` };
+  let commercialOffer: CommercialOfferRow | null = null;
+  if (kind === "follow_up") {
+    if (!outreach.commercial_offer_id || !outreach.purchase_token_hash) {
+      return { ok: false, error: "This payment follow-up is not bound to an offer and purchase link." };
+    }
+    const lead = await readTable<LeadRow | null>((client) =>
+      client.from("leads").select("*").eq("id", outreach.lead_id).maybeSingle(),
+    );
+    commercialOffer = await readTable<CommercialOfferRow | null>((client) =>
+      client.from("commercial_offers").select("*").eq("id", outreach.commercial_offer_id!).maybeSingle(),
+    );
+    const eligibility = evaluateFollowUpEligibility({
+      leadStatus: lead?.status ?? "",
+      offer: commercialOffer
+        ? {
+            status: commercialOffer.status,
+            setupAmountCents: commercialOffer.setup_amount_cents,
+            managedMonthlyAmountCents: commercialOffer.managed_monthly_amount_cents,
+            managedPlanSelected: commercialOffer.managed_plan_selected,
+            purchaseTokenHash: commercialOffer.purchase_token_hash,
+            purchaseLinkRevokedAt: commercialOffer.purchase_link_revoked_at,
+          }
+        : null,
+    });
+    if (!eligibility.ok) {
+      const failed = eligibility.checks.find((check) => !check.ok);
+      return { ok: false, error: failed?.detail ?? "This payment follow-up is not eligible to send." };
+    }
+    if (commercialOffer?.purchase_token_hash !== outreach.purchase_token_hash) {
+      return { ok: false, error: "The offer's purchase link no longer matches the approved follow-up." };
+    }
+  } else {
+    if (!outreach.attribution_token_hash || !outreach.attribution_token_created_at) {
+      return { ok: false, error: "Outreach is missing a valid attribution link." };
+    }
+    const preview = outreach.preview_deployment_id
+      ? await readTable<PreviewDeploymentRow | null>((client) =>
+          client.from("preview_deployments").select("*").eq("id", outreach.preview_deployment_id!).maybeSingle(),
+        )
+      : null;
+    const previewEligibility = validateProspectSendPreview(outreach, preview);
+    if (!previewEligibility.ok) {
+      return { ok: false, error: `${previewEligibility.error} Cannot send outreach with invalid preview.` };
+    }
   }
 
   if (!outreach.approval_id) return { ok: false, error: "Send approval is required before sending." };
@@ -716,20 +913,42 @@ export async function sendApprovedOutreach(
     return { ok: false, error: "Recipient is suppressed or has unsubscribed." };
   }
 
-  const authConfig = getAuthConfig();
-  if (!authConfig) return { ok: false, error: "Admin auth is not configured." };
-  const attributionToken = createOutreachAttributionToken({
-    outreachId: outreach.id,
-    createdAt: outreach.attribution_token_created_at,
-    secret: authConfig.authSecret,
-  });
-  if (attributionToken.hash !== outreach.attribution_token_hash) {
-    return { ok: false, error: "Outreach attribution token verification failed." };
+  let renderedBody: string;
+  if (kind === "follow_up") {
+    // The raw purchase link is supplied by the operator at send time and
+    // verified against the hash the approval bound. SiteForge cannot
+    // reconstruct it -- only the hash and an 8-character hint are stored.
+    const purchaseUrl = (options.purchaseUrl ?? "").trim();
+    if (!purchaseUrl) {
+      return { ok: false, error: "Paste the customer purchase link for this offer to send the follow-up." };
+    }
+    const token = purchaseUrl.split("/").pop() ?? "";
+    if (!isPurchaseToken(token) || hashPurchaseToken(token) !== outreach.purchase_token_hash) {
+      return {
+        ok: false,
+        error: "That purchase link does not match the link this follow-up was approved against.",
+      };
+    }
+    if (!(outreach.body ?? "").includes(FOLLOW_UP_LINK_PLACEHOLDER)) {
+      return { ok: false, error: "The approved follow-up body no longer contains the purchase-link placeholder." };
+    }
+    renderedBody = (outreach.body ?? "").replaceAll(FOLLOW_UP_LINK_PLACEHOLDER, purchaseUrl);
+  } else {
+    const authConfig = getAuthConfig();
+    if (!authConfig) return { ok: false, error: "Admin auth is not configured." };
+    const attributionToken = createOutreachAttributionToken({
+      outreachId: outreach.id,
+      createdAt: outreach.attribution_token_created_at!,
+      secret: authConfig.authSecret,
+    });
+    if (attributionToken.hash !== outreach.attribution_token_hash) {
+      return { ok: false, error: "Outreach attribution token verification failed." };
+    }
+    renderedBody = renderOutreachBody({
+      bodyTemplate: outreach.body ?? "",
+      publicPath: `/o/${attributionToken.token}`,
+    });
   }
-  const renderedBody = renderOutreachBody({
-    bodyTemplate: outreach.body ?? "",
-    publicPath: `/o/${attributionToken.token}`,
-  });
 
   await mutateTable((client) =>
     client.from("outreach_events").insert({
@@ -792,12 +1011,16 @@ export async function sendApprovedOutreach(
       .select("id"),
   );
 
-  // Advance lead status monotonically to contacted
+  // Advance lead status monotonically to contacted -- cold outreach only. A
+  // payment follow-up goes to a lead that is already "interested", and the
+  // M9.9 lifecycle table legitimately allows interested -> contacted as an
+  // operator fallback, so proposing "contacted" here would silently walk the
+  // lead backwards.
   const lead = await readTable<LeadRow | null>((client) =>
     client.from("leads").select("*").eq("id", outreach.lead_id).maybeSingle(),
   );
 
-  if (lead) {
+  if (lead && kind === "cold_outreach") {
     const nextLeadStatus = resolveMonotonicLeadStatus(lead.status, "contacted");
     if (nextLeadStatus !== lead.status) {
       await mutateTable((client) =>

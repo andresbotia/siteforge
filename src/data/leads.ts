@@ -9,9 +9,15 @@ import {
   type ManualPublicProspectInput,
 } from "@/lib/prospects/manual-public";
 import {
+  canTransitionLeadStatus,
+  isLeadStatus as isLifecycleLeadStatus,
+  normalizeArchivedReason,
+} from "@/lib/leads/lifecycle";
+import {
   isNoStandaloneWebsiteSummary,
   noStandaloneWebsiteSummary,
 } from "@/lib/prospects/no-website";
+import { normalizeSuggestedDomain } from "@/lib/prospects/suggested-domain";
 import {
   buildVerifiedPublicFactsInspectionSummary,
   readVerifiedPublicFacts,
@@ -34,20 +40,8 @@ import type {
 import type { AgentRunRow, AuditRow, Json, LeadRow } from "@/types/database";
 import type { ExistingLeadRecord } from "@/lib/scout/types";
 
-const leadStatuses = new Set<LeadStatus>([
-  "discovered",
-  "qualified",
-  "audited",
-  "website_built",
-  "approved",
-  "contacted",
-  "interested",
-  "customer",
-  "rejected",
-]);
-
 function isLeadStatus(value: string): value is LeadStatus {
-  return leadStatuses.has(value as LeadStatus);
+  return isLifecycleLeadStatus(value);
 }
 
 const qualificationTiers = new Set<QualificationTier>([
@@ -90,6 +84,9 @@ function mapLead(row: LeadRow, websiteScore = 0): Lead {
     websiteScore: derivedWebsiteScore,
     leadScore: row.overall_qualification_score ?? row.lead_score ?? 0,
     status: isLeadStatus(row.status) ? row.status : "discovered",
+    archivedReason: row.archived_reason,
+    archivedAt: row.archived_at,
+    suggestedDomain: row.suggested_domain,
     createdAt: row.created_at,
     qualificationTier:
       tier && qualificationTiers.has(tier as QualificationTier)
@@ -415,6 +412,96 @@ export async function updateLeadVerifiedPublicFacts(
   });
 
   return { ok: true };
+}
+
+/**
+ * The only operator-driven lead status write. Every rule lives in
+ * `src/lib/leads/lifecycle.ts`; this function adds persistence plus the
+ * archived-reason bookkeeping the table demands (the database enforces the
+ * same rule independently via leads_archived_reason_check).
+ */
+export async function updateLeadLifecycleStatus(input: {
+  leadId: string;
+  nextStatus: string;
+  archivedReason?: string | null;
+}): Promise<{ ok: true; status: string } | { ok: false; error: string }> {
+  const lead = await readTable<LeadRow | null>((client) =>
+    client.from("leads").select("*").eq("id", input.leadId).maybeSingle(),
+  );
+  if (!lead) return { ok: false, error: "Lead was not found." };
+
+  const archivedReason = normalizeArchivedReason(input.archivedReason);
+  const transition = canTransitionLeadStatus(lead.status, input.nextStatus, { archivedReason });
+  if (!transition.ok) return transition;
+  if (lead.status === input.nextStatus) return { ok: true, status: lead.status };
+
+  const now = new Date().toISOString();
+  const archiving = input.nextStatus === "archived";
+  const updated = await mutateTable<Pick<LeadRow, "id"> | null>((client) =>
+    client
+      .from("leads")
+      .update({
+        status: input.nextStatus,
+        archived_reason: archiving ? archivedReason : lead.archived_reason,
+        archived_at: archiving ? now : lead.archived_at,
+      })
+      .eq("id", lead.id)
+      .select("id")
+      .maybeSingle(),
+  );
+  if (!updated) return { ok: false, error: "Could not update the lead status." };
+
+  await recordActivityEvent({
+    eventType: archiving ? "lead_archived" : "lead_status_changed",
+    title: archiving ? "Lead archived" : "Lead status changed",
+    description: archiving
+      ? `${lead.business_name}: archived (${archivedReason ?? "no reason"})`
+      : `${lead.business_name}: ${lead.status} -> ${input.nextStatus}`,
+    actorType: "admin",
+    leadId: lead.id,
+    metadata: {
+      from_status: lead.status,
+      to_status: input.nextStatus,
+      archived_reason: archivedReason ?? "",
+    },
+  });
+
+  return { ok: true, status: input.nextStatus };
+}
+
+/**
+ * Operator-supplied example domain. SiteForge never checks or claims
+ * availability -- see src/lib/prospects/suggested-domain.ts.
+ */
+export async function updateLeadSuggestedDomain(input: {
+  leadId: string;
+  suggestedDomain: string;
+}): Promise<{ ok: true; suggestedDomain: string | null } | { ok: false; error: string }> {
+  const parsed = normalizeSuggestedDomain(input.suggestedDomain);
+  if (!parsed.ok) return parsed;
+
+  const updated = await mutateTable<Pick<LeadRow, "id"> | null>((client) =>
+    client
+      .from("leads")
+      .update({ suggested_domain: parsed.domain })
+      .eq("id", input.leadId)
+      .select("id")
+      .maybeSingle(),
+  );
+  if (!updated) return { ok: false, error: "Lead was not found." };
+
+  await recordActivityEvent({
+    eventType: "lead_suggested_domain_updated",
+    title: parsed.domain ? "Suggested domain saved" : "Suggested domain cleared",
+    description: parsed.domain
+      ? `Operator-supplied example domain: ${parsed.domain} (availability not checked by SiteForge)`
+      : "Operator cleared the suggested domain.",
+    actorType: "admin",
+    leadId: input.leadId,
+    metadata: { suggested_domain: parsed.domain ?? "" },
+  });
+
+  return { ok: true, suggestedDomain: parsed.domain };
 }
 
 export async function getLeadById(id: string): Promise<Lead | null> {

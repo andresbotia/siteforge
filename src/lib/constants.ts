@@ -42,6 +42,7 @@ export const leadStatuses: LeadStatus[] = [
   "interested",
   "customer",
   "rejected",
+  "archived",
 ];
 
 export const settingsDefaults = {

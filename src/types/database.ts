@@ -41,6 +41,9 @@ export type Database = {
           inspection_summary: Json;
           discovered_at: string | null;
           last_scout_run_id: string | null;
+          archived_reason: string | null;
+          archived_at: string | null;
+          suggested_domain: string | null;
         } & Timestamps;
         Insert: {
           id?: string;
@@ -68,6 +71,9 @@ export type Database = {
           inspection_summary?: Json;
           discovered_at?: string | null;
           last_scout_run_id?: string | null;
+          archived_reason?: string | null;
+          archived_at?: string | null;
+          suggested_domain?: string | null;
         };
         Update: {
           phone?: string | null;
@@ -87,6 +93,9 @@ export type Database = {
           inspection_summary?: Json;
           discovered_at?: string | null;
           last_scout_run_id?: string | null;
+          archived_reason?: string | null;
+          archived_at?: string | null;
+          suggested_domain?: string | null;
         };
         Relationships: [];
       };
@@ -583,6 +592,9 @@ export type Database = {
       outreach: {
         Row: {
           id: string;
+          kind: string;
+          commercial_offer_id: string | null;
+          purchase_token_hash: string | null;
           lead_id: string;
           generated_website_id: string | null;
           preview_deployment_id: string | null;
@@ -609,6 +621,9 @@ export type Database = {
         } & Timestamps;
         Insert: {
           id?: string;
+          kind?: string;
+          commercial_offer_id?: string | null;
+          purchase_token_hash?: string | null;
           lead_id: string;
           generated_website_id?: string | null;
           preview_deployment_id?: string | null;
@@ -634,6 +649,9 @@ export type Database = {
           metadata?: Json;
         };
         Update: {
+          kind?: string;
+          commercial_offer_id?: string | null;
+          purchase_token_hash?: string | null;
           lead_id?: string;
           generated_website_id?: string | null;
           preview_deployment_id?: string | null;

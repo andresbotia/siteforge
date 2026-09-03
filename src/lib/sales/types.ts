@@ -11,6 +11,8 @@ export type SalesLeadInput = {
   websiteUrl?: string | null;
   websiteStatus?: "has_website" | "no_standalone_website" | "unknown";
   status: LeadStatus;
+  /** Operator-supplied example domain; never an availability claim (M9.9). */
+  suggestedDomain?: string | null;
 };
 
 export type SalesAuditInput = {

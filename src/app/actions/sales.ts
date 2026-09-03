@@ -7,10 +7,28 @@ import {
   sendApprovedOutreach,
   updateOutreachDraft,
 } from "@/data/outreach";
-import { startSalesDraftRun } from "@/data/sales";
+import { startFollowUpDraftRun, startSalesDraftRun } from "@/data/sales";
 import { requireAdminSession } from "@/lib/auth/guard";
 
 export type SalesActionState = { ok: boolean; error?: string; outreachId?: string } | null;
+
+/** M9.9 payment follow-up draft. Deterministic, $0, and still fully approval-gated before any send. */
+export async function startFollowUpDraftAction(
+  _prev: SalesActionState,
+  formData: FormData,
+): Promise<SalesActionState> {
+  await requireAdminSession();
+  const offerId = String(formData.get("offerId") ?? "");
+  const recipientEmailOverride = String(formData.get("recipientEmail") ?? "").trim() || undefined;
+  if (!offerId) return { ok: false, error: "Missing offer." };
+
+  const result = await startFollowUpDraftRun({ offerId, recipientEmailOverride });
+  if (!result.ok) return result;
+
+  revalidatePath("/outreach");
+  revalidatePath(`/offers/${offerId}`);
+  redirect(`/outreach/${result.outreachId}`);
+}
 
 export async function startSalesDraftAction(
   _prev: SalesActionState,
@@ -88,7 +106,12 @@ export async function sendApprovedOutreachAction(
   const outreachId = String(formData.get("outreachId") ?? "");
   if (!outreachId) return { ok: false, error: "Missing outreach ID." };
 
-  const result = await sendApprovedOutreach(outreachId);
+  // Only a payment follow-up supplies this: the raw sfb_ purchase link is
+  // never persisted, so the operator pastes it here and the backend verifies
+  // its hash against the hash the approval bound.
+  const purchaseUrl = String(formData.get("purchaseUrl") ?? "").trim() || undefined;
+
+  const result = await sendApprovedOutreach(outreachId, { purchaseUrl });
   if (result.ok) {
     revalidatePath(`/outreach/${outreachId}`);
     revalidatePath("/outreach");
