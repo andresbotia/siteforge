@@ -22,6 +22,7 @@ import {
   isOutreachAttributionToken,
   renderOutreachBody,
 } from "@/lib/sales/attribution";
+import { bodyStatesCommercialTerms } from "@/lib/sales/commercial-terms";
 import { computeOutreachBindingHash } from "@/lib/sales/content-hash";
 import {
   evaluateFollowUpEligibility,
@@ -361,6 +362,7 @@ function buildProspectSendReadiness(input: {
     replyToConfigured: emailStatus.replyToConfigured,
   });
   const unsubscribeOk = hasUnsubscribeLanguage(outreach.body);
+  const commercialTermsOk = bodyStatesCommercialTerms(outreach.body);
   const followUp = isFollowUp
     ? evaluateFollowUpEligibility({
         leadStatus: lead?.status ?? "",
@@ -436,6 +438,14 @@ function buildProspectSendReadiness(input: {
       label: "Opt-out language",
       ok: unsubscribeOk,
       detail: unsubscribeOk ? "Approved body includes unsubscribe or opt-out language" : "Real email requires unsubscribe or opt-out language",
+    },
+    {
+      id: "commercial_terms",
+      label: "Commercial terms",
+      ok: commercialTermsOk,
+      detail: commercialTermsOk
+        ? "Body states the fixed commercial terms (setup + domain + first-year hosting, optional monthly after year one, domain ownership, lapse handling)"
+        : "Body is missing one or more of the required fixed commercial terms",
     },
   ];
 
@@ -897,6 +907,12 @@ export async function sendApprovedOutreach(
       return {
         ok: false,
         error: "Real email delivery requires unsubscribe or opt-out language in the approved body.",
+      };
+    }
+    if (!bodyStatesCommercialTerms(outreach.body)) {
+      return {
+        ok: false,
+        error: "Real email delivery requires the fixed commercial terms in the approved body.",
       };
     }
   }

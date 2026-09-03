@@ -15,6 +15,7 @@ import {
   resolveOfferPlan,
 } from "@/lib/payments/plans";
 import type { ApprovalRow, OutreachRow } from "@/types/database";
+import { bodyStatesCommercialTerms } from "./commercial-terms";
 import { computeOutreachBindingHash } from "./content-hash";
 import {
   composeFollowUpDraft,
@@ -84,21 +85,26 @@ describe("payment follow-up draft", () => {
     assert.equal(a.body, b.body);
   });
 
-  it("states what is purchased, the price, the optional managed plan, and what happens after payment", () => {
+  it("states what is purchased, the fixed commercial terms, and what happens after payment", () => {
     const draft = composeFollowUpDraft(offerInput, { recipientEmail: "owner@example.test" });
-    assert.match(draft.body, /Website setup: \$99 one time/);
-    assert.match(draft.body, /Managed website: \$39 per month, optional/);
+    assert.match(draft.body, /website setup for \$99 one time/);
+    assert.match(draft.body, /\$99 is a one-time payment.*the first year of hosting/s);
+    assert.match(draft.body, /\$39\/month is optional and only applies after the first year/);
     assert.match(draft.body, /What happens after payment/);
     assert.match(draft.body, /setup queue/);
+    assert.equal(bodyStatesCommercialTerms(draft.body), true);
   });
 
-  it("says the monthly plan is absent when the offer did not select it", () => {
-    const draft = composeFollowUpDraft(
-      { ...offerInput, managedPlanSelected: false },
+  it("states the same fixed monthly-term language whether or not the offer selected the managed plan", () => {
+    const withManaged = composeFollowUpDraft(offerInput, { recipientEmail: "owner@example.test" });
+    const withoutManaged = composeFollowUpDraft(
+      { ...offerInput, managedPlanSelected: false, managedMonthlyAmountCents: null },
       { recipientEmail: "owner@example.test" },
     );
-    assert.match(draft.body, /No monthly plan is included/);
-    assert.doesNotMatch(draft.body, /Managed website: \$39 per month/);
+    for (const draft of [withManaged, withoutManaged]) {
+      assert.match(draft.body, /\$39\/month is optional and only applies after the first year/);
+      assert.equal(bodyStatesCommercialTerms(draft.body), true);
+    }
   });
 
   it("includes the same opt-out language the cold path requires before a real send", () => {

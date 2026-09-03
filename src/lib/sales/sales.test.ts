@@ -13,6 +13,7 @@ import {
   M95D_FIRST_CAMPAIGN_ID,
   M95D_FIRST_CAMPAIGN_MAX_PROSPECTS,
 } from "./campaign";
+import { bodyStatesCommercialTerms } from "./commercial-terms";
 import { computeOutreachContentHash, verifyOutreachContentHash } from "./content-hash";
 import { composeSalesDraft } from "./draft";
 import { isLeadEligibleForSales } from "./eligibility";
@@ -88,11 +89,19 @@ const mockPreview: SalesPreviewInput = {
 };
 
 describe("Sales Agent: M9.9 cold email additions", () => {
-  test("states the $99 setup and optional $39/month managed plan", () => {
+  test("states the fixed commercial terms in full, with term language on the monthly", () => {
     const draft = composeSalesDraft(mockLead, mockAudit, mockWebsite, mockPreview);
-    assert.match(draft.body, /\$99 one time/);
-    assert.match(draft.body, /optional \$39 per month/);
-    assert.match(draft.body, /The monthly plan is optional/);
+    // $99 one-time covers setup + a domain + the first year of hosting.
+    assert.match(draft.body, /\$99 is a one-time payment.*registering a domain.*the first year of hosting/s);
+    // $39/month is optional and only after year one -- it does not begin now.
+    assert.match(draft.body, /\$39\/month is optional and only applies after the first year/);
+    // Domain ownership.
+    assert.match(draft.body, /registered in .+'s name, with SiteForge listed only as the technical contact/);
+    assert.match(draft.body, /transfers to you on request/);
+    // Lapse handling.
+    assert.match(draft.body, /the site stays online for 30 days and then comes down/);
+    assert.match(draft.body, /we hand over the site files and transfer the domain to you/);
+    assert.equal(bodyStatesCommercialTerms(draft.body), true);
   });
 
   test("includes opt-out language so a real send is not blocked by the delivery policy", () => {

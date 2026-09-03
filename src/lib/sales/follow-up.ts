@@ -1,5 +1,9 @@
 import { centsToUsd } from "@/lib/payments/money";
 import { offerAmountsMatchConfiguredPrices } from "@/lib/payments/plans";
+import {
+  COMMERCIAL_TERMS_HEADING,
+  commercialTermsLines,
+} from "./commercial-terms";
 import { computeFollowUpContentHash } from "./content-hash";
 import type { SalesEvidenceItem } from "./types";
 
@@ -57,8 +61,6 @@ export function composeFollowUpDraft(
   const senderEmail = options.senderEmail || "outreach@siteforge.agency";
   const recipientEmail = options.recipientEmail.trim();
   const businessName = offer.businessName.trim();
-  const includesManaged =
-    offer.managedPlanSelected && offer.managedMonthlyAmountCents !== null;
 
   const evidence: SalesEvidenceItem[] = [
     {
@@ -80,11 +82,10 @@ export function composeFollowUpDraft(
     "",
     `Thanks for your interest. Here is everything you need to move forward.`,
     "",
-    `What you're purchasing:`,
-    `- Website setup: ${money(offer.setupAmountCents)} one time. We build and set up your website, then hand it over ready to use.`,
-    includesManaged && offer.managedMonthlyAmountCents !== null
-      ? `- Managed website: ${money(offer.managedMonthlyAmountCents)} per month, optional. Ongoing management of the site after it is live. You can take the website without it.`
-      : `- No monthly plan is included in this offer. The ${money(offer.setupAmountCents)} setup is the only charge.`,
+    `What you're purchasing: a website setup for ${money(offer.setupAmountCents)} one time. We build and set up your website, then hand it over ready to use.`,
+    "",
+    COMMERCIAL_TERMS_HEADING,
+    ...commercialTermsLines(businessName),
     "",
     `You can pay securely here:`,
     FOLLOW_UP_LINK_PLACEHOLDER,

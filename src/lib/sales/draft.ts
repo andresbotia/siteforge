@@ -3,6 +3,10 @@
   DEFAULT_SETUP_AMOUNT_CENTS,
 } from "@/lib/payments/limits";
 import { centsToUsd } from "@/lib/payments/money";
+import {
+  COMMERCIAL_TERMS_HEADING,
+  commercialTermsLines,
+} from "./commercial-terms";
 import { computeOutreachContentHash } from "./content-hash";
 import type {
   SalesAuditInput,
@@ -154,7 +158,8 @@ export function composeSalesDraft(
         ]
       : []),
     "",
-    `Pricing is straightforward: ${money(DEFAULT_SETUP_AMOUNT_CENTS)} one time to build and set up the site, plus an optional ${money(DEFAULT_MANAGED_MONTHLY_AMOUNT_CENTS)} per month if you would like us to manage it after it is live. The monthly plan is optional — the website does not depend on it.`,
+    COMMERCIAL_TERMS_HEADING,
+    ...commercialTermsLines(businessName),
     "",
     `If you like the direction or have any questions about how it works, just reply directly to this email.`,
     "",
