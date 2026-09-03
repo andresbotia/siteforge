@@ -1,5 +1,5 @@
 /**
- * SiteForge roadmap, as of M9.9.
+ * SiteForge roadmap, as of M10.
  *
  * Deliberately a typed constant in source, not a database table: there is no
  * CRUD, no migration, and no admin editing surface. Git history is the audit
@@ -173,7 +173,7 @@ export const ROADMAP: readonly Milestone[] = [
   {
     id: "M9.9",
     title: "Lifecycle states and the payment follow-up email",
-    status: "current",
+    status: "done",
     goal: "Model where a lead actually is, lock offer amounts to the configured prices, and add the post-intent payment email.",
     exitCriteria: [
       "One explicit allowed-transitions table with archived reachable from any state and an interested -> contacted fallback",
@@ -185,13 +185,13 @@ export const ROADMAP: readonly Milestone[] = [
   {
     id: "M10",
     title: "Operator Console",
-    status: "next",
+    status: "current",
     goal: "Make the daily operating surface answer 'what needs my attention right now' without hunting across pages.",
     exitCriteria: [
-      "A single queue view spanning approvals, drafts, stalled leads and payment states",
-      "Every item links straight to the action that unblocks it",
+      "Primary nav collapsed to five task-shaped items; /leads/[id] operates a business end to end",
+      "work_items table + /today queue, created and resolved by the same state-change code paths, ordered by proximity to revenue",
     ],
-    notes: "Navigation and dashboard layout changes belong here, not in M9.9.",
+    notes: "Structure only. The visual system pass is M10.5. Outreach commercial terms corrected here too.",
   },
   {
     id: "M10.5",

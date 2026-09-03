@@ -1,6 +1,80 @@
 # SiteForge Handoff
 
-For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5B real-prospect preparation and Auditor calibration are locked, with the M9.5B Auditor Calibration lock at `1358caad47c46b9832f875ec1e62d5834043906b`. M9.5C guarded real email integration/internal send is complete: Resend is configured server-side, the sending domain was verified externally, the live-email gate was exercised for one operator-only test, and the test delivered without prospect/customer funnel mutation. M9.5D first controlled prospect campaign preparation is current. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live payment use, or broader production operation. This is NOT M10.
+For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5B real-prospect preparation and Auditor calibration are locked, with the M9.5B Auditor Calibration lock at `1358caad47c46b9832f875ec1e62d5834043906b`. M9.5C guarded real email integration/internal send is complete: Resend is configured server-side, the sending domain was verified externally, the live-email gate was exercised for one operator-only test, and the test delivered without prospect/customer funnel mutation. M9.5D first controlled prospect campaign preparation is current. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live payment use, or broader production operation. M10 (Operator Console -- navigation + information architecture) is now in progress; the visual system pass is still M10.5 and untouched.
+
+## Session: M10 -- Operator Console (navigation and information architecture)
+
+Session start commit `4d8a0d2` (M9.9). Five commits, none pushed. Two migrations created and **applied to the hosted project** via the normal `supabase migration list -> db push --dry-run -> db push --yes` flow (the Supabase CLI is present in this environment, v2.116.0). No live Stripe call, no live email send, no paid AI, no deployment, DNS, or domain action, no prospect contacted. Mock providers only. M10 is a structure milestone: no color system, typography, or component restyle -- that is M10.5.
+
+### Task 0 -- carried-over fixes
+
+- `20260902000000_lead_lifecycle_and_follow_up_outreach.sql` (M9.9) was the only genuinely pending migration; it is now applied. `20260901020000_stripe_subscription_status.sql` was already applied in an earlier session (confirmed via `migration list`), contrary to the task's assumption that both were pending.
+- New migration `20260903000000_widen_outreach_status_check.sql`: widens `public.outreach.status` CHECK from `{draft, awaiting_approval, approved, sent, failed, replied}` to additionally allow `{interested, declined, unsubscribed}` (the full `dbStatuses` set in `src/data/outreach.ts`). Additive drop+re-add of the constraint; no data affected. Applied. Note: those three values are today only ever DERIVED from `outreach_events` in `displayStatus()` and never written to the column -- this widening is defensive alignment, not a bug fix.
+- `src/lib/leads/lifecycle.ts`: added the `archived -> contacted` edge so an accidental archive is reversible. It is OPERATOR-ONLY -- `resolveLeadStatusTransition` (the automated-writer resolver) now also refuses to move a lead out of `archived`, so Scout/Auditor/the send path/the webhook can never resurrect a retired lead. `updateLeadLifecycleStatus` clears `archived_reason`/`archived_at` on un-archive. Tests updated (the old "archived is terminal" test became "archived has exactly one exit").
+- `src/lib/email/delivery-policy.ts` `isRecipientSuppressed`: a suppression event whose payload names no recipient now matches **nothing** instead of every address (previously an empty `eventRecipient` short-circuited to `true` and suppressed all sends). Malformed-event test added in `email.test.ts`.
+- `src/components/offers/purchase-link-panel.tsx`: a warning before publish and a stronger one after, stating the link is shown once and losing it forces a revoke-republish plus follow-up re-approval.
+- `AGENTS.md` milestone-boundary section rewritten for M9.5-M9.9 and M10 (it still described M9); architecture notes gained `src/lib/leads/lifecycle.ts` and `src/lib/work-items` / `src/data/work-items.ts` / `/today` / `/leads/[id]`.
+
+### Task 1 -- navigation collapse
+
+`src/components/layout/nav-config.ts`: primary nav is now five items -- Today, Pipeline (`/leads`), Customers, Roadmap, Settings. Everything else (`/agents/*`, `/templates`, `/visual-qa`, `/audits`, `/websites`, `/outreach`, `/offers`, `/approvals`, `/analytics`, the old Overview at `/`) keeps its route and is demoted to a collapsed "Tools" group in the sidebar (`toolsSections`) and a "Tools" tab in Settings. Nothing was deleted. `POST_LOGIN_PATH` is `/today`; `/dashboard` redirects there. Sidebar footer no longer reads "Milestone 1 / Mock data only" -- it reads "M10 - Operator Console / Mock payment & email providers". `/leads` is reframed as "Pipeline".
+
+### Task 2 -- business detail as the unit of work
+
+- `src/lib/leads/operator-actions.ts` (NEW) + 13 tests: `deriveOperatorActions(ctx)` composes the lifecycle transition table and the existing eligibility helpers (`isLeadEligibleForAudit/Build/Sales`, `evaluateFollowUpEligibility`) into the ordered list of actions legal for a lead's current state -- there is no second rule set. `recommendWebsiteProducer(industry)` routes the single "Create website" entry point to Builder / Designer Job / external import via `needsNewMasterTemplate`.
+- `/leads/[id]` now carries, in sections with anchors: a "Next actions" panel (only legal actions, revenue-ordered), a single "Create website" entry point (`CreateWebsiteEntry`), the outreach thread (both kinds, every row, status), offer + purchase-link state (`PurchaseLinkPanel` inline per approved/linked offer), payment & customer state, plus the existing business facts / Scout qualification / audit / website sections. The merged chronological timeline already existed -- `activity_events` is the log every code path writes to; nothing new was needed there.
+- `Card` gained an optional `id` prop for the anchors. All three website producers and every existing control are unchanged.
+
+### Task 3 -- work items and the Today queue
+
+- `20260903010000_work_items.sql` (applied): `work_items` (id, lead_id, type, dedupe_key, priority, metadata, created_at, resolved_at, resolution, snoozed_until, dismissed_at, dismissed_reason). Partial unique index on `(lead_id, type, dedupe_key) where resolved_at is null and dismissed_at is null`. RLS enabled; `anon`/`authenticated`/`public` revoked -- same pattern as every other table.
+- `src/lib/work-items/{types,derive}.ts` + 11 tests: `WORK_ITEM_TYPES` is declared in revenue-proximity order (`handle_reply` > `confirm_intent` > `approve_follow_up` > `fulfill_site` > `review_site` > `approve_outreach` > `qualify_lead`); `deriveDesiredWorkItems()` computes the desired open set for one lead purely from live state.
+- `src/data/work-items.ts`: `reconcileWorkItems()` recomputes the desired set for **every** lead in ~8 bulk queries and diffs the table -- insert desired-but-missing, resolve open-but-not-desired with `resolution='condition_no_longer_present'`. Resolution is therefore derived from real state every pass, so a stale item cannot outlive its cause. `getTodayQueue()` reconciles then returns the queue capped at 7 with `hiddenCount`/`snoozedCount`. `snoozeWorkItem` (24h default) and `dismissWorkItem` (reason required; a dismissed item is a tombstone `reconcileWorkItems` will not recreate for the same `dedupe_key`).
+- Creation is wired into the same server-side paths that change state: Auditor run completion (`src/data/auditor.ts`), `requestOutreachSendApproval` (`src/data/outreach.ts`), `updateLeadLifecycleStatus` (`src/data/leads.ts`) all call `syncWorkItemsForLead()` (which delegates to the full reconcile -- one derivation of correctness); the Stripe webhook conversion in `src/data/payments.ts` does a direct raw `work_items` insert for `fulfill_site` because there is no admin session in the webhook path (the partial unique index makes a retry idempotent, and `/today`'s reconcile owns resolution).
+- `/today` rewritten as the queue and is the post-login landing page. `package.json` test glob extended to `src/lib/work-items/*.test.ts`.
+
+**What creates and what resolves each work item:**
+
+| type | created when | resolved when |
+| --- | --- | --- |
+| `qualify_lead` | lead is in `discovered` | lead status advances past `discovered` (any other status, including `rejected`/`archived`) |
+| `review_site` | a `website_audits` row exists for the lead and no `generated_websites` row does, and the lead is not `archived`/`rejected`/`customer` | a `generated_websites` row exists for the lead, or the lead becomes archived/rejected/customer. Keyed on the audit id, so a re-audit produces a fresh item |
+| `approve_outreach` | a `pending` `external_email` approval for the lead whose payload action is `send_outreach_email` (or a legacy approval with no action) | that approval is no longer pending (approved/rejected). Keyed on approval id |
+| `approve_follow_up` | a `pending` `external_email` approval for the lead whose payload action is `send_follow_up_email` | that approval is no longer pending. Keyed on approval id |
+| `handle_reply` | an outreach row for the lead has a `replied` event and the lead status is not yet `interested`/`declined`/`archived`/`customer` | the lead status reaches one of those. Keyed on outreach id |
+| `confirm_intent` | lead status is `interested` and no non-`rejected`/`expired` `commercial_offers` row exists | an offer is created, or the lead leaves `interested` |
+| `fulfill_site` | a `customers` row for the lead is `pending_setup` (webhook conversion) | the customer status leaves `pending_setup`. Keyed on customer id |
+
+### Task 4 -- outreach commercial terms
+
+`src/lib/sales/commercial-terms.ts` (NEW) + `commercial-terms.test.ts`: the four fixed clauses -- (1) $99 one-time covers setup + a domain + the first year of hosting; (2) $39/month is optional and only after year one, covering hosting plus changes; (3) domain in the business's name, SiteForge as technical contact, transferable on request; (4) on lapse the site stays up 30 days then comes down, with files + domain handed over regardless. Amounts read from the locked payment constants. Both `composeSalesDraft` (cold) and `composeFollowUpDraft` (payment follow-up) now embed `commercialTermsLines()` verbatim, replacing the old one-line "$99 setup plus optional $39/month" that implied the monthly began immediately. "Non-editable" is enforced at the send path: `bodyStatesCommercialTerms()` is a new send-readiness item **and** a hard gate in `sendApprovedOutreach` for real delivery (next to the existing unsubscribe-language gate) -- an operator who strips the terms from an edited draft cannot send. `sales.test.ts` / `follow-up.test.ts` updated.
+
+### Validation
+
+`npx tsc --noEmit`, `npm test` (652/652, up from 622 at M9.9 end -- +30: 13 operator-actions, 11 work-item derive, 4 commercial-terms, 2 lifecycle/email, and the sales/follow-up tests were rewritten in place), `npm run lint`, `npm run build`, `git diff --check` all clean.
+
+### Contradictions with the instructions / repo docs
+
+- **Task 0 said "the two pending migrations" were `20260902000000` and `20260901020000`.** Only `20260902000000` was pending; `20260901020000` was applied in a prior session. Both are now applied regardless.
+- **M9.9's HANDOFF "Open questions" wanted an operator decision on which un-archive edge to add.** I chose `archived -> contacted` (the task specified it) and made it operator-only. If the operator wanted "restore to the pre-archive status," that is a different edge and would need the pre-archive status recorded at archive time.
+- **AGENTS.md rule 15 "prefer reversible actions"** is now better satisfied for archive; it was previously in tension with "archived is terminal".
+
+### Assumptions
+
+- `/` (old Overview) stays as a Tools screen rather than being deleted or merged into `/today` -- the task says it is not primary nav, not that it is gone, and it is a useful debugging surface.
+- `review_site` means "an audit is done, produce a website" (the task's literal "a completed audit creates review_site"). It is keyed on the audit id and resolves when a `generated_websites` row appears -- it is not a "review the generated site's visuals" item (that is Designer's `visual_review_required` job state, unchanged).
+- `reconcileWorkItems()` runs over **all** leads on every `/today` load. Bulk-queried (~8 reads total), fine at this data scale; if the lead table grows large this should become lead-scoped.
+- `syncWorkItemsForLead(leadId)` currently delegates to the full reconcile. The signature takes a lead id so call sites read naturally and a scoped implementation is a drop-in later.
+- Snooze is a fixed 24h from the queue row (the action accepts an `hours` field for a future picker).
+- Changing the cold/follow-up body text changes the `contentHash` of **new** drafts only; already-stored rows and already-granted approvals keep their hashes and stay valid. Editing still invalidates approval, unchanged.
+
+### Noticed in passing / risk
+
+- `mutateTable`/`readTable` swallow errors (log + return null). `reconcileWorkItems` inserts/resolves through them, so a transient failure silently no-ops and the next reconcile fixes it -- acceptable, but there is no surfaced error if the `work_items` write path is broken.
+- The `work_items` partial unique index protects against duplicate **open** items, but two concurrent `reconcileWorkItems` runs could each try to insert the same row; one gets a unique-violation which `mutateTable` logs and swallows. Fine for single-admin.
+- `getPreviewAnalyticsForWebsite` is now called on every `/leads/[id]` render (for the operator-action context and preview section) -- one extra query per detail-page load.
+- Seed/dev data has many `discovered` leads, so a fresh `/today` will show a full queue of `qualify_lead` items capped at 7 with the rest counted as hidden. Expected, but worth knowing before demoing.
+- `POST_LOGIN_PATH` moved to `/today`; `HANDOFF.md`/`README.md` still mention `/dashboard` in their manual login-test steps. `/dashboard` still resolves (it redirects), so the steps are not broken, just stale.
 
 ## Session: M9.9 -- lifecycle states and the payment follow-up email
 
