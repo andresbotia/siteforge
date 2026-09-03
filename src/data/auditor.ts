@@ -11,6 +11,7 @@ import {
 } from "@/lib/auditor/limits";
 import { buildAuditorToolCalls, buildWebsiteAuditInsert } from "@/lib/auditor/persist";
 import { runAuditorPipeline } from "@/lib/auditor/run";
+import { syncWorkItemsForLead } from "@/data/work-items";
 import { mutateTable, readTable } from "@/lib/supabase/server";
 import { asRecord } from "@/lib/json";
 import type { Json } from "@/types/database";
@@ -205,6 +206,9 @@ export async function startAuditorRun(input: {
         website_health: String(pipeline.scores.overallAuditScore),
       },
     });
+
+    // M10: a completed audit creates a review_site work item.
+    await syncWorkItemsForLead(lead.id).catch(() => {});
 
     return { ok: true, runId: run.id, auditId: audit.id };
   } catch (error) {

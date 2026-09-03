@@ -20,6 +20,7 @@ import {
 } from "@/lib/payments/webhook";
 import { mapStripeSubscriptionStatus, resolveCustomerPlan, shouldCreateManagedSubscription } from "@/lib/payments/conversion";
 import { resolveMonotonicLeadStatus } from "@/lib/scout/status";
+import { WORK_ITEM_PRIORITY } from "@/lib/work-items/types";
 import { createServerSupabaseClient, mutateTable, readTable } from "@/lib/supabase/server";
 import type { CommercialOffer, CommercialOfferStatus, PurchaseLinkStatus, StripeCheckoutSession } from "@/types";
 import type {
@@ -1127,6 +1128,24 @@ export async function processCheckoutCompletedEvent(
       stripe_event_id: event.eventId,
     },
   });
+
+  // M10: a completed checkout creates a fulfill_site work item. Done with the
+  // webhook's own client (no admin session here); the open-item unique index
+  // makes a retry idempotent, and /today's reconcile owns resolution.
+  if (customer.status === "pending_setup") {
+    try {
+      await client.from("work_items").insert({
+        lead_id: lead.id,
+        type: "fulfill_site",
+        dedupe_key: `customer:${customer.id}`,
+        priority: WORK_ITEM_PRIORITY.fulfill_site,
+        metadata: { customer_id: customer.id, commercial_offer_id: offer.id },
+      });
+    } catch {
+      // Unique-index conflict on retry is expected and harmless.
+    }
+  }
+
   await markWebhook(client, webhookRow, "processed", null);
   return { ok: true };
 }

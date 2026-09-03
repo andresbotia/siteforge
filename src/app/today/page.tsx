@@ -1,29 +1,79 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Card, CardBody } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
+import { WorkItemRow } from "@/components/today/work-item-row";
+import { getTodayQueue } from "@/data/work-items";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Today" };
 
 /**
- * M10 Task 1 stub. The work-item queue lands here in Task 3; until then this
- * is the post-login page and points at the pipeline.
+ * M10 Task 3. The work-item queue and the post-login landing page. Items are
+ * ordered by proximity to revenue; the visible list is capped at seven so a
+ * long queue reads as attention, not a backlog. Reconciliation (creation +
+ * resolution, both derived from live state) runs inside getTodayQueue().
  */
-export default function TodayPage() {
+export default async function TodayPage() {
+  const queue = await getTodayQueue();
+
   return (
     <>
       <PageHeader
         title="Today"
-        description="Your work queue. Items appear here as the pipeline produces them."
+        description="What needs your attention now, nearest-to-revenue first. Each item opens the business it belongs to."
       />
-      <p className="text-sm text-muted">
-        Nothing to show yet.{" "}
-        <Link href="/leads" className="text-accent hover:underline">
-          Go to the pipeline
-        </Link>
-        .
-      </p>
+
+      {queue.visible.length === 0 ? (
+        <Card>
+          <CardBody>
+            <p className="text-sm text-muted">
+              Nothing needs attention right now.{" "}
+              <Link href="/leads" className="text-accent hover:underline">
+                Open the pipeline
+              </Link>
+              .
+              {queue.snoozedCount > 0
+                ? ` ${queue.snoozedCount} item${queue.snoozedCount === 1 ? " is" : "s are"} snoozed.`
+                : ""}
+            </p>
+          </CardBody>
+        </Card>
+      ) : (
+        <>
+          <ul className="space-y-2">
+            {queue.visible.map((item) => (
+              <WorkItemRow
+                key={item.id}
+                item={{
+                  id: item.id,
+                  leadId: item.leadId,
+                  businessName: item.businessName,
+                  type: item.type,
+                  need: item.need,
+                }}
+              />
+            ))}
+          </ul>
+          {queue.hiddenCount > 0 || queue.snoozedCount > 0 ? (
+            <p className="mt-3 text-xs text-muted">
+              {queue.hiddenCount > 0
+                ? `${queue.hiddenCount} more item${queue.hiddenCount === 1 ? "" : "s"} not shown`
+                : ""}
+              {queue.hiddenCount > 0 && queue.snoozedCount > 0 ? " · " : ""}
+              {queue.snoozedCount > 0
+                ? `${queue.snoozedCount} snoozed`
+                : ""}
+              . Work the queue down, or open the{" "}
+              <Link href="/leads" className="text-accent hover:underline">
+                pipeline
+              </Link>
+              .
+            </p>
+          ) : null}
+        </>
+      )}
     </>
   );
 }

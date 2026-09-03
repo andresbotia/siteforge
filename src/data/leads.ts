@@ -1,6 +1,7 @@
 import "server-only";
 
 import { recordActivityEvent } from "@/data/activity";
+import { syncWorkItemsForLead } from "@/data/work-items";
 import { mutateTable, readTable } from "@/lib/supabase/server";
 import { asNumber, asRecord, asStringArray } from "@/lib/json";
 import {
@@ -468,6 +469,10 @@ export async function updateLeadLifecycleStatus(input: {
       archived_reason: archivedReason ?? "",
     },
   });
+
+  // M10: a lifecycle change can open (interested -> confirm_intent) or resolve
+  // (archived/customer) work items.
+  await syncWorkItemsForLead(lead.id).catch(() => {});
 
   return { ok: true, status: input.nextStatus };
 }

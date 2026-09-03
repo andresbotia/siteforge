@@ -318,6 +318,46 @@ export type Database = {
         };
         Relationships: [];
       };
+      work_items: {
+        Row: {
+          id: string;
+          lead_id: string;
+          type: string;
+          dedupe_key: string;
+          priority: number;
+          metadata: Json;
+          created_at: string;
+          resolved_at: string | null;
+          resolution: string | null;
+          snoozed_until: string | null;
+          dismissed_at: string | null;
+          dismissed_reason: string | null;
+        };
+        Insert: {
+          id?: string;
+          lead_id: string;
+          type: string;
+          dedupe_key?: string;
+          priority?: number;
+          metadata?: Json;
+          created_at?: string;
+          resolved_at?: string | null;
+          resolution?: string | null;
+          snoozed_until?: string | null;
+          dismissed_at?: string | null;
+          dismissed_reason?: string | null;
+        };
+        Update: {
+          priority?: number;
+          metadata?: Json;
+          resolved_at?: string | null;
+          resolution?: string | null;
+          snoozed_until?: string | null;
+          dismissed_at?: string | null;
+          dismissed_reason?: string | null;
+        };
+        Relationships: [];
+      };
       preview_deployments: {
         Row: {
           id: string;
@@ -1047,3 +1087,4 @@ export type IntegrationRow =
   Database["public"]["Tables"]["integration_status"]["Row"];
 export type ActivityRow = Database["public"]["Tables"]["activity_events"]["Row"];
 export type DesignerJobRow = Database["public"]["Tables"]["designer_jobs"]["Row"];
+export type WorkItemRow = Database["public"]["Tables"]["work_items"]["Row"];

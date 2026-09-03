@@ -40,6 +40,7 @@ import {
   type PreviewRequestFacts,
 } from "@/lib/previews/events";
 import { resolveMonotonicLeadStatus } from "@/lib/scout/status";
+import { syncWorkItemsForLead } from "@/data/work-items";
 import { createServerSupabaseClient, mutateTable, readTable } from "@/lib/supabase/server";
 import type { EmailProviderStatus, Outreach, OutreachStatus, WebsiteAudit } from "@/types";
 import type {
@@ -682,6 +683,10 @@ export async function requestOutreachSendApproval(
     leadId: outreach.lead_id,
     metadata: { outreach_id: outreach.id, approval_id: approval.id },
   });
+
+  // M10: a pending send approval creates the matching approve_outreach /
+  // approve_follow_up work item.
+  await syncWorkItemsForLead(outreach.lead_id).catch(() => {});
 
   return { ok: true, approvalId: approval.id };
 }
