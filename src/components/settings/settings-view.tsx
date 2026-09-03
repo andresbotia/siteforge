@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState, useState } from "react";
 import { sendInternalTestEmailAction, type EmailActionState } from "@/app/actions/email";
+import { toolsSections } from "@/components/layout/nav-config";
 import { CostControlsPanel } from "@/components/ai/cost-controls-panel";
 import { Button } from "@/components/shared/button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
@@ -26,6 +28,7 @@ const tabs = [
   "Email",
   "Billing",
   "Safety",
+  "Tools",
 ] as const;
 
 type Tab = (typeof tabs)[number];
@@ -364,6 +367,37 @@ export function SettingsView({
               </CardBody>
             </Card>
           </div>
+        </div>
+      ) : null}
+
+      {tab === "Tools" ? (
+        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {toolsSections.map((section) => (
+            <Card key={section.label}>
+              <CardHeader
+                title={section.label ?? "Tools"}
+                description="Per-agent and build-time screens. Kept for detail views and debugging; not part of the daily operating path."
+              />
+              <CardBody>
+                <ul className="space-y-1">
+                  {section.items.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <li key={item.href}>
+                        <Link
+                          href={item.href}
+                          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-muted transition-colors hover:bg-surface-hover hover:text-foreground"
+                        >
+                          <Icon className="size-4 shrink-0" aria-hidden={true} />
+                          {item.label}
+                        </Link>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </CardBody>
+            </Card>
+          ))}
         </div>
       ) : null}
 

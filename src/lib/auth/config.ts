@@ -1,7 +1,7 @@
 export const SESSION_COOKIE_NAME = "siteforge_session";
 export const SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
 export const LOGIN_PATH = "/login";
-export const POST_LOGIN_PATH = "/dashboard";
+export const POST_LOGIN_PATH = "/today";
 
 const MIN_SECRET_LENGTH = 16;
 

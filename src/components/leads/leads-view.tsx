@@ -68,8 +68,8 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
   return (
     <>
       <PageHeader
-        title="Leads"
-        description="Scout can add reviewable leads from public catalog discovery. Seed rows remain fictional."
+        title="Pipeline"
+        description="Every business, at whatever stage. Open one to operate on it end to end. Seed rows remain fictional."
         actions={
           <Button variant="primary" onClick={() => router.push("/agents/scout")}>
             Find Businesses

@@ -5,7 +5,7 @@ import { listLeads } from "@/data/leads";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Leads",
+  title: "Pipeline",
 };
 
 export default async function LeadsPage() {
