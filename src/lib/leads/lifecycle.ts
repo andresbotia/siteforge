@@ -8,8 +8,8 @@ import type { LeadStatus } from "@/types";
  * rather than carrying their own scattered guards.
  *
  * Lead status was monotonic before M9.9 (a lead could only ever move forward
- * through the pipeline). That is broken here deliberately and in exactly two
- * places, both requested by the operator:
+ * through the pipeline). That is broken here deliberately and in exactly three
+ * places, all requested by the operator:
  *
  *   1. `archived` is reachable from EVERY state, including `customer` and
  *      `rejected`. It is the general-purpose "retire this lead" exit and
@@ -17,6 +17,11 @@ import type { LeadStatus } from "@/types";
  *   2. `interested -> contacted` is allowed, so a prospect who expressed
  *      interest and then went quiet can be walked back to plain "contacted"
  *      without inventing a new status or faking a rejection.
+ *   3. `archived -> contacted` is allowed (M10 Task 0), so an accidental
+ *      archive is reversible from the console. This is an OPERATOR-only edge:
+ *      `resolveLeadStatusTransition` (the automated-writer resolver) still
+ *      refuses to move a lead out of `archived`, so Scout/Auditor/the send
+ *      path/the webhook can never silently resurrect a retired lead.
  *
  * Everything else stays monotonic: a state may only advance to a LATER
  * pipeline state (skipping intermediate states is allowed and always was --
@@ -29,9 +34,8 @@ import type { LeadStatus } from "@/types";
  * (an early-stage disqualification, not a general exit). `archived` is the
  * new general exit and covers the later-stage cases.
  *
- * `archived` is terminal -- no transition leads out of it. See HANDOFF.md
- * for why (a literal reading of "every other transition stays monotonic")
- * and what un-archiving would require.
+ * `archived` has exactly one exit, `archived -> contacted`, for the operator
+ * to undo an accidental archive (M10 Task 0). Automated writers cannot use it.
  */
 export const LEAD_LIFECYCLE_TRANSITIONS: Record<LeadStatus, readonly LeadStatus[]> = {
   discovered: [
@@ -54,7 +58,9 @@ export const LEAD_LIFECYCLE_TRANSITIONS: Record<LeadStatus, readonly LeadStatus[
   interested: ["contacted", "customer", "archived"],
   customer: ["archived"],
   rejected: ["archived"],
-  archived: [],
+  // Single exit: lets an operator undo an accidental archive. Automated
+  // writers are blocked from this edge in `resolveLeadStatusTransition`.
+  archived: ["contacted"],
 };
 
 const KNOWN_STATUSES = new Set<string>(leadStatuses);
@@ -109,6 +115,10 @@ export function resolveLeadStatusTransition(
   if (!isLeadStatus(current)) return current;
   // Automated writers never archive; archive is an explicit operator action.
   if (proposed === "archived") return current;
+  // ...and they never un-archive: the `archived -> contacted` edge is
+  // operator-only, so a stale automated proposal can't resurrect a lead
+  // the operator deliberately retired.
+  if (current === "archived") return current;
   return canTransitionLeadStatus(current, proposed).ok ? proposed : current;
 }
 

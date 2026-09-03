@@ -245,6 +245,23 @@ describe("email delivery policy", () => {
     );
   });
 
+  test("a suppression event whose payload names no recipient matches nothing, not every address", () => {
+    const malformed = [
+      { event_type: "email.bounced", payload: {} },
+      { event_type: "email.complained", payload: { recipient_email: "" } },
+      { event_type: "email.bounced", payload: null as unknown as Record<string, unknown> },
+    ];
+    assert.equal(isRecipientSuppressed("owner@example.com", malformed), false);
+    assert.equal(isRecipientSuppressed("someone.else@example.com", malformed), false);
+    // A well-formed suppression for a different address still doesn't match.
+    assert.equal(
+      isRecipientSuppressed("owner@example.com", [
+        { event_type: "email.bounced", payload: { recipient_email: "other@example.com" } },
+      ]),
+      false,
+    );
+  });
+
   test("real prospect sends require unsubscribe language", () => {
     assert.equal(hasUnsubscribeLanguage("Reply unsubscribe if this is not relevant."), true);
     assert.equal(hasUnsubscribeLanguage("Reply opt out if this is not relevant."), true);

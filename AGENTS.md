@@ -54,7 +54,9 @@ Examples of privileged / approval-gated actions:
 
 ## Milestone boundary
 
-Milestone 9 adds manual Stripe Checkout offer drafting, approval binding, mock checkout session creation, Stripe webhook ingestion, and customer conversion. Milestone 8 Sales, Milestone 7 Preview, Milestone 6 Builder, Milestone 5 Auditor, Milestone 4 Scout, and Milestone 3 paid-AI gates remain mandatory. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`.
+The current milestone is **M10 — Operator Console**: a navigation and information-architecture pass. Primary navigation collapses to five items (Today, Pipeline, Customers, Roadmap, Settings); `/leads/[id]` becomes the single end-to-end unit of work for a business; a new `work_items` table plus a `/today` queue surface what needs operator attention, ordered by proximity to revenue. M10 changes structure only — no color system, typography, or component restyle (that is M10.5). It adds no background workers or schedulers; work items are created and resolved by the same server-side code paths that already change state.
+
+Everything through M9.9 remains mandatory: M9 Stripe Checkout / approval binding / webhook ingestion / customer conversion; M9.5 real-prospect preparation (manual public prospect import, Auditor calibration, guarded Resend path, external generated-site import, the Designer Job worker track); M9.6 real test/live Stripe provider (mode derived from the key prefix); M9.7 customer purchase links (`sfb_` tokens, hash + hint only); M9.8 payment provenance (mock/test/live never shown as real revenue); M9.9 lead lifecycle transition table + `follow_up` outreach kind + offer amount lock. M8 Sales, M7 Preview, M6 Builder, M5 Auditor, M4 Scout, and M3 paid-AI gates all still apply. Temporary single-admin cookie auth remains in `src/lib/auth` and `src/proxy.ts`.
 
 - Database migrations must be version-controlled under `supabase/migrations`.
 - Never expose privileged credentials client-side. Never put `SUPABASE_SECRET_KEY` or `XAI_API_KEY` in `NEXT_PUBLIC_*` or Client Components.
@@ -91,15 +93,20 @@ Milestone 9 adds manual Stripe Checkout offer drafting, approval binding, mock c
 - Sales must not invent recipient emails, contact names, testimonials, pricing, or unsupported claims.
 - Outreach attribution must use separate opaque tokens from M7 preview tokens. Store only hash plus hint; never reconstruct M7 preview URLs from token hints.
 - Send approval must bind exact recipient, subject, body, preview deployment, content version, and attribution token hash. Edits must invalidate approval.
-- Email execution is mock-only unless a later milestone explicitly adds a real provider. Do not call Resend or send real email.
+- Email execution is mock-only by default. The guarded Resend path (M9.5C) stays gated off unless `SITEFORGE_ALLOW_LIVE_EMAIL=true` plus server secrets are configured and the exact send is approved. Do not send real prospect email.
 - Payments use the mock Stripe provider by default. Do not call live Stripe unless a later approval explicitly sets `STRIPE_ALLOW_LIVE_PAYMENTS=true`, configures Stripe server secrets, and approves the exact action.
 - Checkout approvals must bind the exact offer amount, currency, plan selection, website, outreach, content version, and content hash. Material offer edits must invalidate approval.
+- Offer amounts are selected from the two configured plans (`src/lib/payments/plans.ts`), never typed as a free cent amount; the `LiveStripeProvider` price lock stays untouched as the last checkpoint.
+- Purchase links (`sfb_`) and follow-up outreach (`follow_up` kind) reuse the existing approval / suppression / duplicate-send / provider machinery. A follow-up approval additionally binds the commercial offer id and the purchase token hash; editing any bound field invalidates it.
 - Stripe webhook handling must be idempotent by provider event ID and must not create duplicate customers or subscriptions for the same completed checkout.
+- Lead status transitions go through the one table in `src/lib/leads/lifecycle.ts`. `archived` requires a reason; `archived -> contacted` is an operator-only reversal edge (automated writers cannot un-archive).
+- Navigation reflects operator tasks, not system architecture. `/agents/*`, `/templates`, `/visual-qa/*`, `/audits`, `/websites`, `/outreach`, `/offers` keep their routes and keep working; they are secondary/debug surfaces, not primary nav. Do not delete routes.
+- `work_items` follow the same RLS pattern as every other table (RLS enabled; anon/authenticated/public revoked). Resolution must be idempotent and derived from real state, not a trusted flag.
 - Do not implement Manager execution.
-- Do not process payments or deploy generated websites.
-- Do not connect Stripe, Resend, or production Vercel APIs.
+- Do not process real payments or deploy generated websites. No live Stripe call, no live email send, no paid AI, no production deployment, DNS, or domain action.
+- Do not connect production Vercel APIs.
 - Do not add background workers or scheduled jobs unless a later milestone explicitly asks for them.
-- Do not start Milestone 9 unless asked.
+- Do not start Milestone 11 (Live Payment Rehearsal) or any later milestone unless asked.
 
 ## Architecture notes
 
@@ -115,6 +122,8 @@ Milestone 9 adds manual Stripe Checkout offer drafting, approval binding, mock c
 - Mock email provider code lives in `src/lib/email`.
 - Payment provider and checkout policy code lives in `src/lib/payments`.
 - Payment data access lives in `src/data/payments.ts`.
+- Lead lifecycle transition rules live in `src/lib/leads/lifecycle.ts` (the one place). Follow-up outreach logic lives in `src/lib/sales/follow-up.ts`.
+- Work items live in `src/lib/work-items` and `src/data/work-items.ts`. Queue UI: `/today` (the post-login landing page). Business detail / unit of work: `/leads/[id]`.
 - Server Supabase utilities live in `src/lib/supabase` and are `server-only`.
 - Shared UI lives in `src/components/shared`.
 - Agent placeholders live in `src/agents`.

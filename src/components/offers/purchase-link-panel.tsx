@@ -52,9 +52,11 @@ export function PurchaseLinkPanel({ offer }: { offer: CommercialOffer }) {
       {justPublished ? (
         <div className="space-y-2 rounded border border-border-subtle p-3">
           <p className="break-all font-mono text-xs text-accent">{publishState.url}</p>
-          <p className="text-[11px] text-muted-foreground">
-            This link is shown once and cannot be recovered later — copy it now to send
-            to the customer.
+          <p className="text-[11px] text-danger">
+            Save this link now. It is shown once and cannot be recovered — SiteForge
+            stores only a hash. If it is lost you must revoke and publish a new one,
+            which invalidates any follow-up approval bound to the old link and forces
+            re-approval before the follow-up can be sent.
           </p>
           <Button
             type="button"
@@ -83,7 +85,12 @@ export function PurchaseLinkPanel({ offer }: { offer: CommercialOffer }) {
           </Button>
         </form>
       ) : offer.status === "approved" ? (
-        <form action={publishAction}>
+        <form action={publishAction} className="space-y-2">
+          <p className="text-[11px] text-danger">
+            The link is revealed once, immediately after publishing, and never again —
+            copy and save it then. Losing it forces a revoke-and-republish and
+            re-approval of any bound follow-up.
+          </p>
           <input type="hidden" name="offerId" value={offer.id} />
           <Button type="submit" variant="primary" size="sm" disabled={publishing}>
             {publishing ? "Publishing..." : "Publish purchase link"}

@@ -437,13 +437,16 @@ export async function updateLeadLifecycleStatus(input: {
 
   const now = new Date().toISOString();
   const archiving = input.nextStatus === "archived";
+  // The only edge out of `archived` is `archived -> contacted` (M10 Task 0):
+  // clear the archive bookkeeping so an un-archived lead carries no stale reason.
+  const unarchiving = lead.status === "archived" && input.nextStatus !== "archived";
   const updated = await mutateTable<Pick<LeadRow, "id"> | null>((client) =>
     client
       .from("leads")
       .update({
         status: input.nextStatus,
-        archived_reason: archiving ? archivedReason : lead.archived_reason,
-        archived_at: archiving ? now : lead.archived_at,
+        archived_reason: archiving ? archivedReason : unarchiving ? null : lead.archived_reason,
+        archived_at: archiving ? now : unarchiving ? null : lead.archived_at,
       })
       .eq("id", lead.id)
       .select("id")

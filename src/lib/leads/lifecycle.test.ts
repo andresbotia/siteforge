@@ -89,16 +89,22 @@ describe("lead lifecycle transition table", () => {
     assert.equal(canTransitionLeadStatus("discovered", "website_built").ok, true);
   });
 
-  it("treats archived as terminal", () => {
-    assert.deepEqual(LEAD_LIFECYCLE_TRANSITIONS.archived, []);
+  it("gives archived exactly one exit -- archived -> contacted -- so an accidental archive is reversible", () => {
+    assert.deepEqual(LEAD_LIFECYCLE_TRANSITIONS.archived, ["contacted"]);
+    assert.equal(canTransitionLeadStatus("archived", "contacted").ok, true);
     for (const status of leadStatuses) {
-      if (status === "archived") continue;
+      if (status === "archived" || status === "contacted") continue;
       assert.equal(
         canTransitionLeadStatus("archived", status, { archivedReason: "x" }).ok,
         false,
         `archived must not move to ${status}`,
       );
     }
+  });
+
+  it("keeps the archived -> contacted exit operator-only: no automated writer can un-archive", () => {
+    assert.equal(resolveLeadStatusTransition("archived", "contacted"), "archived");
+    assert.equal(resolveMonotonicLeadStatus("archived", "contacted"), "archived");
   });
 
   it("keeps rejected reachable only from discovered, exactly as before M9.9", () => {
@@ -125,7 +131,7 @@ describe("lead lifecycle transition table", () => {
 
   it("operatorSelectableStatuses returns exactly the table row", () => {
     assert.deepEqual(operatorSelectableStatuses("interested"), ["contacted", "customer", "archived"]);
-    assert.deepEqual(operatorSelectableStatuses("archived"), []);
+    assert.deepEqual(operatorSelectableStatuses("archived"), ["contacted"]);
     assert.deepEqual(operatorSelectableStatuses("nonsense"), []);
   });
 
@@ -153,7 +159,7 @@ describe("automated writers resolve through the same table", () => {
     assert.equal(resolveScoutLeadStatus("qualified", "not_a_status"), "qualified");
   });
 
-  it("never walks an archived lead back onto the pipeline", () => {
+  it("never walks an archived lead back onto the pipeline (operator-only archived -> contacted aside)", () => {
     assert.equal(resolveMonotonicLeadStatus("archived", "contacted"), "archived");
     assert.equal(resolveMonotonicLeadStatus("archived", "customer"), "archived");
   });

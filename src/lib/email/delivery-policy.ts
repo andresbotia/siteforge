@@ -140,7 +140,11 @@ export function isRecipientSuppressed(
     if (!SUPPRESSION_EVENTS.has(event.event_type)) return false;
     const payload = asRecord(event.payload);
     const eventRecipient = String(payload.recipient_email ?? payload.email ?? "").trim().toLowerCase();
-    return !eventRecipient || eventRecipient === normalized;
+    // A suppression event whose payload names no recipient can't be attributed
+    // to anyone -- it must match nothing, not every address. (Previously an
+    // empty eventRecipient short-circuited to `true` and suppressed all sends.)
+    if (!eventRecipient) return false;
+    return eventRecipient === normalized;
   });
 }
 
