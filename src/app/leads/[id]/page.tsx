@@ -7,20 +7,33 @@ import { BuildRunButton } from "@/components/builder/build-run-button";
 import { LeadLifecyclePanel } from "@/components/leads/lead-lifecycle-panel";
 import { VerifiedPublicFactsForm } from "@/components/leads/verified-public-facts-form";
 import { CreateOfferForm } from "@/components/offers/create-offer-form";
+import { PurchaseLinkPanel } from "@/components/offers/purchase-link-panel";
 import { listActivityForLead } from "@/data/activity";
+import { listCustomers } from "@/data/customers";
 import { getLatestAuditForLead, getLeadById, listAuditsForLead } from "@/data/leads";
 import { listCommercialOffersForLead } from "@/data/payments";
+import { getPreviewAnalyticsForWebsite } from "@/data/previews";
+import { listOutreach } from "@/data/outreach";
 import { getLatestWebsiteForLead } from "@/data/websites";
 import { isLeadEligibleForAudit } from "@/lib/auditor/eligibility";
 import { isLeadEligibleForBuild } from "@/lib/builder/eligibility";
+import {
+  deriveOperatorActions,
+  recommendWebsiteProducer,
+  type OperatorActionContext,
+  type WebsiteProducer,
+} from "@/lib/leads/operator-actions";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
 import { ScoreBar, ScoreRing } from "@/components/shared/score-bar";
 import {
   CommercialOfferStatusBadge,
+  CustomerStatusBadge,
   LeadSourceBadge,
   LeadStatusBadge,
   LeadWebsiteStatusBadge,
+  OutreachStatusBadge,
+  PaymentEnvironmentBadge,
   QualificationBadge,
 } from "@/components/shared/status-badge";
 import { formatDateTime, formatNumber } from "@/lib/format";
@@ -46,15 +59,51 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
   const lead = await getLeadById(id);
   if (!lead) notFound();
 
-  const [audit, audits, activity, website, offers] = await Promise.all([
-    getLatestAuditForLead(lead.id),
-    listAuditsForLead(lead.id),
-    listActivityForLead(lead.id),
-    getLatestWebsiteForLead(lead.id),
-    listCommercialOffersForLead(lead.id),
-  ]);
+  const [audit, audits, activity, website, offers, allOutreach, allCustomers] =
+    await Promise.all([
+      getLatestAuditForLead(lead.id),
+      listAuditsForLead(lead.id),
+      listActivityForLead(lead.id),
+      getLatestWebsiteForLead(lead.id),
+      listCommercialOffersForLead(lead.id),
+      listOutreach(),
+      listCustomers(),
+    ]);
+
+  const outreach = allOutreach.filter((row) => row.leadId === lead.id);
+  const customer = allCustomers.find((row) => row.leadId === lead.id) ?? null;
+  const previewAnalytics = website
+    ? await getPreviewAnalyticsForWebsite(website.id)
+    : null;
+  const preview = previewAnalytics?.deployment ?? null;
+
   const canAudit = isLeadEligibleForAudit(lead);
   const canBuild = isLeadEligibleForBuild(lead);
+
+  const actionContext: OperatorActionContext = {
+    lead: {
+      status: lead.status,
+      industry: lead.industry,
+      websiteUrl: lead.website,
+      inspectionSummary: lead.inspectionSummary,
+    },
+    website: website ? { id: website.id, hasSpec: Boolean(website.spec) } : null,
+    preview: preview ? { status: preview.status, revokedAt: preview.revokedAt } : null,
+    hasPendingPreviewApproval: Boolean(previewAnalytics?.pendingApprovalId),
+    outreach: outreach.map((row) => ({ kind: row.kind, status: row.status })),
+    offers: offers.map((offer) => ({
+      status: offer.status,
+      setupAmountCents: offer.setupAmountCents,
+      managedMonthlyAmountCents: offer.managedMonthlyAmountCents,
+      managedPlanSelected: offer.managedPlanSelected,
+      purchaseTokenHash:
+        offer.purchaseLinkStatus === "not_published" ? null : "published",
+      purchaseLinkRevokedAt:
+        offer.purchaseLinkStatus === "revoked" ? "revoked" : null,
+    })),
+    isCustomer: Boolean(customer),
+  };
+  const operatorActions = deriveOperatorActions(actionContext);
   const isManualPublicProspect = isManualPublicProspectSource(
     lead.discoverySource,
   );
@@ -83,9 +132,48 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           <QualificationBadge tier={lead.qualificationTier} />
         ) : null}
         <Link href="/leads" className="text-xs text-muted hover:text-foreground">
-          Back to leads
+          Back to pipeline
         </Link>
       </div>
+
+      <Card className="mb-4" id="next-actions">
+        <CardHeader
+          title="Next actions"
+          description="Only the actions legal for this business's current state, ordered by proximity to revenue. Derived from the lifecycle transition table and the existing eligibility helpers."
+        />
+        <CardBody>
+          {operatorActions.length === 0 ? (
+            <p className="text-sm text-muted">
+              No actions available in the current state.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {operatorActions.map((action) => {
+                const isRoute = action.target.startsWith("/");
+                return (
+                  <li
+                    key={action.id}
+                    className="flex flex-wrap items-start justify-between gap-3 rounded border border-border-subtle p-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground">
+                        {action.label}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted">{action.description}</p>
+                    </div>
+                    <Link
+                      href={isRoute ? action.target : `#${action.target.replace(/^#/, "")}`}
+                      className="shrink-0 rounded border border-border px-2.5 py-1 text-xs text-accent hover:bg-surface-hover"
+                    >
+                      {isRoute ? "Open" : "Go to control"}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </CardBody>
+      </Card>
 
       {isManualPublicProspect ? (
         <Card className="mb-4">
@@ -132,7 +220,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         </Card>
       </div>
 
-      <Card className="mt-4">
+      <Card className="mt-4" id="lifecycle">
         <CardHeader
           title="Lifecycle"
           description="Operator-set lead status and the optional example domain used in cold outreach copy."
@@ -248,7 +336,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
       ) : null}
 
       {audit ? (
-        <Card className="mt-4">
+        <Card className="mt-4" id="audit">
           <CardHeader
             title="Website audit"
             description={
@@ -311,22 +399,27 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           </CardBody>
         </Card>
       ) : (
-        <Card className="mt-4">
+        <Card className="mt-4" id="audit">
           <CardBody>
             <p className="text-sm text-muted">
               {isNoStandaloneWebsite
                 ? "Website audit not applicable. Operator verified there is no standalone site, so SiteForge records a new website opportunity instead of fabricating a crawled audit."
                 : `Not audited. ${canAudit ? "Run a website audit from this page." : "This lead is not eligible for Auditor."}`}
             </p>
+            {canAudit ? (
+              <div className="mt-3">
+                <AuditRunButton leadId={lead.id} />
+              </div>
+            ) : null}
           </CardBody>
         </Card>
       )}
 
       {website ? (
-        <Card className="mt-4">
+        <Card className="mt-4" id="website">
           <CardHeader
-            title="Website draft"
-            description="Latest Builder draft. Rebuilds create history instead of overwriting."
+            title="Website"
+            description="Current generated website. Rebuilds create history instead of overwriting."
             action={
               <Link href={`/websites/${website.id}`} className="text-xs text-accent hover:underline">
                 Open draft
@@ -338,7 +431,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
             <Detail label="Status" value={website.status} />
             <Detail label="Built" value={formatDateTime(website.createdAt)} />
             <Detail
-              label="Preview"
+              label="Internal preview"
               value={
                 website.spec ? (
                   <Link href={`/websites/${website.id}/preview`} className="text-accent hover:underline">
@@ -349,31 +442,59 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
                 )
               }
             />
+            <Detail
+              label="Public preview"
+              value={
+                preview
+                  ? `${preview.status}${preview.revokedAt ? " (revoked)" : ""}`
+                  : previewAnalytics?.pendingApprovalId
+                    ? "Approval pending"
+                    : "Not requested"
+              }
+            />
+            <Detail
+              label="Preview approval"
+              value={
+                <Link href={`/websites/${website.id}`} className="text-accent hover:underline">
+                  Manage preview / request approval
+                </Link>
+              }
+            />
           </CardBody>
         </Card>
       ) : (
-        <Card className="mt-4">
-          <CardBody>
-            <p className="text-sm text-muted">
-              {canBuild
-                ? "No website draft yet. Build a $0 template draft from this page."
-                : "Builder becomes available after the lead is audited."}
-            </p>
+        <Card className="mt-4" id="website">
+          <CardHeader
+            title="Create website"
+            description="One entry point. Routing is decided by template-registry coverage so you don't have to pick a producer."
+          />
+          <CardBody className="space-y-3">
+            {canBuild ? (
+              <CreateWebsiteEntry
+                leadId={lead.id}
+                producer={actionContext.website ? "builder" : recommendWebsiteProducer(lead.industry)}
+              />
+            ) : (
+              <p className="text-sm text-muted">
+                A website can be created once the lead is audited (or, for a
+                verified no-website prospect, once it is qualified).
+              </p>
+            )}
           </CardBody>
         </Card>
       )}
 
-      <Card className="mt-4">
+      <Card className="mt-4" id="offers">
         <CardHeader
-          title="Commercial offers"
-          description="M9 local checkout offers. Mock payment execution only."
+          title="Offer & purchase link"
+          description="Locked-plan commercial offers, approval binding, and the customer purchase link. Mock payment execution only."
         />
         <CardBody className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-          <div>
+          <div className="space-y-3">
             {offers.length === 0 ? (
               <p className="text-sm text-muted">No offers yet.</p>
             ) : (
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {offers.map((offer) => (
                   <li key={offer.id} className="rounded border border-border-subtle p-3 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -387,13 +508,102 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
                       {offer.managedPlanSelected && offer.managedMonthlyAmountCents
                         ? `; managed monthly cents: ${offer.managedMonthlyAmountCents}`
                         : ""}
+                      {" · purchase link: "}
+                      {offer.purchaseLinkStatus.replace("_", " ")}
                     </p>
+                    {offer.status === "approved" ||
+                    offer.purchaseLinkStatus !== "not_published" ? (
+                      <div className="mt-3 border-t border-border-subtle pt-3">
+                        <PurchaseLinkPanel offer={offer} />
+                      </div>
+                    ) : null}
                   </li>
                 ))}
               </ul>
             )}
           </div>
           <CreateOfferForm lead={lead} website={website} />
+        </CardBody>
+      </Card>
+
+      <Card className="mt-4" id="outreach">
+        <CardHeader
+          title="Outreach thread"
+          description="Every outreach row for this business — cold and payment follow-up — with status."
+        />
+        {outreach.length === 0 ? (
+          <p className="px-4 py-6 text-sm text-muted">No outreach drafted yet.</p>
+        ) : (
+          <ul>
+            {outreach
+              .slice()
+              .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1))
+              .map((row) => (
+                <li
+                  key={row.id}
+                  className="flex flex-wrap items-start justify-between gap-3 border-t border-border-subtle px-4 py-3 first:border-t-0"
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        href={`/outreach/${row.id}`}
+                        className="text-sm font-medium text-accent hover:underline"
+                      >
+                        {row.kind === "follow_up" ? "Payment follow-up" : "Cold outreach"}
+                      </Link>
+                      <OutreachStatusBadge status={row.status} />
+                    </div>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      {row.subject || "(no subject)"} · {row.recipient || "no recipient"}
+                    </p>
+                  </div>
+                  <time className="shrink-0 text-xs text-muted-foreground tabular-nums">
+                    {formatDateTime(row.sentAt ?? row.createdAt)}
+                  </time>
+                </li>
+              ))}
+          </ul>
+        )}
+      </Card>
+
+      <Card className="mt-4" id="payment">
+        <CardHeader
+          title="Payment & customer"
+          description="Conversion state for this business. Mock and Stripe TEST payments are never counted as real revenue."
+        />
+        <CardBody className="grid gap-3 sm:grid-cols-2">
+          {customer ? (
+            <>
+              <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
+                <CustomerStatusBadge status={customer.status} />
+                <PaymentEnvironmentBadge environment={customer.paymentEnvironment} />
+                <Link
+                  href={`/customers/${customer.id}`}
+                  className="text-xs text-accent hover:underline"
+                >
+                  Open customer
+                </Link>
+              </div>
+              <Detail label="Plan" value={customer.plan} />
+              <Detail
+                label="Converted"
+                value={customer.convertedAt ? formatDateTime(customer.convertedAt) : "—"}
+              />
+              <Detail
+                label="Managed subscription"
+                value={customer.managedSubscriptionStatus ?? "none"}
+              />
+              <Detail
+                label="Monthly revenue (live only)"
+                value={`$${customer.monthlyRevenue.toFixed(2)}`}
+              />
+            </>
+          ) : (
+            <p className="sm:col-span-2 text-sm text-muted">
+              Not a customer yet. A completed checkout (via the webhook) converts
+              this business and records the payment environment.
+            </p>
+          )}
         </CardBody>
       </Card>
 
@@ -425,6 +635,57 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         )}
       </Card>
     </>
+  );
+}
+
+/**
+ * M10 Task 2. Single "Create website" entry point. All three underlying
+ * producers are unchanged -- this only picks a default based on
+ * `needsNewMasterTemplate` (via `recommendWebsiteProducer`) and still exposes
+ * the other two.
+ */
+function CreateWebsiteEntry({
+  leadId,
+  producer,
+}: {
+  leadId: string;
+  producer: WebsiteProducer;
+}) {
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-muted">
+        {producer === "builder"
+          ? "Recommended: the deterministic $0 Builder — a template family covers this industry."
+          : "Recommended: a Designer Job — no template family covers this industry, so the deterministic Builder would read as generic."}
+      </p>
+      {producer === "builder" ? (
+        <BuildRunButton leadId={leadId} />
+      ) : (
+        <Link
+          href="/agents/designer"
+          className="inline-block rounded border border-accent px-3 py-1.5 text-sm text-accent hover:bg-surface-hover"
+        >
+          Create a Designer Job
+        </Link>
+      )}
+      <div className="flex flex-wrap gap-3 text-xs">
+        {producer !== "builder" ? (
+          <Link href="/agents/builder" className="text-muted hover:text-foreground">
+            Use the deterministic Builder anyway
+          </Link>
+        ) : (
+          <Link href="/agents/designer" className="text-muted hover:text-foreground">
+            Create a Designer Job instead
+          </Link>
+        )}
+        <Link href="/websites/import-external" className="text-muted hover:text-foreground">
+          Import an externally generated site
+        </Link>
+      </div>
+      <p className="text-[11px] text-muted-foreground">
+        None of these deploy, email, buy a domain, or contact the business.
+      </p>
+    </div>
   );
 }
 
