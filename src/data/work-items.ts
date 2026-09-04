@@ -38,6 +38,19 @@ export type TodayQueue = {
   snoozedCount: number;
 };
 
+/**
+ * Result of a reconcile pass. `changed` is true when the pass inserted or
+ * resolved at least one row (the caller can then refresh). `ok` is false when
+ * a write did not persist -- `mutateTable` logs and returns null on failure,
+ * which would otherwise be invisible; the /today mount action turns `error`
+ * into an operator-visible banner.
+ */
+export type ReconcileResult = {
+  ok: boolean;
+  changed: boolean;
+  error?: string;
+};
+
 const VISIBLE_LIMIT = 7;
 
 type LeadBundle = {
@@ -48,11 +61,23 @@ type LeadBundle = {
   outreach: Array<{ id: string; kind: string; status: string }>;
   pendingEmailApprovals: Array<{ id: string; payloadAction: string | null }>;
   customer: Pick<CustomerRow, "id" | "status"> | null;
+  websitesAwaitingVisualReview: Array<{ id: string }>;
+  designerJobsAwaitingVisualReview: Array<{ id: string }>;
 };
 
 async function loadReconcileState() {
-  const [leads, audits, websites, offers, outreach, outreachEvents, customers, approvals, workItems] =
-    await Promise.all([
+  const [
+    leads,
+    audits,
+    websites,
+    offers,
+    outreach,
+    outreachEvents,
+    customers,
+    approvals,
+    workItems,
+    designerJobs,
+  ] = await Promise.all([
       readTable<Pick<LeadRow, "id" | "status" | "business_name">[]>((client) =>
         client.from("leads").select("id, status, business_name"),
       ),
@@ -62,8 +87,8 @@ async function loadReconcileState() {
           .select("id, lead_id")
           .order("created_at", { ascending: false }),
       ),
-      readTable<Array<{ lead_id: string }>>((client) =>
-        client.from("generated_websites").select("lead_id"),
+      readTable<Array<{ id: string; lead_id: string; status: string }>>((client) =>
+        client.from("generated_websites").select("id, lead_id, status"),
       ),
       readTable<Pick<CommercialOfferRow, "id" | "lead_id" | "status">[]>((client) =>
         client.from("commercial_offers").select("id, lead_id, status"),
@@ -85,6 +110,10 @@ async function loadReconcileState() {
           .eq("status", "pending"),
       ),
       readTable<WorkItemRow[]>((client) => client.from("work_items").select("*")),
+      readTable<Array<{ id: string; lead_id: string | null; status: string }>>(
+        (client) =>
+          client.from("designer_jobs").select("id, lead_id, status"),
+      ),
     ]);
 
   return {
@@ -97,6 +126,7 @@ async function loadReconcileState() {
     customers: customers ?? [],
     approvals: approvals ?? [],
     workItems: workItems ?? [],
+    designerJobs: designerJobs ?? [],
   };
 }
 
@@ -118,6 +148,17 @@ function bundleForLead(
     lead,
     latestAuditId: latestAudit?.id ?? null,
     hasWebsite: websiteLeadIds.has(lead.id),
+    websitesAwaitingVisualReview: state.websites
+      .filter(
+        (row) => row.lead_id === lead.id && row.status === "review_required",
+      )
+      .map((row) => ({ id: row.id })),
+    designerJobsAwaitingVisualReview: state.designerJobs
+      .filter(
+        (row) =>
+          row.lead_id === lead.id && row.status === "visual_review_required",
+      )
+      .map((row) => ({ id: row.id })),
     offers: state.offers.filter((offer) => offer.lead_id === lead.id),
     outreach: state.outreach
       .filter((row) => row.lead_id === lead.id)
@@ -151,6 +192,8 @@ function toInputs(bundle: LeadBundle): LeadWorkItemInputs {
     customer: bundle.customer
       ? { id: bundle.customer.id, status: bundle.customer.status }
       : null,
+    websitesAwaitingVisualReview: bundle.websitesAwaitingVisualReview,
+    designerJobsAwaitingVisualReview: bundle.designerJobsAwaitingVisualReview,
   };
 }
 
@@ -163,11 +206,14 @@ const openKey = (row: Pick<WorkItemRow, "lead_id" | "type" | "dedupe_key">) =>
  * desired. Idempotent. Called on every /today render and by the mutating code
  * paths (audit completion, approval request, lifecycle change, conversion).
  *
- * Not a background job -- it runs synchronously inside a request.
+ * Not a background job -- it runs synchronously inside a request. Never call
+ * this during a Server Component render (it writes): the /today page triggers
+ * it from a client-mounted server action, and the mutating code paths call it
+ * after their own writes.
  */
-export async function reconcileWorkItems(): Promise<void> {
+export async function reconcileWorkItems(): Promise<ReconcileResult> {
   const state = await loadReconcileState();
-  if (state.leads.length === 0) return;
+  if (state.leads.length === 0) return { ok: true, changed: false };
 
   const openRows = state.workItems.filter(
     (row) => !row.resolved_at && !row.dismissed_at,
@@ -206,18 +252,21 @@ export async function reconcileWorkItems(): Promise<void> {
 
   const toResolve = openRows.filter((row) => !desiredKeys.has(openKey(row)));
 
+  let ok = true;
+
   if (toInsert.length > 0) {
-    await mutateTable((client) =>
+    const inserted = await mutateTable((client) =>
       client
         .from("work_items")
         .insert(toInsert)
         .select("id"),
     );
+    if (inserted === null) ok = false;
   }
 
   if (toResolve.length > 0) {
     const now = new Date().toISOString();
-    await mutateTable((client) =>
+    const resolved = await mutateTable((client) =>
       client
         .from("work_items")
         .update({ resolved_at: now, resolution: "condition_no_longer_present" })
@@ -227,7 +276,16 @@ export async function reconcileWorkItems(): Promise<void> {
         )
         .select("id"),
     );
+    if (resolved === null) ok = false;
   }
+
+  return {
+    ok,
+    changed: toInsert.length > 0 || toResolve.length > 0,
+    error: ok
+      ? undefined
+      : "The work queue could not be fully updated. Some items below may be stale or missing. Retry, or check the server logs.",
+  };
 }
 
 /**
@@ -240,9 +298,13 @@ export async function syncWorkItemsForLead(leadId: string): Promise<void> {
   await reconcileWorkItems();
 }
 
+/**
+ * Pure read. Does NOT reconcile -- reconciliation is a write and must not run
+ * during a Server Component render. `/today` reconciles via a client-mounted
+ * server action (see src/app/actions/today.ts); the mutating code paths
+ * reconcile after their own writes. This just projects the current table.
+ */
 export async function getTodayQueue(): Promise<TodayQueue> {
-  await reconcileWorkItems();
-
   const [rows, leads] = await Promise.all([
     readTable<WorkItemRow[]>((client) =>
       client

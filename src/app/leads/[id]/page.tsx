@@ -113,15 +113,14 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
 
   return (
     <>
+      {/*
+        M10.5 Task 0: audit / build actions render only in their own cards
+        (Website audit, Create website) and in the "Next actions" panel --
+        the header no longer duplicates them.
+      */}
       <PageHeader
         title={lead.businessName}
         description={`${lead.industry} · ${lead.location}`}
-        actions={
-          <div className="flex flex-col items-end gap-3">
-            {canAudit ? <AuditRunButton leadId={lead.id} /> : null}
-            {canBuild ? <BuildRunButton leadId={lead.id} /> : null}
-          </div>
-        }
       />
 
       <div className="mb-4 flex flex-wrap items-center gap-2">

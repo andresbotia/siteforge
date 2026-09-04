@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Card, CardBody } from "@/components/shared/card";
 import { PageHeader } from "@/components/shared/page-header";
+import { QueueReconciler } from "@/components/today/queue-reconciler";
 import { WorkItemRow } from "@/components/today/work-item-row";
 import { getTodayQueue } from "@/data/work-items";
 
@@ -24,6 +25,8 @@ export default async function TodayPage() {
         title="Today"
         description="What needs your attention now, nearest-to-revenue first. Each item opens the business it belongs to."
       />
+
+      <QueueReconciler />
 
       {queue.visible.length === 0 ? (
         <Card>

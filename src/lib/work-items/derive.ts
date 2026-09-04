@@ -25,6 +25,16 @@ export type LeadWorkItemInputs = {
   /** Pending external_email approvals for this lead, with their payload action. */
   pendingEmailApprovals: Array<{ id: string; payloadAction: string | null }>;
   customer: { id: string; status: string } | null;
+  /**
+   * Generated websites for this lead that exist and are awaiting a human
+   * visual decision (generated_websites.status = 'review_required').
+   */
+  websitesAwaitingVisualReview?: Array<{ id: string }>;
+  /**
+   * Designer Jobs for this lead sitting in `visual_review_required` -- a
+   * produced site that needs human visual sign-off before it can be approved.
+   */
+  designerJobsAwaitingVisualReview?: Array<{ id: string }>;
 };
 
 const TERMINAL_FOR_SITE = new Set(["archived", "rejected", "customer"]);
@@ -62,6 +72,20 @@ export function deriveDesiredWorkItems(
     !TERMINAL_FOR_SITE.has(lead.status)
   ) {
     desired.push(item("review_site", `audit:${input.latestAuditId}`));
+  }
+
+  // review_visuals -- a produced site (deterministic Builder or a Designer
+  // Job) exists and is waiting on human visual sign-off. Distinct from
+  // review_site, which means "no website has been produced yet". Approving
+  // site visuals is the most common operator action during a live campaign,
+  // so it gets its own type between fulfill_site and review_site by priority.
+  if (!TERMINAL_FOR_SITE.has(lead.status)) {
+    for (const site of input.websitesAwaitingVisualReview ?? []) {
+      desired.push(item("review_visuals", `website:${site.id}`));
+    }
+    for (const job of input.designerJobsAwaitingVisualReview ?? []) {
+      desired.push(item("review_visuals", `designer_job:${job.id}`));
+    }
   }
 
   // approve_outreach / approve_follow_up -- one per pending send approval.

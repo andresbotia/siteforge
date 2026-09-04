@@ -121,6 +121,47 @@ describe("deriveDesiredWorkItems", () => {
     );
   });
 
+  it("wants review_visuals for a built site awaiting visual sign-off, from either producer", () => {
+    const fromWebsite = inputs({
+      lead: { id: "L1", status: "contacted" },
+      hasWebsite: true,
+      websitesAwaitingVisualReview: [{ id: "W1" }],
+    });
+    assert.deepEqual(
+      deriveDesiredWorkItems(fromWebsite).map((d) => `${d.type}:${d.dedupeKey}`),
+      ["review_visuals:website:W1"],
+    );
+
+    const fromDesignerJob = inputs({
+      lead: { id: "L1", status: "website_built" },
+      designerJobsAwaitingVisualReview: [{ id: "J1" }],
+    });
+    assert.deepEqual(
+      deriveDesiredWorkItems(fromDesignerJob).map((d) => `${d.type}:${d.dedupeKey}`),
+      ["review_visuals:designer_job:J1"],
+    );
+  });
+
+  it("drops review_visuals once the lead is archived / rejected / customer", () => {
+    for (const status of ["archived", "rejected", "customer"]) {
+      assert.equal(
+        types(
+          inputs({
+            lead: { id: "L1", status },
+            websitesAwaitingVisualReview: [{ id: "W1" }],
+          }),
+        ).includes("review_visuals"),
+        false,
+        status,
+      );
+    }
+  });
+
+  it("orders review_visuals between fulfill_site and review_site", () => {
+    assert.ok(WORK_ITEM_PRIORITY.fulfill_site < WORK_ITEM_PRIORITY.review_visuals);
+    assert.ok(WORK_ITEM_PRIORITY.review_visuals < WORK_ITEM_PRIORITY.review_site);
+  });
+
   it("assigns handle_reply the highest priority and qualify_lead the lowest", () => {
     assert.equal(WORK_ITEM_PRIORITY.handle_reply, 0);
     assert.ok(WORK_ITEM_PRIORITY.qualify_lead > WORK_ITEM_PRIORITY.approve_outreach);
