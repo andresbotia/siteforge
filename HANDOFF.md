@@ -1,8 +1,50 @@
 # SiteForge Handoff
 
-For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5B real-prospect preparation and Auditor calibration are locked, with the M9.5B Auditor Calibration lock at `1358caad47c46b9832f875ec1e62d5834043906b`. M9.5C guarded real email integration/internal send is complete: Resend is configured server-side, the sending domain was verified externally, the live-email gate was exercised for one operator-only test, and the test delivered without prospect/customer funnel mutation. M9.5D first controlled prospect campaign preparation is current. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live payment use, or broader production operation. M10 (Operator Console -- navigation + information architecture) is complete. M10.5 (Visual System Pass) is current.
+For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5B real-prospect preparation and Auditor calibration are locked, with the M9.5B Auditor Calibration lock at `1358caad47c46b9832f875ec1e62d5834043906b`. M9.5C guarded real email integration/internal send is complete: Resend is configured server-side, the sending domain was verified externally, the live-email gate was exercised for one operator-only test, and the test delivered without prospect/customer funnel mutation. M9.5D first controlled prospect campaign preparation is current. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live payment use, or broader production operation. M10 (Operator Console -- navigation + information architecture) is complete. M10.5 (Visual System Pass) is complete, though it shipped dark and M10.6 converted it to light. M10.6 (Data hygiene and light theme) is current: a reversible archive-stale-leads script exists and was dry-run against the real hosted database this session but **not executed** -- that is an explicit operator decision, see below.
 
-## Session: M10.5 -- Visual System Pass
+## Session: M10.6 -- Data hygiene and light theme
+
+Session start commit `14eac54` (M10.5 handoff). Five commits, none pushed. Two new migration-free code changes plus one script; no schema migration in this session. No live Stripe call, no live email, no paid AI, no deployment, DNS, or domain action, no prospect contacted. Mock providers only. This session had real `SUPABASE_SECRET_KEY`/`NEXT_PUBLIC_SUPABASE_URL` credentials in `.env.local` and used them for read-only inspection throughout, and once, deliberately, for the archive script's dry run (still read-only -- `--execute` was never passed).
+
+### Task 1 -- archive-stale-leads script
+
+`src/lib/leads/archive-classification.ts` (pure, 10 tests) + `scripts/archive-stale-leads.ts` (`npm run leads:archive-stale`, dry-run by default, `--execute` to apply). Connects directly to Supabase the same way `scripts/designer-worker.ts` does (readTable/mutateTable and any `"server-only"` module cannot be used from a standalone Node process -- documented inline). Three rules only, matching the brief literally: seed/fixture source, Scout rows stuck at `discovered`, and customers with mock-prefixed (`cus_mock_`/`cs_mock_`) Stripe identifiers. Archiving goes through `canTransitionLeadStatus`/the existing `archived -> contacted` edge (reason required, activity-logged); `--execute` also expires pending approvals tied to an archived lead.
+
+Ran the dry run against the real hosted DB. Full classification (see also the reply to the operator this session): 25 non-archived leads, 17 classified (14 seed, 2 scout-never-advanced: Tiny Leak Bros and Verdant Lyfe, 1 mock-Stripe customer: Atlantic Drain Plumbing), 8 real-provenance leads correctly left alone -- Antojitos Salvadoreños Restaurant and all four manually-imported HVAC/plumbing/electrical prospects (Signature Air Conditioning, Joe & Joe Air Conditioning, Powercom LLC, Pam Blount Plumbing) among them, plus the two Scout leads that were actually rejected (a completed classification, not "never advanced" clutter) -- and one anomaly flagged for manual review, not auto-archived: a lead named "SiteForge Stripe Test" whose customer row used Stripe TEST-mode (not mock) identifiers, outside the script's literal scope. 5 pending approvals tied to archived leads were found for expiry. **`--execute` was not run.**
+
+### Task 2 -- work-item overlap and Today grouping
+
+Found and fixed a genuine derive bug, not just a fixture artifact: `confirm_intent` and `approve_follow_up` now both require no `customers` row to exist (`src/lib/work-items/derive.ts`). `lead.status` is operator-set and can lag the Stripe webhook that creates the `customers` row, so gating only on status let "confirm buying intent" and "approve payment follow-up" both fire alongside "fulfil the paid site" for the same business -- verified this was live on the hosted data (Tidewash Pressure Washing). Audited every other type pair for the same class of overlap; none of the others were contradictory (full writeup in the reply). One of the two overlapping conditions was self-inflicted: the M10.5 dev-seed fixture had attached a follow-up approval to Tidewash, which already had a `pending_setup` customer row -- an unrealistic combination I introduced last session. The derive fix alone suppresses it now; no seed migration was needed, and the stale approval row will be swept up by the Task 1 archive script (Tidewash is seed-sourced) if `--execute` is run.
+
+`getTodayQueue()` (`src/data/work-items.ts`) now returns `TodayQueueBusiness[]` -- one entry per lead with all its open items -- capped at 7 businesses, not 7 items. New `BusinessQueueCard` component; `WorkItemRow` simplified to just the per-item need/snooze/dismiss (the business card carries the one "Open" action).
+
+Pipeline (`leads-view.tsx`): "Show seed / fixture data" checkbox, default off, reusing the same seed/fixture definition as the archive script.
+
+### Task 3 -- light theme
+
+Full value swap in `globals.css` + `src/lib/console-theme/palette.ts`. Token architecture, five-size type scale, 4px spacing scale, two radii, one border weight, borders-not-shadows elevation all unchanged from M10.5 -- only hex values moved, and every one was checked against `contrastRatio()` before being committed (see the reply for the full probe results). Accent kept M10.5's blue hue but darkened it (`#5b9dff` was ~3.1:1 on white, too pale; `#2555c7` is 6.2:1). All four semantic tones re-derived darker/more saturated, not the dark set lightened. Soft-fill tint amount dropped 14% -> 10% (`palette.ts` `SOFT_FILL_AMOUNT`) because a lighter base needs a lighter tint to keep a badge's own text legible against its own fill. `contrast.test.ts` required no structural change and no weakened threshold -- same 22 assertions, all passing against the new values. `DESIGN-SYSTEM.md` updated: Direction section reversed (dark -> light) with the concrete restraint checklist from the brief, color tables carry new values + reasoning.
+
+### Task 4 -- Pipeline restraint
+
+"Add public prospect" moved from permanent page-body real estate into a `Dialog` behind its own "Add prospect" button (deliberately not folded into "Find Businesses," which starts an unrelated Scout run). `ManualPublicProspectForm` gained a `bare` render mode so it doesn't nest a bordered Card inside the Dialog's own bordered panel. `Dialog` gained a `size` prop (`"lg"` used here) and a scrollable body, since it can now host taller multi-column forms, not just short confirms.
+
+Numeric columns: "Website Score" renamed to "Site Health" (matches the label `/leads/[id]` already used for the same value, so direction reads correctly without inverting it mentally). "Opportunity" removed from the table (moved to detail view, not deleted) rather than renamed -- it is mathematically close to a duplicate of Site Health whenever both are present (`derivedWebsiteScore = 100 - opportunity`), so the table was showing one signal twice, inverted.
+
+### Validation
+
+`npx tsc --noEmit`, `npm test` (691/691, up from 677 at M10.5 end: +10 archive-classification, +4 derive overlap; Task 3 changed contrast.test.ts's inputs, not its count; Task 4 added none), `npm run lint`, `npm run build`, `git diff --check` all clean.
+
+### Operator action required
+
+- Review the Task 1 dry-run classification (this session's reply has the full list) and re-run `npm run leads:archive-stale -- --execute` if you want it applied. Nothing was archived automatically.
+- The "SiteForge Stripe Test" lead (Stripe TEST-mode customer, business name is self-declaratory) was flagged but not archived -- it doesn't match the mock-identifier rule as written. Decide by hand whether to archive it via the console (`/leads/[id]` -> Lifecycle) or extend the script.
+- No migration to apply this session.
+
+### Assumptions / decisions the operator may want to veto
+
+- Scout leads that reached `rejected` (Perfect Choice Nursery, The Time Is Now Design & Build) were treated as a completed Scout decision, not "never advanced" clutter, and were left alone. If you'd rather archive rejected Scout leads too, that's a one-line change to the classifier.
+- The mock-Stripe-customer rule intentionally ignores `leads.source` -- it would archive a mock-Stripe customer regardless of how the lead was created, on the theory that a mock checkout is decisive evidence of a smoke test by itself. Confirmed correct against the one real case that exists (Atlantic Drain Plumbing, `scout` source, `.example.test` domain).
+- Corrected M9.8's roadmap status from "current" to "done" while updating M10.5/M10.6 -- it had been stale since before M9.9 shipped.
 
 Session start commit `97cabe5` (M10 handoff). Four commits, none pushed. Two migrations created, **not applied by this session** -- both are additive and one is dev-seed-only (see below); apply with the normal `supabase db push` flow. No live Stripe call, no live email, no paid AI, no deployment, DNS, or domain action, no prospect contacted. Mock providers only. No information-architecture, route, navigation, or business-logic change -- paint only.
 

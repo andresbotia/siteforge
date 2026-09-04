@@ -1,5 +1,5 @@
 /**
- * SiteForge roadmap, as of M10.5.
+ * SiteForge roadmap, as of M10.6.
  *
  * Deliberately a typed constant in source, not a database table: there is no
  * CRUD, no migration, and no admin editing surface. Git history is the audit
@@ -162,13 +162,13 @@ export const ROADMAP: readonly Milestone[] = [
   {
     id: "M9.8",
     title: "Payment provenance and revenue truthfulness",
-    status: "current",
+    status: "done",
     goal: "Never present a mock or Stripe TEST payment as real revenue anywhere in the console.",
     exitCriteria: [
       "mock / test / live distinguished per customer and per payment",
       "Only live payments count toward revenue figures",
     ],
-    notes: "Started with the M9.7 inferPaymentEnvironment fix; the reporting surfaces are still being finished.",
+    notes: "Corrected M10.6: this had been left marked \"current\" despite M9.9/M10/M10.5 all having shipped after it. PaymentEnvironmentBadge and the customers list/detail pages distinguish mock/test/live and gate revenue on live throughout.",
   },
   {
     id: "M9.9",
@@ -196,14 +196,27 @@ export const ROADMAP: readonly Milestone[] = [
   {
     id: "M10.5",
     title: "Visual System Pass",
-    status: "current",
+    status: "done",
     goal: "Bring the console onto one deliberate visual system instead of accumulated per-page styling.",
     exitCriteria: [
       "DESIGN-SYSTEM.md authored; --sf-* token layer + five-size type scale in globals.css; contrast enforced by test",
       "Shared tokens and components applied consistently across pipeline and operations pages",
       "Responsive and accessible behavior verified, not assumed",
     ],
-    notes: "Deliberately after M10 so the layout settles before it is styled. Task 0 carried M10's remaining fixes (reconcile out of render, reconcile-failure banner, review_visuals work item, dedup detail buttons, dev-seed mix).",
+    notes: "Deliberately after M10 so the layout settles before it is styled. Task 0 carried M10's remaining fixes (reconcile out of render, reconcile-failure banner, review_visuals work item, dedup detail buttons, dev-seed mix). Shipped dark; M10.6 converted it to light.",
+  },
+  {
+    id: "M10.6",
+    title: "Data hygiene and light theme",
+    status: "current",
+    goal: "Show only real work before the first campaign, fix the work-item overlap that surfaced once real data was in the mix, and move the console off dark onto a light neutral ramp.",
+    exitCriteria: [
+      "Reversible, dry-run-first archive script for seed/fixture leads, dead Scout experiments, and mock-Stripe smoke-test customers",
+      "confirm_intent / approve_follow_up can no longer fire once a customer row exists; /today groups by business, capped at 7 businesses",
+      "Console palette re-derived light, same token architecture, contrast.test.ts passing unweakened",
+      "Add-prospect form off the Pipeline page body; numeric columns read in an intuitive direction",
+    ],
+    notes: "Dry run only was executed this session -- the archive script's --execute is an operator call after reviewing the classification.",
   },
   {
     id: "M11",
