@@ -74,8 +74,8 @@ type LeadBundle = {
   outreach: Array<{ id: string; kind: string; status: string }>;
   pendingEmailApprovals: Array<{ id: string; payloadAction: string | null }>;
   customer: Pick<CustomerRow, "id" | "status"> | null;
-  websitesAwaitingVisualReview: Array<{ id: string }>;
-  designerJobsAwaitingVisualReview: Array<{ id: string }>;
+  latestWebsite: { id: string; status: string } | null;
+  latestDesignerJob: { id: string; status: string } | null;
 };
 
 async function loadReconcileState() {
@@ -100,8 +100,17 @@ async function loadReconcileState() {
           .select("id, lead_id")
           .order("created_at", { ascending: false }),
       ),
-      readTable<Array<{ id: string; lead_id: string; status: string }>>((client) =>
-        client.from("generated_websites").select("id, lead_id, status"),
+      // M10.6 follow-up: ordered newest-first so bundleForLead's .find() per lead
+      // picks the CURRENT (most recently created) website. Rebuilds create
+      // history instead of overwriting, so a lead can have several rows
+      // still sitting in review_required from before they were superseded --
+      // only the latest one may generate a review_visuals item.
+      readTable<Array<{ id: string; lead_id: string; status: string; created_at: string }>>(
+        (client) =>
+          client
+            .from("generated_websites")
+            .select("id, lead_id, status, created_at")
+            .order("created_at", { ascending: false }),
       ),
       readTable<Pick<CommercialOfferRow, "id" | "lead_id" | "status">[]>((client) =>
         client.from("commercial_offers").select("id, lead_id, status"),
@@ -123,9 +132,13 @@ async function loadReconcileState() {
           .eq("status", "pending"),
       ),
       readTable<WorkItemRow[]>((client) => client.from("work_items").select("*")),
-      readTable<Array<{ id: string; lead_id: string | null; status: string }>>(
+      // Same newest-first reasoning as generated_websites above.
+      readTable<Array<{ id: string; lead_id: string | null; status: string; created_at: string }>>(
         (client) =>
-          client.from("designer_jobs").select("id, lead_id, status"),
+          client
+            .from("designer_jobs")
+            .select("id, lead_id, status, created_at")
+            .order("created_at", { ascending: false }),
       ),
     ]);
 
@@ -156,22 +169,20 @@ function bundleForLead(
   );
   const websiteLeadIds = new Set(state.websites.map((row) => row.lead_id));
   const latestAudit = state.audits.find((row) => row.lead_id === lead.id) ?? null;
+  // state.websites/state.designerJobs are queried newest-first, so the first
+  // match per lead is the current version -- everything after it for the
+  // same lead is a superseded draft and must never generate its own item.
+  const latestWebsite = state.websites.find((row) => row.lead_id === lead.id) ?? null;
+  const latestDesignerJob = state.designerJobs.find((row) => row.lead_id === lead.id) ?? null;
 
   return {
     lead,
     latestAuditId: latestAudit?.id ?? null,
     hasWebsite: websiteLeadIds.has(lead.id),
-    websitesAwaitingVisualReview: state.websites
-      .filter(
-        (row) => row.lead_id === lead.id && row.status === "review_required",
-      )
-      .map((row) => ({ id: row.id })),
-    designerJobsAwaitingVisualReview: state.designerJobs
-      .filter(
-        (row) =>
-          row.lead_id === lead.id && row.status === "visual_review_required",
-      )
-      .map((row) => ({ id: row.id })),
+    latestWebsite: latestWebsite ? { id: latestWebsite.id, status: latestWebsite.status } : null,
+    latestDesignerJob: latestDesignerJob
+      ? { id: latestDesignerJob.id, status: latestDesignerJob.status }
+      : null,
     offers: state.offers.filter((offer) => offer.lead_id === lead.id),
     outreach: state.outreach
       .filter((row) => row.lead_id === lead.id)
@@ -205,8 +216,8 @@ function toInputs(bundle: LeadBundle): LeadWorkItemInputs {
     customer: bundle.customer
       ? { id: bundle.customer.id, status: bundle.customer.status }
       : null,
-    websitesAwaitingVisualReview: bundle.websitesAwaitingVisualReview,
-    designerJobsAwaitingVisualReview: bundle.designerJobsAwaitingVisualReview,
+    latestWebsite: bundle.latestWebsite,
+    latestDesignerJob: bundle.latestDesignerJob,
   };
 }
 

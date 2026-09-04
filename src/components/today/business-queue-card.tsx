@@ -28,9 +28,11 @@ export function BusinessQueueCard({
           </span>
           <div className="min-w-0">
             <p className="text-sm font-medium text-foreground">{business.businessName}</p>
-            <p className="mt-0.5 text-xs text-muted">
-              {business.items.length} outstanding action{business.items.length === 1 ? "" : "s"}
-            </p>
+            {business.items.length > 1 ? (
+              <p className="mt-0.5 text-xs text-muted">
+                {business.items.length} outstanding actions
+              </p>
+            ) : null}
           </div>
         </div>
         <LinkButton

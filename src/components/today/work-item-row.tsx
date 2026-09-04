@@ -16,9 +16,14 @@ export type WorkItemRowData = {
 };
 
 /**
- * M10.6 Task 2. One outstanding item inside a business's queue card. No
- * per-item "Open" link any more -- the business card carries the one "Open"
- * action; this row is just what's needed and the snooze/dismiss controls.
+ * M10.6 follow-up. One outstanding item, ONE row inside a business's queue card. The
+ * item used to read as its own mini-panel (a stacked label / need /
+ * button-row, each at card-header padding) -- so an 8-item card looked like
+ * 8 cards with a shared header. Now label+need share a line and the actions
+ * are plain inline text, matching Dismiss's existing weight, so a row reads
+ * as subordinate to the card rather than as a card of its own. The only
+ * separator between rows is the parent `<ul>`'s `divide-y` hairline -- no
+ * row draws its own border.
  */
 export function WorkItemRow({ item }: { item: WorkItemRowData }) {
   const [snoozeState, snooze, snoozing] = useActionState<WorkItemActionState, FormData>(
@@ -32,19 +37,25 @@ export function WorkItemRow({ item }: { item: WorkItemRowData }) {
   const [showDismiss, setShowDismiss] = useState(false);
 
   return (
-    <li className="px-4 py-3">
-      <p className="text-xs tracking-wide text-muted uppercase">
-        {WORK_ITEM_LABEL[item.type]}
+    <li className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1 px-4 py-2">
+      <p className="min-w-0 flex-1 text-sm text-foreground">
+        <span className="text-xs tracking-wide text-muted uppercase">
+          {WORK_ITEM_LABEL[item.type]}
+        </span>{" "}
+        <span className="text-muted">·</span> {item.need}
       </p>
-      <p className="mt-0.5 text-sm text-foreground">{item.need}</p>
 
-      <div className="mt-2 flex flex-wrap items-center gap-3">
+      <div className="flex shrink-0 items-center gap-3">
         <form action={snooze}>
           <input type="hidden" name="workItemId" value={item.id} />
           <input type="hidden" name="hours" value="24" />
-          <Button type="submit" variant="ghost" size="sm" disabled={snoozing}>
+          <button
+            type="submit"
+            disabled={snoozing}
+            className="text-xs text-muted transition-colors hover:text-foreground disabled:opacity-50"
+          >
             {snoozing ? "Snoozing…" : "Snooze 24h"}
-          </Button>
+          </button>
         </form>
         <button
           type="button"
@@ -53,13 +64,14 @@ export function WorkItemRow({ item }: { item: WorkItemRowData }) {
         >
           {showDismiss ? "Cancel" : "Dismiss…"}
         </button>
-        {snoozeState?.error ? (
-          <span className="text-xs text-danger">{snoozeState.error}</span>
-        ) : null}
       </div>
 
+      {snoozeState?.error ? (
+        <p className="w-full text-xs text-danger">{snoozeState.error}</p>
+      ) : null}
+
       {showDismiss ? (
-        <form action={dismiss} className="mt-2 flex flex-wrap items-center gap-2">
+        <form action={dismiss} className="mt-1 flex w-full flex-wrap items-center gap-2">
           <input type="hidden" name="workItemId" value={item.id} />
           <input
             name="reason"

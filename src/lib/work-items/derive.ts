@@ -26,15 +26,20 @@ export type LeadWorkItemInputs = {
   pendingEmailApprovals: Array<{ id: string; payloadAction: string | null }>;
   customer: { id: string; status: string } | null;
   /**
-   * Generated websites for this lead that exist and are awaiting a human
-   * visual decision (generated_websites.status = 'review_required').
+   * The lead's most recently created generated_websites row, if any -- null
+   * when nothing has been produced. M10.6 follow-up: rebuilds create history instead
+   * of overwriting (by design), so a lead can carry several historical rows
+   * all still sitting in `review_required` because nothing ever moves an
+   * old draft out of that status when it's superseded. Only the CURRENT
+   * (latest) version can generate `review_visuals`; passing every historical
+   * row here was producing one duplicate item per rebuild.
    */
-  websitesAwaitingVisualReview?: Array<{ id: string }>;
+  latestWebsite?: { id: string; status: string } | null;
   /**
-   * Designer Jobs for this lead sitting in `visual_review_required` -- a
-   * produced site that needs human visual sign-off before it can be approved.
+   * The lead's most recently created Designer Job, if any. Same idea as
+   * `latestWebsite` -- only the current job's status matters.
    */
-  designerJobsAwaitingVisualReview?: Array<{ id: string }>;
+  latestDesignerJob?: { id: string; status: string } | null;
 };
 
 const TERMINAL_FOR_SITE = new Set(["archived", "rejected", "customer"]);
@@ -58,6 +63,19 @@ export function deriveDesiredWorkItems(
   input: LeadWorkItemInputs,
 ): DesiredWorkItem[] {
   const { lead, offers, outreach, pendingEmailApprovals, customer } = input;
+
+  // M10.6 follow-up: an archived lead is retired and must produce NO work item of any
+  // type, full stop -- not "most types, gated by TERMINAL_FOR_SITE", which
+  // is what every type but fulfill_site already did. fulfill_site had no
+  // status guard at all, which is why an archived lead with a still-
+  // pending_setup customer row (Tidewash, Atlantic Drain Plumbing) kept
+  // showing "Fulfil the paid site" indefinitely: every reconcile pass
+  // recomputed the desired set from customer.status alone, so the item was
+  // never in the "no longer desired" bucket reconcile resolves. A single
+  // early return here is the fix for fulfill_site and a guarantee for every
+  // future type, rather than one more per-type guard to remember.
+  if (lead.status === "archived") return [];
+
   const desired: DesiredWorkItem[] = [];
 
   // qualify_lead -- a brand-new discovered lead awaiting a decision.
@@ -80,11 +98,11 @@ export function deriveDesiredWorkItems(
   // site visuals is the most common operator action during a live campaign,
   // so it gets its own type between fulfill_site and review_site by priority.
   if (!TERMINAL_FOR_SITE.has(lead.status)) {
-    for (const site of input.websitesAwaitingVisualReview ?? []) {
-      desired.push(item("review_visuals", `website:${site.id}`));
+    if (input.latestWebsite && input.latestWebsite.status === "review_required") {
+      desired.push(item("review_visuals", `website:${input.latestWebsite.id}`));
     }
-    for (const job of input.designerJobsAwaitingVisualReview ?? []) {
-      desired.push(item("review_visuals", `designer_job:${job.id}`));
+    if (input.latestDesignerJob && input.latestDesignerJob.status === "visual_review_required") {
+      desired.push(item("review_visuals", `designer_job:${input.latestDesignerJob.id}`));
     }
   }
 

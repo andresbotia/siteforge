@@ -120,6 +120,42 @@ describe("deriveDesiredWorkItems", () => {
     assert.equal(types(interestedButPaid).includes("confirm_intent"), false);
   });
 
+  it("M10.6 follow-up: an archived lead produces fulfill_site nowhere, even with a pending_setup customer row", () => {
+    // Regression: fulfill_site's condition (customer.status === "pending_setup")
+    // never checked lead.status at all, unlike every other type. Archiving
+    // Tidewash / Atlantic Drain Plumbing (both had a live pending_setup
+    // customer row from before they were archived) left "Fulfil the paid
+    // site" showing at the top of the queue indefinitely -- reconcile kept
+    // recomputing it as desired on every pass since the condition never
+    // changed, so it was never in the "no longer desired" set reconcile
+    // resolves. This is a missing status guard, not a resolve-pass bug.
+    const archivedButPendingSetup = inputs({
+      lead: { id: "L1", status: "archived" },
+      customer: { id: "C1", status: "pending_setup" },
+    });
+    assert.deepEqual(types(archivedButPendingSetup), []);
+  });
+
+  it("M10.6 follow-up: an archived lead produces NO work item of any type, whatever else is true about it", () => {
+    // Every trigger at once, to prove the guard is a blanket early return and
+    // not one more per-type condition someone has to remember to add.
+    const archivedWithEverything = inputs({
+      lead: { id: "L1", status: "archived" },
+      latestAuditId: "A1",
+      hasWebsite: false,
+      latestWebsite: { id: "W1", status: "review_required" },
+      latestDesignerJob: { id: "J1", status: "visual_review_required" },
+      customer: { id: "C1", status: "pending_setup" },
+      offers: [{ id: "OF1", status: "draft" }],
+      outreach: [{ id: "O1", kind: "cold_outreach", status: "replied" }],
+      pendingEmailApprovals: [
+        { id: "AP1", payloadAction: "send_outreach_email" },
+        { id: "AP2", payloadAction: "send_follow_up_email" },
+      ],
+    });
+    assert.deepEqual(deriveDesiredWorkItems(archivedWithEverything), []);
+  });
+
   it("wants fulfill_site only while the customer is pending_setup", () => {
     assert.deepEqual(
       types(inputs({ lead: { id: "L1", status: "customer" }, customer: { id: "C1", status: "pending_setup" } })),
@@ -169,7 +205,7 @@ describe("deriveDesiredWorkItems", () => {
     const fromWebsite = inputs({
       lead: { id: "L1", status: "contacted" },
       hasWebsite: true,
-      websitesAwaitingVisualReview: [{ id: "W1" }],
+      latestWebsite: { id: "W1", status: "review_required" },
     });
     assert.deepEqual(
       deriveDesiredWorkItems(fromWebsite).map((d) => `${d.type}:${d.dedupeKey}`),
@@ -178,7 +214,7 @@ describe("deriveDesiredWorkItems", () => {
 
     const fromDesignerJob = inputs({
       lead: { id: "L1", status: "website_built" },
-      designerJobsAwaitingVisualReview: [{ id: "J1" }],
+      latestDesignerJob: { id: "J1", status: "visual_review_required" },
     });
     assert.deepEqual(
       deriveDesiredWorkItems(fromDesignerJob).map((d) => `${d.type}:${d.dedupeKey}`),
@@ -192,13 +228,47 @@ describe("deriveDesiredWorkItems", () => {
         types(
           inputs({
             lead: { id: "L1", status },
-            websitesAwaitingVisualReview: [{ id: "W1" }],
+            latestWebsite: { id: "W1", status: "review_required" },
           }),
         ).includes("review_visuals"),
         false,
         status,
       );
     }
+  });
+
+  it("M10.6 follow-up: review_visuals ignores a superseded website even if it is still review_required, and follows only the latest", () => {
+    // Regression for the Antojitos bug: 8 historical generated_websites rows
+    // all sitting in review_required (rebuilds create history instead of
+    // overwriting; nothing moves an old draft out of that status when it's
+    // superseded) used to produce 8 duplicate work items. The data layer
+    // (src/data/work-items.ts) now resolves "latest" before calling in here,
+    // so derive only ever sees ONE candidate per lead -- this asserts the
+    // derive-side half of the contract: passing the current version produces
+    // exactly one item keyed on ITS id, never on an older one.
+    const currentIsAwaitingReview = inputs({
+      lead: { id: "L1", status: "website_built" },
+      latestWebsite: { id: "W-latest", status: "review_required" },
+    });
+    assert.deepEqual(
+      deriveDesiredWorkItems(currentIsAwaitingReview).map((d) => d.dedupeKey),
+      ["website:W-latest"],
+    );
+
+    // The current version has already moved past review_required (approved,
+    // live, building, failed, ...) -- no item, even though older history
+    // might still say review_required in the database (derive never sees
+    // that history at all; the data layer excludes it before this point).
+    for (const status of ["approved", "live", "building", "failed"]) {
+      const currentIsPastReview = inputs({
+        lead: { id: "L1", status: "website_built" },
+        latestWebsite: { id: "W-latest", status },
+      });
+      assert.deepEqual(types(currentIsPastReview), [], status);
+    }
+
+    // Nothing produced (no exception) when there is no current version at all.
+    assert.deepEqual(types(inputs({ lead: { id: "L1", status: "website_built" }, latestWebsite: null })), []);
   });
 
   it("orders review_visuals between fulfill_site and review_site", () => {
