@@ -42,7 +42,7 @@ export function ManualPublicProspectForm() {
                 aria-describedby={errors.businessName ? "manual-business-name-error" : undefined}
               />
               {errors.businessName ? (
-                <p id="manual-business-name-error" className="text-[11px] text-danger">
+                <p id="manual-business-name-error" className="text-xs text-danger">
                   {errors.businessName}
                 </p>
               ) : null}
@@ -63,7 +63,7 @@ export function ManualPublicProspectForm() {
                 aria-describedby={errors.websiteUrl ? "manual-website-url-error" : undefined}
               />
               {errors.websiteUrl ? (
-                <p id="manual-website-url-error" className="text-[11px] text-danger">
+                <p id="manual-website-url-error" className="text-xs text-danger">
                   {errors.websiteUrl}
                 </p>
               ) : null}
@@ -100,7 +100,7 @@ export function ManualPublicProspectForm() {
                 aria-describedby={errors.location ? "manual-location-error" : undefined}
               />
               {errors.location ? (
-                <p id="manual-location-error" className="text-[11px] text-danger">
+                <p id="manual-location-error" className="text-xs text-danger">
                   {errors.location}
                 </p>
               ) : null}
@@ -126,7 +126,7 @@ export function ManualPublicProspectForm() {
                 ))}
               </SelectInput>
               {errors.industry ? (
-                <p id="manual-industry-error" className="text-[11px] text-danger">
+                <p id="manual-industry-error" className="text-xs text-danger">
                   {errors.industry}
                 </p>
               ) : null}
@@ -144,7 +144,7 @@ export function ManualPublicProspectForm() {
                 aria-describedby={errors.phone ? "manual-phone-error" : undefined}
               />
               {errors.phone ? (
-                <p id="manual-phone-error" className="text-[11px] text-danger">
+                <p id="manual-phone-error" className="text-xs text-danger">
                   {errors.phone}
                 </p>
               ) : null}

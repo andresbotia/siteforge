@@ -104,7 +104,7 @@ export default async function DesignerAgentPage() {
 function HealthItem({ label, value, tone }: { label: string; value: string; tone: "success" | "danger" | "neutral" }) {
   return (
     <div>
-      <p className="text-[11px] text-muted-foreground uppercase tracking-wide">{label}</p>
+      <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
       <p className="mt-0.5">
         <Badge tone={tone}>{value}</Badge>
       </p>

@@ -196,14 +196,14 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
             <tr>
               <td
                 colSpan={13}
-                className="border-t border-border-subtle px-3 py-6 text-sm text-muted"
+                className="border-t border-border px-3 py-8 text-center text-sm text-muted"
               >
-                No leads yet.
+                No leads match these filters.
               </td>
             </tr>
           ) : null}
           {filtered.map((lead) => (
-            <tr key={lead.id} className="hover:bg-surface-hover/70">
+            <tr key={lead.id} className="hover:bg-surface-2/60">
               <Td>
                 <Link
                   href={`/leads/${lead.id}`}

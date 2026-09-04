@@ -146,7 +146,7 @@ export default async function OverviewPage() {
           <CardBody>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <p className="text-[11px] text-muted-foreground uppercase">
+                <p className="text-xs text-muted-foreground uppercase">
                   Today
                 </p>
                 <p className="mt-1 text-lg font-semibold tabular-nums">
@@ -154,7 +154,7 @@ export default async function OverviewPage() {
                 </p>
               </div>
               <div>
-                <p className="text-[11px] text-muted-foreground uppercase">
+                <p className="text-xs text-muted-foreground uppercase">
                   This month
                 </p>
                 <p className="mt-1 text-lg font-semibold tabular-nums">

@@ -32,10 +32,10 @@ function NavLink({
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
       className={cn(
-        "flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors",
+        "flex items-center gap-2 rounded-sm px-2 py-1.5 text-sm transition-colors",
         active
-          ? "bg-accent-muted text-accent"
-          : "text-muted hover:bg-surface-hover hover:text-foreground",
+          ? "bg-accent-muted font-medium text-accent"
+          : "text-muted hover:bg-surface-2 hover:text-foreground",
       )}
     >
       <Icon className="size-4 shrink-0" aria-hidden={true} />
@@ -60,7 +60,7 @@ export function Sidebar({
       <div className="border-b border-border px-4 py-4">
         <Link href="/today" onClick={onNavigate} className="block">
           <p className="text-sm font-semibold tracking-tight">SiteForge</p>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             AI Website Operations
           </p>
         </Link>
@@ -69,7 +69,7 @@ export function Sidebar({
         {navSections.map((section, index) => (
           <div key={section.label ?? `section-${index}`} className="mb-4">
             {section.label ? (
-              <p className="px-2 pb-1.5 text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+              <p className="px-2 pb-1.5 text-xs tracking-wide text-muted-foreground uppercase">
                 {section.label}
               </p>
             ) : null}
@@ -95,7 +95,7 @@ export function Sidebar({
             aria-expanded={toolsOpen}
             aria-controls="sidebar-tools"
             onClick={() => setToolsOpen((open) => !open)}
-            className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-[10px] font-medium tracking-wider text-muted-foreground uppercase transition-colors hover:text-foreground"
+            className="flex w-full items-center gap-1.5 rounded-sm px-2 py-1.5 text-xs tracking-wide text-muted-foreground uppercase transition-colors hover:text-foreground"
           >
             <ChevronRight
               className={cn("size-3 transition-transform", toolsOpen && "rotate-90")}
@@ -108,7 +108,7 @@ export function Sidebar({
               {toolsSections.map((section) => (
                 <div key={section.label}>
                   {section.label ? (
-                    <p className="px-2 pb-1 text-[10px] tracking-wide text-muted-foreground/70 uppercase">
+                    <p className="px-2 pb-1 text-xs tracking-wide text-muted-foreground uppercase">
                       {section.label}
                     </p>
                   ) : null}
@@ -132,14 +132,14 @@ export function Sidebar({
         </div>
       </nav>
       <div className="border-t border-border px-4 py-3">
-        <p className="text-[11px] text-muted-foreground">M10 · Operator Console</p>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">M10.5 · Operator Console</p>
+        <p className="text-xs text-muted-foreground">
           Mock payment &amp; email providers
         </p>
         <form action={logout} className="mt-2">
           <button
             type="submit"
-            className="text-[11px] text-muted transition-colors hover:text-foreground"
+            className="text-xs text-muted transition-colors hover:text-foreground"
           >
             Log out
           </button>

@@ -20,7 +20,7 @@ export function AuditRunButton({ leadId }: { leadId: string }) {
       <Button type="submit" variant="primary" disabled={pending}>
         {pending ? "Auditing…" : "Run Website Audit"}
       </Button>
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Audit cost: ${AUDITOR_COST_USD.toFixed(2)} · Paid AI: Not required
       </p>
       {state?.error ? (

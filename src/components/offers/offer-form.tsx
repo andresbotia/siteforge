@@ -79,7 +79,7 @@ export function OfferEditor({ offer, stripeMode }: { offer: CommercialOffer; str
                   </span>
                 </label>
               ))}
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Amounts are fixed server-side to the configured Stripe Prices. Stripe refuses
                 any checkout whose offer amounts do not match them.
               </p>
@@ -124,7 +124,7 @@ export function OfferEditor({ offer, stripeMode }: { offer: CommercialOffer; str
           >
             {MODE_LABEL[stripeMode]}
           </p>
-          <p className="break-all font-mono text-[11px] text-muted">
+          <p className="break-all font-mono text-xs text-muted">
             {offer.contentHash}
           </p>
           {canRequest ? (
@@ -147,7 +147,7 @@ export function OfferEditor({ offer, stripeMode }: { offer: CommercialOffer; str
               <Button type="submit" variant="primary" disabled={creating}>
                 {creating ? "Creating..." : `Create Checkout (${MODE_LABEL[stripeMode]})`}
               </Button>
-              <p className="mt-1 text-[11px] text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 For internal testing. Customers should use the purchase link below.
               </p>
               {checkoutState?.checkoutUrl ? (

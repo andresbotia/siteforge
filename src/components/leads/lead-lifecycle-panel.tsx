@@ -97,7 +97,7 @@ export function LeadLifecyclePanel({ lead }: { lead: Lead }) {
             placeholder="exampleplumbing.com"
           />
         </Field>
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Operator-supplied example only. SiteForge does not check availability, and outreach
           copy never claims the domain is available -- you are responsible for having checked.
         </p>

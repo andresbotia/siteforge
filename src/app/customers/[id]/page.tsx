@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
+import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
 import {
   CustomerStatusBadge,
@@ -86,16 +87,19 @@ export default async function CustomerDetailPage({ params }: CustomerPageProps) 
           <CardHeader title="Subscriptions" />
           <CardBody>
             {customer.subscriptions.length === 0 ? (
-              <p className="text-sm text-muted">No subscription rows.</p>
+              <EmptyState title="No subscription rows." />
             ) : (
               <ul className="space-y-2">
                 {customer.subscriptions.map((subscription) => (
-                  <li key={subscription.id} className="rounded border border-border-subtle p-3 text-sm">
-                    <p>{subscription.status} - {subscription.interval ?? "one_time"}</p>
+                  <li
+                    key={subscription.id}
+                    className="rounded-sm bg-surface-2 p-3 text-sm"
+                  >
+                    <p>{subscription.status} — {subscription.interval ?? "one_time"}</p>
                     <p className="text-muted">
                       {formatCurrency(Number(subscription.amount_usd))} via {subscription.provider ?? "unknown"}
                     </p>
-                    <p className="break-all font-mono text-[11px] text-muted">
+                    <p className="mt-1 font-mono text-xs break-all text-muted">
                       {subscription.provider_subscription_id ?? "No provider subscription id"}
                     </p>
                   </li>

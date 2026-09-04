@@ -23,7 +23,10 @@ import {
   type OperatorActionContext,
   type WebsiteProducer,
 } from "@/lib/leads/operator-actions";
+import { LinkButton } from "@/components/shared/button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
+import { EmptyState } from "@/components/shared/empty-state";
+import { InlineCallout } from "@/components/shared/callout";
 import { PageHeader } from "@/components/shared/page-header";
 import { ScoreBar, ScoreRing } from "@/components/shared/score-bar";
 import {
@@ -135,7 +138,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         </Link>
       </div>
 
-      <Card className="mb-4" id="next-actions">
+      <Card className="mb-6" id="next-actions">
         <CardHeader
           title="Next actions"
           description="Only the actions legal for this business's current state, ordered by proximity to revenue. Derived from the lifecycle transition table and the existing eligibility helpers."
@@ -146,26 +149,28 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
               No actions available in the current state.
             </p>
           ) : (
-            <ul className="space-y-2">
+            <ul className="-my-3 divide-y divide-border">
               {operatorActions.map((action) => {
                 const isRoute = action.target.startsWith("/");
                 return (
                   <li
                     key={action.id}
-                    className="flex flex-wrap items-start justify-between gap-3 rounded border border-border-subtle p-3"
+                    className="flex flex-wrap items-start justify-between gap-3 py-3"
                   >
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-foreground">
                         {action.label}
                       </p>
-                      <p className="mt-0.5 text-xs text-muted">{action.description}</p>
+                      <p className="mt-0.5 text-sm text-muted">{action.description}</p>
                     </div>
-                    <Link
+                    <LinkButton
                       href={isRoute ? action.target : `#${action.target.replace(/^#/, "")}`}
-                      className="shrink-0 rounded border border-border px-2.5 py-1 text-xs text-accent hover:bg-surface-hover"
+                      variant={isRoute ? "primary" : "secondary"}
+                      size="sm"
+                      className="shrink-0"
                     >
                       {isRoute ? "Open" : "Go to control"}
-                    </Link>
+                    </LinkButton>
                   </li>
                 );
               })}
@@ -175,15 +180,11 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
       </Card>
 
       {isManualPublicProspect ? (
-        <Card className="mb-4">
-          <CardBody>
-            <p className="text-sm text-muted">
-              {isNoStandaloneWebsite
-                ? "M9.5D public-data-only prospect with operator-verified no standalone website. Auditor is not applicable; Builder may create a standalone website draft from verified lead facts only."
-                : "M9.5B public-data-only prospect. Auditor and Builder may use the existing deterministic public website flow, but no outreach, payment, paid AI, or customer production deployment has been run."}
-            </p>
-          </CardBody>
-        </Card>
+        <InlineCallout tone="info" className="mb-4">
+          {isNoStandaloneWebsite
+            ? "M9.5D public-data-only prospect with operator-verified no standalone website. Auditor is not applicable; Builder may create a standalone website draft from verified lead facts only."
+            : "M9.5B public-data-only prospect. Auditor and Builder may use the existing deterministic public website flow, but no outreach, payment, paid AI, or customer production deployment has been run."}
+        </InlineCallout>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_220px]">
@@ -219,7 +220,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         </Card>
       </div>
 
-      <Card className="mt-4" id="lifecycle">
+      <Card className="mt-6" id="lifecycle">
         <CardHeader
           title="Lifecycle"
           description="Operator-set lead status and the optional example domain used in cold outreach copy."
@@ -229,7 +230,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         </CardBody>
       </Card>
 
-      <Card className="mt-4">
+      <Card className="mt-6">
         <CardHeader
           title="Scout qualification"
           description="Deterministic public-business and website-opportunity scores. Not LLM-authored."
@@ -264,7 +265,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
             }
           />
           <div className="sm:col-span-2">
-            <p className="text-[11px] text-muted-foreground uppercase">Reasons</p>
+            <p className="text-xs text-muted-foreground uppercase">Reasons</p>
             {lead.qualificationReasons.length === 0 ? (
               <p className="mt-1 text-sm text-muted">No Scout reasons stored.</p>
             ) : (
@@ -277,7 +278,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           </div>
           {lead.inspectionSummary ? (
             <div className="sm:col-span-2">
-              <p className="text-[11px] text-muted-foreground uppercase">
+              <p className="text-xs text-muted-foreground uppercase">
                 Inspection
               </p>
               <p className="mt-1 text-sm text-muted">
@@ -295,7 +296,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
       </Card>
 
       {commercialPotential ? (
-        <Card className="mt-4">
+        <Card className="mt-6">
           <CardHeader
             title="Commercial potential (Scout)"
             description="Second-stage ranking on top of Scout's business/website scores. Not LLM-authored. Does not by itself invoke Designer or spend anything."
@@ -307,7 +308,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
             <Detail label="Designer coverage" value={String(commercialPotential.designer_coverage_level ?? "—")} />
             {Array.isArray(commercialPotential.reasons) && commercialPotential.reasons.length > 0 ? (
               <div className="sm:col-span-2">
-                <p className="text-[11px] text-muted-foreground uppercase">Reasons</p>
+                <p className="text-xs text-muted-foreground uppercase">Reasons</p>
                 <ul className="mt-1 list-disc space-y-1 pl-4 text-sm text-muted">
                   {commercialPotential.reasons.map((reason: unknown, index: number) => (
                     <li key={index}>{String(reason)}</li>
@@ -320,7 +321,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
       ) : null}
 
       {isNoStandaloneWebsite ? (
-        <Card className="mt-4">
+        <Card className="mt-6">
           <CardHeader
             title="Verified public facts"
             description="Operator-attached public facts for Builder regeneration. Saving does not publish, send outreach, or call paid services."
@@ -335,7 +336,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
       ) : null}
 
       {audit ? (
-        <Card className="mt-4" id="audit">
+        <Card className="mt-6" id="audit">
           <CardHeader
             title="Website audit"
             description={
@@ -398,7 +399,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           </CardBody>
         </Card>
       ) : (
-        <Card className="mt-4" id="audit">
+        <Card className="mt-6" id="audit">
           <CardBody>
             <p className="text-sm text-muted">
               {isNoStandaloneWebsite
@@ -415,7 +416,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
       )}
 
       {website ? (
-        <Card className="mt-4" id="website">
+        <Card className="mt-6" id="website">
           <CardHeader
             title="Website"
             description="Current generated website. Rebuilds create history instead of overwriting."
@@ -462,7 +463,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
           </CardBody>
         </Card>
       ) : (
-        <Card className="mt-4" id="website">
+        <Card className="mt-6" id="website">
           <CardHeader
             title="Create website"
             description="One entry point. Routing is decided by template-registry coverage so you don't have to pick a producer."
@@ -483,7 +484,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         </Card>
       )}
 
-      <Card className="mt-4" id="offers">
+      <Card className="mt-6" id="offers">
         <CardHeader
           title="Offer & purchase link"
           description="Locked-plan commercial offers, approval binding, and the customer purchase link. Mock payment execution only."
@@ -491,11 +492,14 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         <CardBody className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="space-y-3">
             {offers.length === 0 ? (
-              <p className="text-sm text-muted">No offers yet.</p>
+              <EmptyState title="No offers yet." />
             ) : (
-              <ul className="space-y-3">
+              <ul className="space-y-2">
                 {offers.map((offer) => (
-                  <li key={offer.id} className="rounded border border-border-subtle p-3 text-sm">
+                  <li
+                    key={offer.id}
+                    className="rounded-sm bg-surface-2 p-3 text-sm"
+                  >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <Link href={`/offers/${offer.id}`} className="font-medium text-accent hover:underline">
                         Offer {offer.id.slice(0, 8)}
@@ -512,7 +516,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
                     </p>
                     {offer.status === "approved" ||
                     offer.purchaseLinkStatus !== "not_published" ? (
-                      <div className="mt-3 border-t border-border-subtle pt-3">
+                      <div className="mt-3 border-t border-border pt-3">
                         <PurchaseLinkPanel offer={offer} />
                       </div>
                     ) : null}
@@ -525,7 +529,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         </CardBody>
       </Card>
 
-      <Card className="mt-4" id="outreach">
+      <Card className="mt-6" id="outreach">
         <CardHeader
           title="Outreach thread"
           description="Every outreach row for this business — cold and payment follow-up — with status."
@@ -565,7 +569,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         )}
       </Card>
 
-      <Card className="mt-4" id="payment">
+      <Card className="mt-6" id="payment">
         <CardHeader
           title="Payment & customer"
           description="Conversion state for this business. Mock and Stripe TEST payments are never counted as real revenue."
@@ -606,7 +610,7 @@ export default async function LeadDetailPage({ params }: LeadPageProps) {
         </CardBody>
       </Card>
 
-      <Card className="mt-4">
+      <Card className="mt-6">
         <CardHeader title="Activity timeline" />
         {activity.length === 0 ? (
           <p className="px-4 py-6 text-sm text-muted">No activity yet.</p>
@@ -660,12 +664,9 @@ function CreateWebsiteEntry({
       {producer === "builder" ? (
         <BuildRunButton leadId={leadId} />
       ) : (
-        <Link
-          href="/agents/designer"
-          className="inline-block rounded border border-accent px-3 py-1.5 text-sm text-accent hover:bg-surface-hover"
-        >
+        <LinkButton href="/agents/designer" variant="primary" size="sm">
           Create a Designer Job
-        </Link>
+        </LinkButton>
       )}
       <div className="flex flex-wrap gap-3 text-xs">
         {producer !== "builder" ? (
@@ -681,7 +682,7 @@ function CreateWebsiteEntry({
           Import an externally generated site
         </Link>
       </div>
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         None of these deploy, email, buy a domain, or contact the business.
       </p>
     </div>
@@ -703,8 +704,8 @@ function Detail({
 }) {
   return (
     <div>
-      <p className="text-[11px] text-muted-foreground uppercase">{label}</p>
-      <p className="mt-1 break-all text-sm">{value}</p>
+      <p className="text-xs tracking-wide text-muted uppercase">{label}</p>
+      <p className="mt-1 text-sm break-words">{value}</p>
     </div>
   );
 }

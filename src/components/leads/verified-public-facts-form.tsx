@@ -120,7 +120,7 @@ export function VerifiedPublicFactsForm({
       <section className="grid gap-2 rounded-md border border-border p-3">
         <div>
           <h3 className="text-xs font-semibold text-muted">Daily hours</h3>
-          <p className="text-[11px] text-muted-foreground">Enter each day separately. Check Closed for closed days.</p>
+          <p className="text-xs text-muted-foreground">Enter each day separately. Check Closed for closed days.</p>
         </div>
         <div className="grid gap-2">
           {DAY_ORDER.map(({ key, label }) => {
@@ -192,7 +192,7 @@ export function VerifiedPublicFactsForm({
       <section className="grid gap-3 rounded-md border border-border p-3">
         <div>
           <h3 className="text-xs font-semibold text-muted">Verified social profiles</h3>
-          <p className="text-[11px] text-muted-foreground">Only attach profiles the operator has verified as belonging to this business.</p>
+          <p className="text-xs text-muted-foreground">Only attach profiles the operator has verified as belonging to this business.</p>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           {SOCIAL_FIELDS.map(({ platform, label }) => (
@@ -211,7 +211,7 @@ export function VerifiedPublicFactsForm({
       <section className="grid gap-3 rounded-md border border-border p-3">
         <div>
           <h3 className="text-xs font-semibold text-muted">Approved images</h3>
-          <p className="text-[11px] text-muted-foreground">Attach only right-cleared hero/gallery assets. Public platform photos must not be reused unless rights are approved.</p>
+          <p className="text-xs text-muted-foreground">Attach only right-cleared hero/gallery assets. Public platform photos must not be reused unless rights are approved.</p>
         </div>
         {[0, 1, 2, 3].map((index) => {
           const image = imageAssets[index];
@@ -305,7 +305,7 @@ function readImageAssets(value: unknown): WebsiteImageAsset[] {
 
 function ErrorText({ children }: { children: string }) {
   return (
-    <p className="text-[11px] text-danger" role="alert">
+    <p className="text-xs text-danger" role="alert">
       {children}
     </p>
   );

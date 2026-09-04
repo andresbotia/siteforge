@@ -73,7 +73,7 @@ function MilestoneCard({ milestone }: { milestone: Milestone }) {
         </div>
         <p className="text-sm text-muted">{milestone.goal}</p>
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Exit criteria
           </p>
           <ul className="mt-1 list-disc space-y-1 pl-4 text-xs text-muted">

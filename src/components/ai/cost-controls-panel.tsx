@@ -72,7 +72,7 @@ export function CostControlsPanel({
           <CardBody className="grid gap-2 sm:grid-cols-5">
             {snapshot.perRunCeilings.map((item) => (
               <div key={item.agentId}>
-                <p className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+                <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                   {item.label}
                 </p>
                 <p className="mt-1 text-sm font-medium tabular-nums">{item.amountUsd}</p>

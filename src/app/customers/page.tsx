@@ -43,14 +43,14 @@ export default async function CustomersPage() {
             <tr>
               <td
                 colSpan={7}
-                className="border-t border-border-subtle px-3 py-6 text-sm text-muted"
+                className="border-t border-border px-3 py-8 text-center text-sm text-muted"
               >
                 No customers yet.
               </td>
             </tr>
           ) : null}
           {customers.map((customer) => (
-            <tr key={customer.id} className="hover:bg-surface-hover/70">
+            <tr key={customer.id} className="hover:bg-surface-2/60">
               <Td>
                 <Link
                   href={`/customers/${customer.id}`}
@@ -62,7 +62,7 @@ export default async function CustomersPage() {
                   <div>
                     <Link
                       href={`/leads/${customer.leadId}`}
-                      className="text-[11px] text-muted hover:text-foreground"
+                      className="text-xs text-muted hover:text-foreground"
                     >
                       Lead profile
                     </Link>

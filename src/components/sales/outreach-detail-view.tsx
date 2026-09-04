@@ -260,7 +260,7 @@ export function OutreachDetailView({
                           placeholder="https://.../buy/sfb_..."
                           required
                         />
-                        <p className="mt-1 text-[11px] text-emerald-200/70">
+                        <p className="mt-1 text-xs text-emerald-200/70">
                           Paste the link you copied when publishing it. SiteForge stores only its
                           hash, so it cannot rebuild the link -- the backend verifies your paste
                           against the exact hash this approval bound, then substitutes it for{" "}
@@ -346,7 +346,7 @@ export function OutreachDetailView({
                   </li>
                 ))}
               </ul>
-              <p className="text-[11px] text-muted">
+              <p className="text-xs text-muted">
                 Live gate alone is insufficient. Exact-content approval and every eligibility check must pass.
               </p>
             </CardBody>
@@ -391,12 +391,12 @@ export function OutreachDetailView({
                 <ul className="space-y-3">
                   {outreach.evidence.map((item, index) => (
                     <li key={index} className="rounded border border-border-subtle bg-surface-subtle/40 p-2.5 text-xs">
-                      <span className="font-semibold text-foreground uppercase tracking-wider text-[10px]">
+                      <span className="font-semibold text-foreground uppercase tracking-wider text-xs">
                         {item.type.replace("_", " ")}
                       </span>
                       <p className="mt-1 text-muted-foreground">{item.text}</p>
                       {item.source ? (
-                        <p className="mt-0.5 font-mono text-[10px] text-muted">Source: {item.source}</p>
+                        <p className="mt-0.5 font-mono text-xs text-muted">Source: {item.source}</p>
                       ) : null}
                     </li>
                   ))}
@@ -422,13 +422,13 @@ export function OutreachDetailView({
                       <span className="text-lg font-bold text-foreground">
                         {outreach.attributedPreviewEvents.filter((e) => e.event_type === "preview_viewed").length}
                       </span>
-                      <p className="text-[11px] text-muted">Preview Views</p>
+                      <p className="text-xs text-muted">Preview Views</p>
                     </div>
                     <div className="rounded border border-border-subtle p-2">
                       <span className="text-lg font-bold text-foreground">
                         {outreach.attributedPreviewEvents.filter((e) => e.event_type !== "preview_viewed").length}
                       </span>
-                      <p className="text-[11px] text-muted">CTA Interactions</p>
+                      <p className="text-xs text-muted">CTA Interactions</p>
                     </div>
                   </div>
                 </div>
@@ -436,7 +436,7 @@ export function OutreachDetailView({
                 <p className="text-xs text-muted">No active preview deployment linked.</p>
               )}
 
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Privacy notice: Activity attributed to this preview link. Raw IP addresses are not stored. Email scanners may trigger automated views.
               </p>
             </CardBody>
@@ -453,7 +453,7 @@ export function OutreachDetailView({
                   {outreach.events.map((event) => (
                     <li key={event.id} className="border-l-2 border-accent pl-3 text-xs">
                       <span className="font-medium text-foreground">{event.event_type}</span>
-                      <p className="text-muted text-[11px]">{formatDateTime(event.occurred_at)}</p>
+                      <p className="text-muted text-xs">{formatDateTime(event.occurred_at)}</p>
                     </li>
                   ))}
                 </ul>
@@ -469,7 +469,7 @@ export function OutreachDetailView({
 function ReadinessMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded border border-border-subtle p-2">
-      <p className="text-[10px] uppercase text-muted">{label}</p>
+      <p className="text-xs uppercase text-muted">{label}</p>
       <p className="mt-1 font-medium text-foreground">{value}</p>
     </div>
   );

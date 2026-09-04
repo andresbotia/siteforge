@@ -153,7 +153,7 @@ export default async function ScoutRunPage({ params, searchParams }: PageProps) 
                           name
                         )}
                         {reasons.length > 0 ? (
-                          <ul className="mt-1 space-y-0.5 text-[11px] text-muted-foreground">
+                          <ul className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                             {reasons.map((reason: unknown, i: number) => (
                               <li key={i}>{String(reason)}</li>
                             ))}
@@ -174,7 +174,7 @@ export default async function ScoutRunPage({ params, searchParams }: PageProps) 
                       <td className="px-4 py-2 text-muted">
                         {websiteStatusText(String(row.website_status ?? ""))}
                         {row.business_status && row.business_status !== "OPERATIONAL" ? (
-                          <div className="text-[11px] text-danger">{String(row.business_status)}</div>
+                          <div className="text-xs text-danger">{String(row.business_status)}</div>
                         ) : null}
                       </td>
                       <td className="px-4 py-2 tabular-nums">{String(row.business_strength ?? "—")}</td>
@@ -182,9 +182,9 @@ export default async function ScoutRunPage({ params, searchParams }: PageProps) 
                       <td className="px-4 py-2 tabular-nums">
                         {String(row.contactability_score ?? "—")}
                         {Array.isArray(row.contactability_channels) && row.contactability_channels.length > 0 ? (
-                          <div className="text-[11px] text-muted-foreground">{row.contactability_channels.join(", ")}</div>
+                          <div className="text-xs text-muted-foreground">{row.contactability_channels.join(", ")}</div>
                         ) : (
-                          <div className="text-[11px] text-danger">none verified</div>
+                          <div className="text-xs text-danger">none verified</div>
                         )}
                       </td>
                       <td className="px-4 py-2 tabular-nums">{String(row.facts_completeness_count ?? "—")}/6</td>

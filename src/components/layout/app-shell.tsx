@@ -41,7 +41,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             className="absolute inset-0 bg-black/70"
             onClick={() => setMobileOpen(false)}
           />
-          <div className="relative h-full w-64 border-r border-border bg-background">
+          <div className="relative h-full w-64 border-r border-border bg-background shadow-[var(--sf-shadow-overlay)]">
             <div className="absolute top-3 right-3">
               <Button
                 variant="ghost"
@@ -69,9 +69,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Button>
           <div>
             <p className="text-sm font-semibold">SiteForge</p>
-            <p className="text-[11px] text-muted-foreground">
-              AI Website Operations
-            </p>
+            <p className="text-xs text-muted-foreground">AI Website Operations</p>
           </div>
         </header>
         <main id="main-content" className="px-4 py-6 md:px-8 md:py-8">

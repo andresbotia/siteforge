@@ -57,7 +57,7 @@ export function Dialog({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className="relative w-full max-w-md rounded-lg border border-border bg-surface p-5 shadow-2xl outline-none"
+        className="relative w-full max-w-md rounded-md border border-border bg-surface p-5 shadow-[var(--sf-shadow-overlay)] outline-none"
       >
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>

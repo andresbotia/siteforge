@@ -238,7 +238,7 @@ export default async function WebsiteDetailPage({ params }: WebsitePageProps) {
 function Detail({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div>
-      <p className="text-[11px] text-muted-foreground uppercase">{label}</p>
+      <p className="text-xs text-muted-foreground uppercase">{label}</p>
       <div className="mt-1 break-all text-sm">{value}</div>
     </div>
   );

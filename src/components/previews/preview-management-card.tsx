@@ -98,7 +98,7 @@ export function PreviewManagementCard({
 function Metric({ label, value }: { label: string; value: number }) {
   return (
     <div>
-      <p className="text-[11px] text-muted-foreground uppercase">{label}</p>
+      <p className="text-xs text-muted-foreground uppercase">{label}</p>
       <p className="mt-1 text-xl font-semibold text-foreground">{value}</p>
     </div>
   );
@@ -107,7 +107,7 @@ function Metric({ label, value }: { label: string; value: number }) {
 function Detail({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-[11px] text-muted-foreground uppercase">{label}</p>
+      <p className="text-xs text-muted-foreground uppercase">{label}</p>
       <p className="mt-1 break-all text-foreground">{value}</p>
     </div>
   );
