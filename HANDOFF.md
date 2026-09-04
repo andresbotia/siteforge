@@ -61,6 +61,33 @@ Verified both fixes, then ran the dry run again (identical classification to the
 
 No further operator action needed for Task 1. Reversal, if any archived lead needs it, is one click: `/leads/[id]` -> Lifecycle -> move to "Contacted".
 
+### Addendum 2 -- three bugs found once real data was in the queue
+
+The operator reported `/today` problems after the archive above went live: Antojitos showed eight identical "Approve site visuals" cards, three archived/synthetic leads (Tidewash, SiteForge Stripe Test, Atlantic Drain Plumbing) still showed `fulfil_site`, and item rows inside a business card visually read as their own mini-cards rather than as rows.
+
+**Investigated against the real hosted data before touching code** (all three diagnoses confirmed by direct query, not assumption):
+
+- Antojitos has 8 `generated_websites` rows, **all** `status = review_required` -- every rebuild creates a new row (by design: "rebuilds create history instead of overwriting"), and nothing ever moves a superseded draft out of `review_required` when it's replaced. The old derive condition took every matching row per lead, so 8 rows -> 8 duplicate `review_visuals` items.
+- The three `fulfill_site` items all had `created_at` **~44 minutes before** Tidewash/Atlantic Drain Plumbing were archived -- proving reconcile *had* run since (it runs on every `/today` visit) and simply kept recreating the item as "desired," because `fulfill_site`'s condition never checked `lead.status` at all, unlike every other type. **This was a missing guard, not a stale-item/resolve-pass bug** -- the requested diagnosis.
+- SiteForge Stripe Test still shows `fulfill_site` after this fix, correctly: it is not actually archived in the database (only flagged, never archived, by Addendum 1's `--execute` run) -- out of scope for an "archived leads produce nothing" fix, and still the open operator decision noted above.
+
+**Fixes** (`src/lib/work-items/derive.ts`, `src/data/work-items.ts`, `src/components/today/{business-queue-card,work-item-row}.tsx`):
+
+1. `LeadWorkItemInputs.websitesAwaitingVisualReview`/`designerJobsAwaitingVisualReview` (arrays) replaced with `latestWebsite`/`latestDesignerJob` (the single most-recently-created row of each, or null). The data layer now queries both tables newest-first and takes the first match per lead; derive only ever sees one candidate, so it is structurally impossible to produce more than one `review_visuals` item per producer per lead. Verified against live data: Antojitos now derives exactly one item, keyed on its actual latest website (`b7598a73...`). The 7 now-superseded open items resolve automatically on the next reconcile pass -- no manual cleanup, derived not flagged, consistent with the rest of the system.
+2. `deriveDesiredWorkItems()` now returns `[]` immediately when `lead.status === "archived"`, before any per-type logic runs -- one blanket guarantee instead of a guard to remember per type. Verified against live data: Tidewash and Atlantic Drain Plumbing (both actually archived) now derive zero items.
+3. Row density: label+need collapsed to one line, snooze/dismiss are now plain inline text actions (matching Dismiss's existing weight) instead of a bordered/backgrounded Button chip, row padding `py-3` -> `py-2`. The hairline `divide-y` between rows is unchanged and remains the only separator -- no row draws its own border; the previous "boxed" read came from padding and block-stacking, not from an actual per-row border. Outstanding-action count on the card header now renders only when there is more than one item.
+
+Queue ordering, the seven-business cap, and snooze/dismiss behavior are unchanged, as instructed.
+
+tests 691 -> 694 (+3: two archived-lead blanket-suppression tests, one superseded-website-exclusion test).
+
+### Assumptions / decisions worth a veto (this addendum)
+
+- The `latestWebsite`/`latestDesignerJob` "current version" is defined purely by `created_at` (most recent row wins), with no separate "superseded" flag on `generated_websites`/`designer_jobs` -- consistent with how those tables already work (there is no such flag today). If two rows for the same lead somehow share a timestamp, `.find()`'s order over the DB's own `order by created_at desc` result decides it; not observed in the real data.
+- I did not add a `lead.status === "archived"` guard anywhere else redundantly (TERMINAL_FOR_SITE still includes `archived` for `review_site`/`review_visuals`, now provably redundant given the new early return, but left in place as a second, explicit line of defense rather than removed for minimalism).
+
+## Session: M10.5 -- Visual System Pass
+
 Session start commit `97cabe5` (M10 handoff). Four commits, none pushed. Two migrations created, **not applied by this session** -- both are additive and one is dev-seed-only (see below); apply with the normal `supabase db push` flow. No live Stripe call, no live email, no paid AI, no deployment, DNS, or domain action, no prospect contacted. Mock providers only. No information-architecture, route, navigation, or business-logic change -- paint only.
 
 ### Task 0 -- carried-over M10 fixes
