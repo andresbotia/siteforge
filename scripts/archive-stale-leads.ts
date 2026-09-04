@@ -16,8 +16,14 @@
  * reversible from `/leads/[id]` with one click.
  *
  * Usage:
- *   npm run leads:archive-stale            (dry run -- reports only, writes nothing)
- *   npm run leads:archive-stale -- --execute   (applies the archive + approval expiry)
+ *   npm run leads:archive-stale                 (dry run -- reports only, writes nothing)
+ *   npm run leads:archive-stale:execute         (applies the archive + approval expiry)
+ *   npm run leads:archive-stale -- --execute    (equivalent; kept for scripting, but the
+ *                                                 dedicated script above is more reliable --
+ *                                                 some Windows npm/shell combinations have
+ *                                                 been seen to mangle args passed after `--`,
+ *                                                 which the dedicated script sidesteps by
+ *                                                 never needing arg passthrough at all)
  *
  * Connects directly to Supabase with SUPABASE_SECRET_KEY, the same pattern
  * scripts/designer-worker.ts and src/lib/designer/worker-db.ts use: this is a
@@ -27,7 +33,15 @@
  * unconditionally outside Next's webpack bundling). It is run locally by the
  * operator, who already holds SUPABASE_SECRET_KEY in .env.local like any
  * other server-side SiteForge code.
+ *
+ * Unlike the Next.js app (which loads .env.local automatically), a standalone
+ * tsx process gets no env file loaded for it -- loadDotEnvLocal() below does
+ * that explicitly, using Node's own built-in process.loadEnvFile() (no new
+ * dependency). It is a no-op, not an error, when the file does not exist:
+ * an operator may have the variables set in the shell/CI environment instead.
  */
+import { existsSync } from "node:fs";
+import { resolve } from "node:path";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import {
   ARCHIVE_CATEGORY_LABEL,
@@ -38,8 +52,29 @@ import {
 } from "@/lib/leads/archive-classification";
 import { canTransitionLeadStatus, normalizeArchivedReason } from "@/lib/leads/lifecycle";
 import { inferPaymentEnvironment } from "@/lib/payments/conversion";
-import { getSupabaseServerConfigFromEnv } from "@/lib/supabase/config-core";
+import {
+  getSupabaseServerConfigFromEnv,
+  getSupabaseServerConfigIssueFromEnv,
+} from "@/lib/supabase/config-core";
 import type { Database } from "@/types/database";
+
+/**
+ * Loads .env.local into process.env if the file exists and hasn't already
+ * been loaded another way. Never overrides a variable already set in the
+ * environment (process.loadEnvFile follows the same "shell wins" convention
+ * as `node --env-file` / dotenv). Never logs file contents or values.
+ */
+function loadDotEnvLocal(): void {
+  const path = resolve(process.cwd(), ".env.local");
+  if (!existsSync(path)) return;
+  try {
+    process.loadEnvFile(path);
+  } catch (error) {
+    console.error(
+      `Found .env.local but could not load it (${error instanceof Error ? error.message : "unknown error"}).`,
+    );
+  }
+}
 
 type LeadRow = {
   id: string;
@@ -79,13 +114,28 @@ function toCustomerInput(row: CustomerRow): ArchivableLeadCustomer {
 }
 
 async function main(): Promise<void> {
-  const execute = process.argv.includes("--execute");
+  loadDotEnvLocal();
 
+  // Exact "--execute" is the normal case. The `.endsWith` check is a defense
+  // against shell/npm-version combinations seen to concatenate a passed-through
+  // arg onto the preceding token without a separating space (e.g.
+  // "...archive-stale-leads.ts--execute" arriving as one argv element) --
+  // npm run leads:archive-stale:execute never needs to pass an arg at all, so
+  // it is the reliable path; this just keeps `-- --execute` from failing silent.
+  const execute = process.argv.some((arg) => arg === "--execute" || arg.endsWith("--execute"));
+
+  const issue = getSupabaseServerConfigIssueFromEnv(process.env);
+  if (issue) {
+    console.error(`Supabase server config problem: ${issue.message} (code: ${issue.code})`);
+    process.exitCode = 1;
+    return;
+  }
   const config = getSupabaseServerConfigFromEnv(process.env);
   if (!config) {
-    console.error(
-      "Supabase server config missing: NEXT_PUBLIC_SUPABASE_URL and SUPABASE_SECRET_KEY must both be set (see .env.local).",
-    );
+    // Unreachable in practice (getSupabaseServerConfigIssueFromEnv already
+    // covers every way getSupabaseServerConfigFromEnv can return null), kept
+    // only so this stays type-safe without a non-null assertion.
+    console.error("Supabase server config could not be resolved for an unknown reason.");
     process.exitCode = 1;
     return;
   }

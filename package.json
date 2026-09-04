@@ -14,7 +14,8 @@
     "designer:smoke-test": "tsx scripts/designer-smoke-test.ts",
     "designer:smoke-test:enqueue": "tsx scripts/designer-smoke-test-enqueue.ts",
     "designer:proof:enqueue": "tsx scripts/designer-proof-enqueue.ts",
-    "leads:archive-stale": "tsx scripts/archive-stale-leads.ts"
+    "leads:archive-stale": "tsx scripts/archive-stale-leads.ts",
+    "leads:archive-stale:execute": "tsx scripts/archive-stale-leads.ts --execute"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
