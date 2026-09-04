@@ -3,8 +3,8 @@ import { Card } from "@/components/shared/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { LinkButton } from "@/components/shared/button";
 import { PageHeader } from "@/components/shared/page-header";
+import { BusinessQueueCard } from "@/components/today/business-queue-card";
 import { QueueReconciler } from "@/components/today/queue-reconciler";
-import { WorkItemRow } from "@/components/today/work-item-row";
 import { getTodayQueue } from "@/data/work-items";
 
 export const dynamic = "force-dynamic";
@@ -12,29 +12,30 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Today" };
 
 /**
- * M10 Task 3 / M10.5. The work-item queue and the post-login landing page.
- * Items are ordered by proximity to revenue; the visible list is capped at
- * seven so a long queue reads as attention, not a backlog. Reconciliation runs
- * from a client-mounted action (QueueReconciler), never in this render.
+ * M10 Task 3 / M10.5 / M10.6. The work-item queue and the post-login landing
+ * page, grouped one card per business so a business with several outstanding
+ * actions occupies one queue slot instead of several. Capped at seven
+ * businesses. Reconciliation runs from a client-mounted action
+ * (QueueReconciler), never in this render.
  */
 export default async function TodayPage() {
   const queue = await getTodayQueue();
 
   const overflow: string[] = [];
-  if (queue.hiddenCount > 0) {
+  if (queue.hiddenBusinessCount > 0) {
     overflow.push(
-      `${queue.hiddenCount} more item${queue.hiddenCount === 1 ? "" : "s"} not shown`,
+      `${queue.hiddenBusinessCount} more business${queue.hiddenBusinessCount === 1 ? "" : "es"} (${queue.hiddenItemCount} item${queue.hiddenItemCount === 1 ? "" : "s"}) not shown`,
     );
   }
   if (queue.snoozedCount > 0) {
-    overflow.push(`${queue.snoozedCount} snoozed`);
+    overflow.push(`${queue.snoozedCount} item${queue.snoozedCount === 1 ? "" : "s"} snoozed`);
   }
 
   return (
     <>
       <PageHeader
         title="Today"
-        description="What needs your attention now, nearest-to-revenue first. Each item opens the business it belongs to."
+        description="What needs your attention now, nearest-to-revenue first. One card per business, every outstanding action it has."
       />
 
       <QueueReconciler />
@@ -57,23 +58,11 @@ export default async function TodayPage() {
         </Card>
       ) : (
         <>
-          <Card>
-            <ul className="divide-y divide-border">
-              {queue.visible.map((item, index) => (
-                <WorkItemRow
-                  key={item.id}
-                  position={index + 1}
-                  item={{
-                    id: item.id,
-                    leadId: item.leadId,
-                    businessName: item.businessName,
-                    type: item.type,
-                    need: item.need,
-                  }}
-                />
-              ))}
-            </ul>
-          </Card>
+          <div className="space-y-3">
+            {queue.visible.map((business, index) => (
+              <BusinessQueueCard key={business.leadId} business={business} position={index + 1} />
+            ))}
+          </div>
           {overflow.length > 0 ? (
             <p className="mt-3 text-xs text-muted">
               {overflow.join(" · ")}. Work the queue down, or open the pipeline.

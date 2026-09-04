@@ -35,12 +35,25 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
   const [tier, setTier] = useState("all");
   const [source, setSource] = useState("all");
   const [minScore, setMinScore] = useState("");
+  // M10.6 Task 2: default OFF. Seed/fixture rows are fictional development
+  // data mixed into the same table as real prospects; hiding them by default
+  // is what makes Pipeline show only real work. Never hides anything by
+  // itself when a real business happens to have no source set -- only rows
+  // whose source is literally "seed" or unset match this bucket.
+  const [showFixtures, setShowFixtures] = useState(false);
+
+  const fixtureCount = useMemo(
+    () => leads.filter((lead) => (lead.discoverySource ?? "seed") === "seed").length,
+    [leads],
+  );
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const scoreFloor = minScore === "" ? 0 : Number(minScore);
 
     return leads.filter((lead) => {
+      const isFixture = (lead.discoverySource ?? "seed") === "seed";
+      const matchesFixtureVisibility = showFixtures || !isFixture;
       const matchesQuery =
         needle.length === 0 ||
         lead.businessName.toLowerCase().includes(needle) ||
@@ -54,6 +67,7 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
         source === "all" || (lead.discoverySource ?? "seed") === source;
       const matchesScore = lead.leadScore >= scoreFloor;
       return (
+        matchesFixtureVisibility &&
         matchesQuery &&
         matchesIndustry &&
         matchesLocation &&
@@ -63,7 +77,7 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
         matchesScore
       );
     });
-  }, [industry, leads, location, minScore, query, source, status, tier]);
+  }, [industry, leads, location, minScore, query, showFixtures, source, status, tier]);
 
   return (
     <>
@@ -167,9 +181,23 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
         </Field>
       </div>
 
-      <p className="mb-3 text-xs text-muted-foreground">
-        Showing {filtered.length} of {leads.length} leads
-      </p>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          Showing {filtered.length} of {leads.length} leads
+        </p>
+        {fixtureCount > 0 ? (
+          <label className="flex items-center gap-1.5 text-xs text-muted">
+            <input
+              type="checkbox"
+              checked={showFixtures}
+              onChange={(event) => setShowFixtures(event.target.checked)}
+              className="size-3.5 rounded-sm border-border"
+            />
+            Show seed / fixture data (
+            {showFixtures ? `${fixtureCount} shown` : `${fixtureCount} hidden`})
+          </label>
+        ) : null}
+      </div>
 
       <ManualPublicProspectForm />
 

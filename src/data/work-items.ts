@@ -32,9 +32,22 @@ export type TodayQueueItem = {
   snoozedUntil: string | null;
 };
 
+/** One business and every outstanding (non-snoozed) work item it has open, most-urgent item first. */
+export type TodayQueueBusiness = {
+  leadId: string;
+  businessName: string;
+  items: TodayQueueItem[];
+};
+
+/**
+ * M10.6 Task 2: the cap is seven BUSINESSES, not seven items. A business with
+ * three open items used to occupy three of the seven slots by itself; now it
+ * occupies one, listing all of its items.
+ */
 export type TodayQueue = {
-  visible: TodayQueueItem[];
-  hiddenCount: number;
+  visible: TodayQueueBusiness[];
+  hiddenBusinessCount: number;
+  hiddenItemCount: number;
   snoozedCount: number;
 };
 
@@ -344,9 +357,25 @@ export async function getTodayQueue(): Promise<TodayQueue> {
     });
   }
 
+  // Group by lead, preserving the priority/created_at order already applied
+  // above: a Map's insertion order is the order each lead's first (most
+  // urgent) item was seen, which is exactly the right order for the groups.
+  const groups = new Map<string, TodayQueueBusiness>();
+  for (const item of active) {
+    let group = groups.get(item.leadId);
+    if (!group) {
+      group = { leadId: item.leadId, businessName: item.businessName, items: [] };
+      groups.set(item.leadId, group);
+    }
+    group.items.push(item);
+  }
+  const orderedGroups = Array.from(groups.values());
+  const hiddenGroups = orderedGroups.slice(VISIBLE_LIMIT);
+
   return {
-    visible: active.slice(0, VISIBLE_LIMIT),
-    hiddenCount: Math.max(0, active.length - VISIBLE_LIMIT),
+    visible: orderedGroups.slice(0, VISIBLE_LIMIT),
+    hiddenBusinessCount: hiddenGroups.length,
+    hiddenItemCount: hiddenGroups.reduce((sum, group) => sum + group.items.length, 0),
     snoozedCount,
   };
 }

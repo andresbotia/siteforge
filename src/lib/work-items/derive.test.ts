@@ -110,6 +110,16 @@ describe("deriveDesiredWorkItems", () => {
     assert.equal(types(withRejectedOffer).includes("confirm_intent"), true);
   });
 
+  it("M10.6: never wants confirm_intent once a customer row exists, even if lead.status still reads interested", () => {
+    // lead.status is operator-set and can lag the payment webhook; the
+    // customers row is the fact that actually confirms intent.
+    const interestedButPaid = inputs({
+      lead: { id: "L1", status: "interested" },
+      customer: { id: "C1", status: "pending_setup" },
+    });
+    assert.equal(types(interestedButPaid).includes("confirm_intent"), false);
+  });
+
   it("wants fulfill_site only while the customer is pending_setup", () => {
     assert.deepEqual(
       types(inputs({ lead: { id: "L1", status: "customer" }, customer: { id: "C1", status: "pending_setup" } })),
@@ -119,6 +129,40 @@ describe("deriveDesiredWorkItems", () => {
       types(inputs({ lead: { id: "L1", status: "customer" }, customer: { id: "C1", status: "active" } })),
       [],
     );
+  });
+
+  it("M10.6: a lead with a pending follow-up approval AND a pending_setup customer wants fulfill_site only, not all three at once", () => {
+    // This is the exact overlap M10.6 reported: one business simultaneously
+    // asking to confirm intent, approve a payment follow-up, and fulfil the
+    // paid site. Once a customers row exists, intent is confirmed and any
+    // "please pay" follow-up is stale -- fulfill_site is the only live ask.
+    const overlapping = inputs({
+      lead: { id: "L1", status: "interested" },
+      customer: { id: "C1", status: "pending_setup" },
+      pendingEmailApprovals: [{ id: "AP1", payloadAction: "send_follow_up_email" }],
+    });
+    assert.deepEqual(types(overlapping), ["fulfill_site"]);
+  });
+
+  it("M10.6: approve_follow_up still fires normally before any customer row exists", () => {
+    // A real follow-up approval always implies an approved offer (per
+    // evaluateFollowUpEligibility), which also suppresses confirm_intent --
+    // so this fixture matches what the real eligibility gate would produce.
+    const stillProspect = inputs({
+      lead: { id: "L1", status: "interested" },
+      offers: [{ id: "OF1", status: "approved" }],
+      pendingEmailApprovals: [{ id: "AP1", payloadAction: "send_follow_up_email" }],
+    });
+    assert.deepEqual(types(stillProspect), ["approve_follow_up"]);
+  });
+
+  it("M10.6: approve_outreach (cold) is unaffected by an existing customer row", () => {
+    const alreadyCustomerButColdApprovalSomehowPending = inputs({
+      lead: { id: "L1", status: "customer" },
+      customer: { id: "C1", status: "active" },
+      pendingEmailApprovals: [{ id: "AP1", payloadAction: "send_outreach_email" }],
+    });
+    assert.deepEqual(types(alreadyCustomerButColdApprovalSomehowPending), ["approve_outreach"]);
   });
 
   it("wants review_visuals for a built site awaiting visual sign-off, from either producer", () => {
