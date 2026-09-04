@@ -218,7 +218,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function Permission({ allowed, label }: { allowed: boolean; label: string }) {
   return (
-    <Badge tone={allowed ? "accent" : "neutral"}>
+    <Badge tone={allowed ? "success" : "neutral"}>
       {allowed ? "Allowed" : "Denied"} · {label}
     </Badge>
   );

@@ -26,11 +26,14 @@ import type {
   RiskLevel,
 } from "@/types";
 
+// Tone assignments follow the canonical map in DESIGN-SYSTEM.md section 1.
+// The through-line: `warning` always means "the operator has a decision to
+// make". There is no `accent` tone -- accent is for interactive elements.
 const leadTone = {
   discovered: "neutral",
-  qualified: "accent",
+  qualified: "success",
   audited: "info",
-  website_built: "warning",
+  website_built: "info",
   approved: "success",
   contacted: "info",
   interested: "success",
@@ -40,9 +43,9 @@ const leadTone = {
 } as const;
 
 const websiteTone = {
-  building: "warning",
-  review_required: "info",
-  approved: "accent",
+  building: "info",
+  review_required: "warning",
+  approved: "success",
   live: "success",
   failed: "danger",
 } as const;
@@ -50,10 +53,10 @@ const websiteTone = {
 const outreachTone = {
   draft: "neutral",
   awaiting_approval: "warning",
-  approved: "accent",
+  approved: "success",
   sent: "info",
   failed: "danger",
-  replied: "accent",
+  replied: "info",
   interested: "success",
   declined: "danger",
   unsubscribed: "neutral",
@@ -67,23 +70,25 @@ const customerStatusTone = {
 
 const planTone = {
   website_only: "neutral",
-  managed: "accent",
+  managed: "info",
 } as const;
 
+// Approval type is a category, not a state. All neutral except the classes
+// that carry irreversible-side-effect risk, flagged with `warning`.
 const approvalTone = {
-  website_deployment: "accent",
-  external_email: "info",
-  website_modification: "warning",
-  payment_action: "danger",
+  website_deployment: "neutral",
+  external_email: "neutral",
+  website_modification: "neutral",
+  payment_action: "warning",
   paid_ai_usage: "warning",
-  dns_change: "danger",
-  destructive_infrastructure_action: "danger",
+  dns_change: "warning",
+  destructive_infrastructure_action: "warning",
 } as const;
 
 const commercialOfferTone = {
   draft: "neutral",
   awaiting_approval: "warning",
-  approved: "accent",
+  approved: "success",
   checkout_created: "info",
   paid: "success",
   expired: "neutral",
@@ -118,7 +123,7 @@ const leadWebsiteTone = {
 const qualificationTone = {
   reject: "danger",
   review: "warning",
-  qualified: "accent",
+  qualified: "success",
   high_priority: "success",
 } as const;
 
@@ -132,7 +137,7 @@ export function LeadSourceBadge({ source }: { source: string | null }) {
     return <Badge tone="info">Manual public</Badge>;
   }
   if (normalized === "scout") {
-    return <Badge tone="accent">Scout</Badge>;
+    return <Badge tone="neutral">Scout</Badge>;
   }
   return <Badge tone="neutral">Seed / fixture</Badge>;
 }

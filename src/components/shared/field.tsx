@@ -13,19 +13,17 @@ export function Field({
 }) {
   return (
     <div className="grid gap-1.5">
-      <label htmlFor={htmlFor} className="text-xs font-medium text-muted">
+      <label htmlFor={htmlFor} className="text-xs text-muted">
         {label}
       </label>
       {children}
-      {hint ? (
-        <p className="text-[11px] text-muted-foreground">{hint}</p>
-      ) : null}
+      {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
 
 export const inputClassName =
-  "h-9 w-full rounded-md border border-border bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground";
+  "h-8 w-full rounded-sm border border-border bg-surface px-2.5 text-sm text-foreground placeholder:text-muted-foreground";
 
 export function TextInput({
   className,
@@ -53,7 +51,7 @@ export function TextArea({
   return (
     <textarea
       className={cn(
-        "w-full rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none",
+        "w-full rounded-sm border border-border bg-surface px-2.5 py-2 text-sm text-foreground placeholder:text-muted-foreground",
         className,
       )}
       {...props}

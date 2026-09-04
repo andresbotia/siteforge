@@ -1,5 +1,10 @@
 import { cn } from "@/lib/cn";
 
+/**
+ * See DESIGN-SYSTEM.md section 5. Dense: ~36px rows, 13px cells, one border
+ * weight, surface-2 header. The page body never scrolls sideways -- the table
+ * does, inside this box.
+ */
 export function DataTable({
   children,
   minWidth = "min-w-[880px]",
@@ -8,7 +13,7 @@ export function DataTable({
   minWidth?: string;
 }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-border">
+    <div className="overflow-x-auto rounded-md border border-border">
       <table className={cn("w-full text-left text-sm", minWidth)}>
         {children}
       </table>
@@ -18,7 +23,7 @@ export function DataTable({
 
 export function THead({ children }: { children: React.ReactNode }) {
   return (
-    <thead className="bg-surface-hover/60 text-[11px] font-medium tracking-wide text-muted-foreground uppercase">
+    <thead className="border-b border-border bg-surface-2 text-xs text-muted uppercase">
       {children}
     </thead>
   );
@@ -32,7 +37,7 @@ export function Th({
   className?: string;
 }) {
   return (
-    <th className={cn("px-3 py-2.5 font-medium whitespace-nowrap", className)}>
+    <th className={cn("px-3 py-2 font-medium whitespace-nowrap", className)}>
       {children}
     </th>
   );
@@ -47,10 +52,7 @@ export function Td({
 }) {
   return (
     <td
-      className={cn(
-        "border-t border-border-subtle px-3 py-2.5 align-middle",
-        className,
-      )}
+      className={cn("border-t border-border px-3 py-2 align-middle", className)}
     >
       {children}
     </td>

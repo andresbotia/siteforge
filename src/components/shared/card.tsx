@@ -12,10 +12,7 @@ export function Card({
   return (
     <section
       id={id}
-      className={cn(
-        "rounded-lg border border-border bg-surface",
-        className,
-      )}
+      className={cn("rounded-md border border-border bg-surface", className)}
     >
       {children}
     </section>
@@ -32,14 +29,14 @@ export function CardHeader({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-3 border-b border-border-subtle px-4 py-3">
-      <div>
-        <h2 className="text-sm font-medium text-foreground">{title}</h2>
+    <div className="flex items-start justify-between gap-3 border-b border-border px-4 py-3">
+      <div className="min-w-0">
+        <h2 className="text-lg text-foreground">{title}</h2>
         {description ? (
-          <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
+          <p className="mt-1 max-w-2xl text-sm text-muted">{description}</p>
         ) : null}
       </div>
-      {action}
+      {action ? <div className="shrink-0">{action}</div> : null}
     </div>
   );
 }

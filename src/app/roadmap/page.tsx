@@ -13,9 +13,9 @@ export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = { title: "Roadmap" };
 
-const TONE_BY_STATUS: Record<MilestoneStatus, "accent" | "success" | "warning" | "neutral"> = {
+const TONE_BY_STATUS: Record<MilestoneStatus, "info" | "success" | "warning" | "neutral"> = {
   done: "success",
-  current: "accent",
+  current: "info",
   next: "warning",
   backlog: "neutral",
 };

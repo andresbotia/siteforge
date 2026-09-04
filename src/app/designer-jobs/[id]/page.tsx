@@ -219,7 +219,7 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function statusTone(status: string): "neutral" | "accent" | "success" | "warning" | "danger" | "info" {
+function statusTone(status: string): "neutral" | "success" | "warning" | "danger" | "info" {
   if (status === "approved") return "success";
   if (status === "rejected" || status === "failed") return "danger";
   if (status === "visual_review_required") return "warning";

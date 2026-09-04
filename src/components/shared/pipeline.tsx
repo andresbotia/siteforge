@@ -9,12 +9,10 @@ export function PipelineStrip({ stages }: { stages: PipelineStage[] }) {
           key={stage.id}
           className="flex flex-col gap-1 bg-surface px-3 py-3"
         >
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             {index + 1}. {stage.label}
           </span>
-          <span className="text-lg font-semibold tabular-nums">
-            {stage.count}
-          </span>
+          <span className="text-lg tabular-nums">{stage.count}</span>
         </li>
       ))}
     </ol>

@@ -86,13 +86,13 @@ export function OutreachDetailView({
             {OUTREACH_KIND_LABEL[outreach.kind]}
           </Badge>
           {isFollowUp ? (
-            <Badge tone={outreach.commercialOffer ? "accent" : "danger"}>
+            <Badge tone={outreach.commercialOffer ? "success" : "danger"}>
               {outreach.commercialOffer
                 ? `Offer: ${outreach.commercialOffer.status}`
                 : "No offer bound"}
             </Badge>
           ) : outreach.previewDeployment ? (
-            <Badge tone={previewActive ? "accent" : "danger"}>
+            <Badge tone={previewActive ? "success" : "danger"}>
               Preview: {previewActive ? "Active" : "Invalid"} (ending {outreach.tokenHint})
             </Badge>
           ) : (
@@ -126,7 +126,7 @@ export function OutreachDetailView({
                       placeholder="e.g. owner@business.com"
                       required
                     />
-                    <Badge tone={isSendable ? "accent" : "warning"}>
+                    <Badge tone={isSendable ? "success" : "warning"}>
                       {isSendable ? "Valid" : "Missing / Invalid"}
                     </Badge>
                   </div>
@@ -340,7 +340,7 @@ export function OutreachDetailView({
                   >
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-medium text-foreground">{item.label}</span>
-                      <Badge tone={item.ok ? "accent" : "warning"}>{item.ok ? "Pass" : "Blocked"}</Badge>
+                      <Badge tone={item.ok ? "success" : "warning"}>{item.ok ? "Pass" : "Blocked"}</Badge>
                     </div>
                     <p className="mt-1 text-muted">{item.detail}</p>
                   </li>

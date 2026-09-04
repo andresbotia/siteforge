@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { reconcileTodayQueueAction } from "@/app/actions/today";
+import { InlineCallout } from "@/components/shared/callout";
 
 /**
  * M10.5 Task 0. Runs the work-item reconcile once, after mount, so the write
@@ -33,11 +34,8 @@ export function QueueReconciler() {
   if (!error) return null;
 
   return (
-    <div
-      role="status"
-      className="mb-4 rounded-md border border-warning/30 bg-warning-muted px-3 py-2 text-xs text-warning"
-    >
+    <InlineCallout tone="warning" className="mb-4">
       {error}
-    </div>
+    </InlineCallout>
   );
 }

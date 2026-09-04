@@ -156,7 +156,7 @@ export function ApprovalsView({
             <div className="mt-4 flex flex-wrap items-start gap-2">
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
                 onClick={() => setPreviewId(approval.id)}
               >
                 Preview

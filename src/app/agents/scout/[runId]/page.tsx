@@ -238,7 +238,7 @@ function websiteStatusText(status: string): string {
   }
 }
 
-function recommendationTone(value: string): "neutral" | "accent" | "success" | "warning" | "danger" | "info" {
+function recommendationTone(value: string): "neutral" | "success" | "warning" | "danger" | "info" {
   if (value === "BUILD") return "success";
   if (value === "REVIEW") return "warning";
   if (value === "SKIP") return "neutral";
