@@ -2,18 +2,27 @@
 
 import { useEffect, useId, useRef } from "react";
 import { Button } from "@/components/shared/button";
+import { cn } from "@/lib/cn";
+
+const sizes = {
+  md: "max-w-md",
+  lg: "max-w-2xl",
+} as const;
 
 export function Dialog({
   open,
   onClose,
   title,
   description,
+  size = "md",
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
   description?: string;
+  /** "lg" for forms with several fields side by side; "md" (default) for a confirm/simple form. */
+  size?: keyof typeof sizes;
   children: React.ReactNode;
 }) {
   const titleId = useId();
@@ -57,18 +66,18 @@ export function Dialog({
         aria-labelledby={titleId}
         aria-describedby={description ? descriptionId : undefined}
         tabIndex={-1}
-        className="relative w-full max-w-md rounded-md border border-border bg-surface p-5 shadow-[var(--sf-shadow-overlay)] outline-none"
+        className={cn(
+          "relative flex max-h-[85vh] w-full flex-col rounded-md border border-border bg-surface p-5 shadow-[var(--sf-shadow-overlay)] outline-none",
+          sizes[size],
+        )}
       >
-        <div className="mb-4 flex items-start justify-between gap-3">
+        <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
           <div>
-            <h2 id={titleId} className="text-sm font-semibold text-foreground">
+            <h2 id={titleId} className="text-lg text-foreground">
               {title}
             </h2>
             {description ? (
-              <p
-                id={descriptionId}
-                className="mt-1 text-xs leading-5 text-muted"
-              >
+              <p id={descriptionId} className="mt-1 text-sm text-muted">
                 {description}
               </p>
             ) : null}
@@ -77,7 +86,7 @@ export function Dialog({
             Close
           </Button>
         </div>
-        {children}
+        <div className="overflow-y-auto">{children}</div>
       </div>
     </div>
   );

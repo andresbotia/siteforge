@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/shared/button";
 import { DataTable, Td, Th, THead } from "@/components/shared/data-table";
+import { Dialog } from "@/components/shared/dialog";
 import { Field, SelectInput, TextInput } from "@/components/shared/field";
 import { ManualPublicProspectForm } from "@/components/leads/manual-public-prospect-form";
 import { PageHeader } from "@/components/shared/page-header";
@@ -41,6 +42,11 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
   // itself when a real business happens to have no source set -- only rows
   // whose source is literally "seed" or unset match this bucket.
   const [showFixtures, setShowFixtures] = useState(false);
+  // M10.6 Task 4: "Add public prospect" used to occupy permanent space above
+  // the table for an occasional task. It now lives behind its own dialog
+  // trigger -- deliberately not folded into "Find Businesses", which starts
+  // an unrelated automated Scout run.
+  const [addProspectOpen, setAddProspectOpen] = useState(false);
 
   const fixtureCount = useMemo(
     () => leads.filter((lead) => (lead.discoverySource ?? "seed") === "seed").length,
@@ -85,11 +91,26 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
         title="Pipeline"
         description="Every business, at whatever stage. Open one to operate on it end to end. Seed rows remain fictional."
         actions={
-          <Button variant="primary" onClick={() => router.push("/agents/scout")}>
-            Find Businesses
-          </Button>
+          <>
+            <Button variant="secondary" onClick={() => setAddProspectOpen(true)}>
+              Add prospect
+            </Button>
+            <Button variant="primary" onClick={() => router.push("/agents/scout")}>
+              Find Businesses
+            </Button>
+          </>
         }
       />
+
+      <Dialog
+        open={addProspectOpen}
+        onClose={() => setAddProspectOpen(false)}
+        title="Add public prospect"
+        description="Manual M9.5B import for public business data only. No outreach, payment, paid AI, or customer production deployment will run."
+        size="lg"
+      >
+        <ManualPublicProspectForm bare />
+      </Dialog>
 
       <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
         <Field label="Search" htmlFor="lead-search">
@@ -199,8 +220,6 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
         ) : null}
       </div>
 
-      <ManualPublicProspectForm />
-
       <DataTable>
         <THead>
           <tr>
@@ -209,10 +228,9 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
             <Th>Location</Th>
             <Th>Rating</Th>
             <Th>Reviews</Th>
-            <Th>Website Score</Th>
+            <Th>Site Health</Th>
             <Th>Website Status</Th>
             <Th>Lead Score</Th>
-            <Th>Opportunity</Th>
             <Th>Qualification</Th>
             <Th>Status</Th>
             <Th>Source</Th>
@@ -223,7 +241,7 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
           {filtered.length === 0 ? (
             <tr>
               <td
-                colSpan={13}
+                colSpan={12}
                 className="border-t border-border px-3 py-8 text-center text-sm text-muted"
               >
                 No leads match these filters.
@@ -251,9 +269,6 @@ export function LeadsView({ leads }: { leads: Lead[] }) {
                 <LeadWebsiteStatusBadge status={lead.websiteStatus} />
               </Td>
               <Td className="tabular-nums font-medium">{lead.leadScore}</Td>
-              <Td className="tabular-nums">
-                {lead.websiteOpportunityScore ?? "—"}
-              </Td>
               <Td>
                 {lead.qualificationTier ? (
                   <QualificationBadge tier={lead.qualificationTier} />
