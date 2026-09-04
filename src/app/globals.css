@@ -8,35 +8,53 @@
  * with the builder website-generation --sf-* inline vars in
  * src/lib/builder/design-system.ts -- different system, never on the same page.
  * Hex values here mirror src/lib/console-theme/palette.ts (contrast-tested).
+ *
+ * M10.6 Task 3: light neutral ramp (was dark through M10.5). Re-derived, not
+ * repainted -- every value here was checked against src/lib/builder's
+ * contrastRatio() math before being committed; see
+ * src/lib/console-theme/contrast.test.ts for the full matrix. The dark-mode
+ * hex values are gone, not backgrounded -- there is no theme toggle, this is
+ * a full conversion.
  */
 :root {
-  /* Neutrals */
-  --sf-bg: #09090b;
-  --sf-surface: #111114;
-  --sf-surface-2: #17171b;
-  --sf-border: #26262b;
-  --sf-border-strong: #3a3a42;
-  --sf-text: #f4f4f5;
-  --sf-text-muted: #a1a1aa;
-  --sf-text-faint: #8b8b95;
+  /* Neutrals -- near-white ground (not pure #fff, so a white surface still
+     reads as a distinct, slightly-raised plane under a hairline border). */
+  --sf-bg: #f8f8f9;
+  --sf-surface: #ffffff;
+  --sf-surface-2: #eef0f2;
+  --sf-border: #e2e2e6;
+  --sf-border-strong: #c9c9d1;
+  --sf-text: #1a1a1e;
+  --sf-text-muted: #5b5b63;
+  --sf-text-faint: #6b6b74;
 
   /* Accent -- exactly one, interactive only */
-  --sf-accent: #5b9dff;
-  --sf-accent-hover: #7db2ff;
-  --sf-on-accent: #08111f;
-  --sf-accent-soft: color-mix(in srgb, var(--sf-accent) 14%, transparent);
+  --sf-accent: #2555c7;
+  --sf-accent-hover: #1c469f;
+  --sf-on-accent: #ffffff;
+  /* Light mode needs a much lighter tint than dark mode did to keep a status
+     color's own text legible against its own soft fill (a dark color loses
+     contrast fast as its tint approaches white) -- 10%, not 14%. See
+     palette.ts softenOver() and contrast.test.ts. */
+  --sf-accent-soft: color-mix(in srgb, var(--sf-accent) 10%, transparent);
 
-  /* Semantic -- status only */
-  --sf-info: #2dd4bf;
-  --sf-warning: #e8b23a;
-  --sf-success: #3ecf8e;
-  --sf-danger: #f26d6d;
-  --sf-info-soft: color-mix(in srgb, var(--sf-info) 14%, transparent);
-  --sf-warning-soft: color-mix(in srgb, var(--sf-warning) 14%, transparent);
-  --sf-success-soft: color-mix(in srgb, var(--sf-success) 14%, transparent);
-  --sf-danger-soft: color-mix(in srgb, var(--sf-danger) 14%, transparent);
+  /* Semantic -- status only. Darker/more saturated than the dark-mode set on
+     purpose: hitting 4.5:1 on a near-white ground requires more weight than
+     hitting it on a near-black one. Colors legible on dark are reliably too
+     pale here -- these are new colors, not the dark set lightened. */
+  --sf-info: #086b7a;
+  --sf-warning: #7a4a05;
+  --sf-success: #0a6a3d;
+  --sf-danger: #ab2530;
+  --sf-info-soft: color-mix(in srgb, var(--sf-info) 10%, transparent);
+  --sf-warning-soft: color-mix(in srgb, var(--sf-warning) 10%, transparent);
+  --sf-success-soft: color-mix(in srgb, var(--sf-success) 10%, transparent);
+  --sf-danger-soft: color-mix(in srgb, var(--sf-danger) 10%, transparent);
 
-  --sf-shadow-overlay: 0 16px 48px -12px rgba(0, 0, 0, 0.6);
+  /* The one sanctioned shadow (mobile drawer, dialog overlay only). Neutral
+     black at low opacity, not a colored/glow shadow -- reads as "this is
+     physically above the page," nothing more. */
+  --sf-shadow-overlay: 0 16px 40px -14px rgba(15, 15, 20, 0.22);
 
   /* Legacy aliases (compatibility bridge) */
   --background: var(--sf-bg);
@@ -108,7 +126,7 @@
 }
 
 html {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 body {

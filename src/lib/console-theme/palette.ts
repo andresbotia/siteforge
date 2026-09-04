@@ -6,29 +6,41 @@
  * This is the admin console theme. It is NOT the builder website-generation
  * design system (src/lib/builder/design-system.ts) -- separate surface,
  * separate tokens, never merged. See DESIGN-SYSTEM.md.
+ *
+ * M10.6 Task 3: light neutral ramp (was dark through M10.5). No theme
+ * toggle -- this replaced the dark values, it did not add a second set.
  */
 export const CONSOLE_PALETTE = {
-  bg: "#09090b",
-  surface: "#111114",
-  surface2: "#17171b",
-  border: "#26262b",
-  borderStrong: "#3a3a42",
-  text: "#f4f4f5",
-  textMuted: "#a1a1aa",
-  textFaint: "#8b8b95",
-  accent: "#5b9dff",
-  accentHover: "#7db2ff",
-  onAccent: "#08111f",
-  info: "#2dd4bf",
-  warning: "#e8b23a",
-  success: "#3ecf8e",
-  danger: "#f26d6d",
+  bg: "#f8f8f9",
+  surface: "#ffffff",
+  surface2: "#eef0f2",
+  border: "#e2e2e6",
+  borderStrong: "#c9c9d1",
+  text: "#1a1a1e",
+  textMuted: "#5b5b63",
+  textFaint: "#6b6b74",
+  accent: "#2555c7",
+  accentHover: "#1c469f",
+  onAccent: "#ffffff",
+  info: "#086b7a",
+  warning: "#7a4a05",
+  success: "#0a6a3d",
+  danger: "#ab2530",
 } as const;
 
 export type ConsoleColorName = keyof typeof CONSOLE_PALETTE;
 
-/** 14% tint of a hex over an opaque backdrop -- mirrors `color-mix(... 14%, transparent)` composited on `backdrop`. */
-export function softenOver(hex: string, backdrop: string, amount = 0.14): string {
+/**
+ * Soft-fill tint amount for status badges. Lighter than the dark theme's 14%
+ * on purpose: light mode's semantic colors are already dark/saturated (they
+ * have to be, to clear 4.5:1 on a near-white ground), so mixing at the same
+ * 14% strength darkens the fill enough to erode the badge text's own
+ * contrast against it. 10% keeps the fill light while still visibly tinted.
+ */
+export const SOFT_FILL_AMOUNT = 0.1;
+
+/** Tint of a hex over an opaque backdrop -- mirrors `color-mix(... amount, transparent)` composited on `backdrop`. */
+export function softenOver(hex: string, backdrop: string, amount = SOFT_FILL_AMOUNT): string {
   const f = hexToRgb(hex);
   const b = hexToRgb(backdrop);
   const mix = (c: "r" | "g" | "b") => Math.round(f[c] * amount + b[c] * (1 - amount));

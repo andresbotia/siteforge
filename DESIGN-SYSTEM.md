@@ -1,6 +1,6 @@
 # SiteForge Operator Console — Design System
 
-Status: **M10.5**. This document is the durable artifact. The CSS variables in
+Status: **M10.6**. This document is the durable artifact. The CSS variables in
 `src/app/globals.css` and the shared components in `src/components/shared` are
 downstream of it. When they disagree, this document is wrong or the code is
 wrong — fix one of them, not neither.
@@ -15,8 +15,10 @@ This system styles the **admin operator console**: the authenticated app behind
 It is **not** the website-generation design system. `src/lib/builder/design-system.ts`
 (`DESIGN_PRESETS`, `presetCssVariables`, the `--sf-*` inline-style vars consumed
 by `src/components/builder/site/*`) styles the sites SiteForge produces *for
-prospects*. That system is light, editorial, and per-preset; this one is dark,
-neutral, and singular. **They must not share tokens.** The name collision on the
+prospects*. That system is light, editorial, and per-preset; this one is light,
+neutral, and singular (it was dark through M10.5; M10.6 converted it — see
+Direction below). **They must not share tokens** regardless of which is
+currently dark or light. The name collision on the
 `--sf-` prefix is unfortunate but the two never appear on the same page: the
 console theme lives on `:root` in `globals.css`; the builder presets are written
 as inline `style={}` on a preset root inside a renderer. Do not import one into
@@ -40,9 +42,32 @@ every non-neutral color on the screen is either "this is interactive" (one
 accent) or "this is a status" (four semantic colors), never "this looks nice
 here."
 
-The console stays **dark**. It was already dark (`#09090b` ground); a daily
-operational surface benefits from the lower light output, and the status colors
-read more clearly against a dark neutral field than against white.
+**M10.6: the console is now light**, not dark. Reversed from M10.5's own
+"the console stays dark" call — the operator's direction, and the right one:
+a near-white ground with mostly-black text is the more legible default for
+long sessions of reading dense tabular data, and it is the harder aesthetic
+to fake, which is the point. Restraint is the aesthetic this pass targets
+explicitly:
+
+- No gradients, no glassmorphism, no colored/glow drop shadows.
+- No rounded-everything — two radii, not one applied indiscriminately.
+- No emoji or decorative icons in the product chrome (Lucide icons in the nav
+  are functional wayfinding, not decoration, and stay).
+- No purple-to-blue anything. One accent, one hue, used only for interactive
+  elements.
+- No cards floating on a tinted background — the page ground and the card
+  fill are both neutral; the only thing that separates them is a hairline
+  border, not a color shift.
+- No color used to make a screen feel lively. If a visual element is not
+  communicating information, it is not in this system.
+- Structure comes from whitespace and hairline rules, not from nesting boxes
+  inside boxes (§4's "no bordered card inside a bordered card" rule is part
+  of this, not just a density rule).
+
+This is a value swap, not a redesign: every rule below this line that isn't a
+color value is unchanged from M10.5 — same five-size type scale, same 4px
+spacing scale, same two radii, same one-border-weight rule, same borders-not-
+shadows elevation model, same component vocabulary.
 
 ---
 
@@ -58,31 +83,31 @@ compatibility bridge, not a second palette.
 
 | token | value | role | reason |
 |---|---|---|---|
-| `--sf-bg` | `#09090b` | page ground | Near-black, not pure black, so elevated surfaces can be *lighter* than it without going grey-on-grey. |
-| `--sf-surface` | `#111114` | card / panel fill | One step off the ground — enough to read as a distinct plane under a 1px border, not so much it demands attention. |
-| `--sf-surface-2` | `#17171b` | table header, row hover, nested block fill | The *only* second surface. Replaces "a card inside a card": nested content gets this fill and no border. |
-| `--sf-border` | `#26262b` | every border and divider | One border weight. Card edges, table row rules, section dividers, input outlines all use it. "Subtle vs strong border" was a false distinction that made the UI look noisy. |
-| `--sf-border-strong` | `#3a3a42` | hover border on interactive surfaces, focus-ring track | Used only to signal interactivity on hover, never structurally. |
-| `--sf-text` | `#f4f4f5` | primary text | ~17.8:1 on `--sf-bg`. |
-| `--sf-text-muted` | `#a1a1aa` | secondary text, labels, descriptions | 7.0:1 on `--sf-bg`, 6.3:1 on `--sf-surface` — clears AA for body everywhere it is used. |
-| `--sf-text-faint` | `#8b8b95` | timestamps, disabled, non-load-bearing metadata | 4.9:1 on `--sf-bg`. Raised from the old `#71717a` (3.2:1, **failed AA**) so tertiary text is still legible. Never put anything the operator must read at this weight. |
+| `--sf-bg` | `#f8f8f9` | page ground | Near-white, not pure `#fff` — a hair off white so a pure-white raised surface still reads as a distinct plane under a hairline border, without needing a shadow to separate them. |
+| `--sf-surface` | `#ffffff` | card / panel fill | White. The one surface allowed to be pure white; everything else sits slightly off it. |
+| `--sf-surface-2` | `#eef0f2` | table header, row hover, nested block fill | The *only* second surface. Replaces "a card inside a card": nested content gets this fill and no border. |
+| `--sf-border` | `#e2e2e6` | every border and divider | One border weight, light enough to recede (contrast ratio ~1.2 against white — deliberately low; a border's job is definition, not attention) but present enough to define structure without a shadow's help. |
+| `--sf-border-strong` | `#c9c9d1` | hover border on interactive surfaces, focus-ring track | Used only to signal interactivity on hover, never structurally. |
+| `--sf-text` | `#1a1a1e` | primary text | 16.4:1 on `--sf-bg`, 17.4:1 on `--sf-surface`. Near-black, not pure black — mostly-black text on mostly-white ground, per the M10.6 brief. |
+| `--sf-text-muted` | `#5b5b63` | secondary text, labels, descriptions | 6.3:1 on `--sf-bg`, 5.9:1 on `--sf-surface-2` — clears AA everywhere it is used. |
+| `--sf-text-faint` | `#6b6b74` | timestamps, disabled, non-load-bearing metadata | 5.0:1 on `--sf-bg`, 5.3:1 on `--sf-surface`. Still held to the same 4.5:1 floor as every other body text — no exception was carved out for "it's just a timestamp." |
 
 ### Accent — exactly one
 
 | token | value | role |
 |---|---|---|
-| `--sf-accent` | `#5b9dff` | interactive: links, primary button fill, active nav item, focus outline, the one "do this" affordance in a group |
-| `--sf-accent-hover` | `#7db2ff` | accent hover |
-| `--sf-on-accent` | `#08111f` | text/icon on an accent fill (12.5:1 on `--sf-accent`) |
-| `--sf-accent-soft` | `color-mix(--sf-accent 14%, transparent)` | active nav background, selected-row tint |
+| `--sf-accent` | `#2555c7` | interactive: links, primary button fill, active nav item, focus outline, the one "do this" affordance in a group |
+| `--sf-accent-hover` | `#1c469f` | accent hover (darker, not lighter — conventional on a light ground, reads as "pressed," not "lifted") |
+| `--sf-on-accent` | `#ffffff` | text/icon on an accent fill (6.6:1 on `--sf-accent`, 8.7:1 on `--sf-accent-hover`) |
+| `--sf-accent-soft` | `color-mix(--sf-accent 10%, transparent)` | active nav background, selected-row tint |
 
-The accent moved from the previous teal (`#2dd4bf`) to blue. Reason: teal sat one
-hue away from the success green and was used simultaneously for links *and* for
-the "qualified" status — so "is this color telling me something is good, or that I
-can click it?" had no stable answer. Blue is the conventional interactive color
-and is unambiguously *not* a status. Teal is now retired from the accent role and
-reused as the `info` status color (below), where "in progress" is a meaning it
-carries well.
+M10.5 had already moved the accent off the original teal to a blue
+(`#5b9dff`) so it stopped colliding with the success-green status color.
+M10.6 keeps that decision and re-derives the exact blue for the light ground:
+`#5b9dff` reads at only ~3.1:1 on white — legible on a dark ground, too pale
+on a light one — so the hue was kept and the value darkened to `#2555c7`
+(6.2:1 on `--sf-bg`), which still reads unambiguously as "blue, not black,
+not a status color."
 
 ### Semantic — status only
 
@@ -93,14 +118,23 @@ badge. If you want to draw the eye to an action, that is the accent's job.
 | tone | value | `-soft` bg | means | example statuses |
 |---|---|---|---|---|
 | `neutral` | `--sf-text-faint` | `--sf-surface-2` | inert / not started / archived | draft, not_connected, archived, expired, "none" |
-| `info` | `#2dd4bf` | `mix 14%` | in progress, nothing required of the operator yet | building, contacted, sent, checkout_created, review (tier) |
-| `warning` | `#e8b23a` | `mix 14%` | **the operator needs to act** | awaiting_approval, pending_setup, review_required, needs_revision |
-| `success` | `#3ecf8e` | `mix 14%` | good, usually terminal | approved, live, paid, active, interested, customer, qualified |
-| `danger` | `#f26d6d` | `mix 14%` | bad, or failed | failed, rejected, declined, error, cancelled |
+| `info` | `#086b7a` | `mix 10%` | in progress, nothing required of the operator yet | building, contacted, sent, checkout_created, review (tier) |
+| `warning` | `#7a4a05` | `mix 10%` | **the operator needs to act** | awaiting_approval, pending_setup, review_required, needs_revision |
+| `success` | `#0a6a3d` | `mix 10%` | good, usually terminal | approved, live, paid, active, interested, customer, qualified |
+| `danger` | `#ab2530` | `mix 10%` | bad, or failed | failed, rejected, declined, error, cancelled |
 
-Contrast: each semantic hex clears 4.5:1 on both `--sf-bg` and `--sf-surface`;
-each is used as `text` on its own `-soft` background (a tint of the same hue over
-a dark ground keeps the ratio high). Verified in `contrast.test.ts`.
+All four are markedly darker/more saturated than their M10.5 dark-mode
+counterparts (`#2dd4bf`/`#e8b23a`/`#3ecf8e`/`#f26d6d`) — **re-derived, not
+lightened.** A color that clears 4.5:1 against near-black needs far less
+weight than one that has to clear 4.5:1 against near-white; picking colors
+that "look like the same family, just paler" reliably undershoots on a light
+ground. Every value here was checked directly against the real contrast
+math, including the harder case: the badge's own text against its own tinted
+fill, which is why the tint amount also changed (14% on dark → 10% on light,
+`palette.ts`'s `SOFT_FILL_AMOUNT` — a lighter base needs a lighter tint to
+keep the fill from converging on the text color). Verified end-to-end in
+`contrast.test.ts`, 22 assertions, all passing against the light values with
+no threshold weakened.
 
 ### The canonical status → tone map
 
@@ -202,10 +236,10 @@ empty states, callouts) cap at `max-w-2xl`.
 - **Elevation: borders, not shadows.** A shadow says "this element is on a
   different z-plane than the page." The only things that are: the mobile nav
   drawer and the modal dialog. Those get `--sf-shadow-overlay`
-  (`0 16px 48px -12px rgba(0,0,0,0.6)`). Every card, panel, dropdown-in-flow,
-  and popover-in-flow uses a border and `--sf-surface` / `--sf-surface-2`
-  fills. The current `shadow-2xl` on `Card`-like elements and `shadow-sm` on
-  buttons are removed.
+  (`0 16px 40px -14px rgba(15,15,20,0.22)` on the light ground — neutral
+  black at low opacity, never a colored/glow shadow). Every card, panel,
+  dropdown-in-flow, and popover-in-flow uses a border and `--sf-surface` /
+  `--sf-surface-2` fills, never a shadow.
 - **Nested containers:** do not put a bordered card inside a bordered card.
   A block inside a `CardBody` that needs visual separation gets
   `bg-[--sf-surface-2]` + `rounded-sm` + padding, no border, or just a top
