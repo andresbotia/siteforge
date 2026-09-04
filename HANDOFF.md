@@ -1,6 +1,50 @@
 # SiteForge Handoff
 
-For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5B real-prospect preparation and Auditor calibration are locked, with the M9.5B Auditor Calibration lock at `1358caad47c46b9832f875ec1e62d5834043906b`. M9.5C guarded real email integration/internal send is complete: Resend is configured server-side, the sending domain was verified externally, the live-email gate was exercised for one operator-only test, and the test delivered without prospect/customer funnel mutation. M9.5D first controlled prospect campaign preparation is current. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live payment use, or broader production operation. M10 (Operator Console -- navigation + information architecture) is now in progress; the visual system pass is still M10.5 and untouched.
+For the next session. Milestones 1 through 9 are locked, with the latest M9.5A readiness lock at `bfbf41181fb8c1c1ba3ba56ab38f5c2606b8f007`. M9.5B real-prospect preparation and Auditor calibration are locked, with the M9.5B Auditor Calibration lock at `1358caad47c46b9832f875ec1e62d5834043906b`. M9.5C guarded real email integration/internal send is complete: Resend is configured server-side, the sending domain was verified externally, the live-email gate was exercised for one operator-only test, and the test delivered without prospect/customer funnel mutation. M9.5D first controlled prospect campaign preparation is current. The operator deferred credential rotation for now; credential rotation is still required before sensitive customer/payment data, live payment use, or broader production operation. M10 (Operator Console -- navigation + information architecture) is complete. M10.5 (Visual System Pass) is current.
+
+## Session: M10.5 -- Visual System Pass
+
+Session start commit `97cabe5` (M10 handoff). Four commits, none pushed. Two migrations created, **not applied by this session** -- both are additive and one is dev-seed-only (see below); apply with the normal `supabase db push` flow. No live Stripe call, no live email, no paid AI, no deployment, DNS, or domain action, no prospect contacted. Mock providers only. No information-architecture, route, navigation, or business-logic change -- paint only.
+
+### Task 0 -- carried-over M10 fixes
+
+- **Reconcile out of render.** `getTodayQueue()` is now a pure read. `reconcileWorkItems()` runs from a client-mounted server action (`src/app/actions/today.ts` -> `src/components/today/queue-reconciler.tsx`), refreshing the route only when the pass changed something. Chosen over a route handler because a `GET` route handler is prefetchable (the exact double-run the task flagged) whereas a `useEffect`-invoked server action is not. The mutating code paths still call `syncWorkItemsForLead()` after their writes, so the table is kept fresh by writes and the mount action is a backstop.
+- **Reconcile failure is visible.** `reconcileWorkItems()` returns `{ ok, changed, error }` (was `void`). `mutateTable` still logs-and-returns-null on failure globally (unchanged); the reconcile now detects a null insert/update result and the mount action renders an `InlineCallout` warning banner on `/today`.
+- **New work-item type `review_visuals`**, slotted between `fulfill_site` and `review_site` by priority. Created when a `generated_websites` row for the lead has status `review_required`, or a `designer_jobs` row is in `visual_review_required`, and the lead is not archived/rejected/customer. Keyed `website:<id>` / `designer_job:<id>`. Resolves automatically when the site/job leaves that state (derived, not flagged). `20260904000000_work_items_review_visuals_type.sql` widens the type CHECK (additive drop+readd).
+- **Duplicate detail-page buttons removed.** `/leads/[id]` header no longer renders `AuditRunButton`/`BuildRunButton`; they render only in their own cards and the Next actions panel.
+- **Dev seed mix.** `20260904010000_dev_seed_lifecycle_mix.sql` (fixtures only, keyed to the fictional `10000000-...` seed leads) adds a Designer Job in `visual_review_required` and a `send_follow_up_email` pending approval so `/today` exercises `review_visuals` and `approve_follow_up`. NOTE: tracing the base seed, it already spans lifecycle stages and already produces handle_reply/confirm_intent/fulfill_site/review_site/approve_outreach/qualify_lead items -- the "seven qualify_lead and nothing else" the task describes is the *hosted DB's* current state (Scout test rows), not a seed defect. `supabase db reset` gives a representative local queue.
+
+### Task 1 -- UI inventory
+
+Recorded in the session report to the operator (text sizes, colors, spacing, card/button/badge variants, duplicated patterns). Headline findings: 6+ ad-hoc text sizes (`text-[10px]`, `text-[11px]`, `text-[13px]` plus xs/sm/base/lg/xl at inconsistent px), teal accent used simultaneously for links and for "qualified" status, `border` vs `border-subtle` a false distinction, five button variants (two near-identical), a `rounded border border-border-subtle p-3` "mini-card" reimplemented ~8 times, `shadow-2xl`/`shadow-sm` doing borders' job.
+
+### Task 2 -- DESIGN-SYSTEM.md
+
+Authored at repo root. Dark neutral palette + one accent (moved teal -> blue so it no longer collides with success-green; teal reused as the `info` status tone), four semantic status tones reserved for status only, a five-size type scale (11/13/14/16/20) with hierarchy from weight and spacing, a 4px spacing scale with "tight within / generous between" section rhythm, two radii, borders instead of shadows (overlay shadow only on the mobile drawer and dialog), table/list density rules, the canonical status->tone map, and the consolidated component vocabulary. Explicitly kept separate from `src/lib/builder/design-system.ts` (the website-generation presets) -- shared prefix, never shared tokens; the only reuse is the `contrastRatio()` function in a test.
+
+### Task 3 -- applied
+
+- **Tokens** (`src/app/globals.css`): `--sf-*` semantic layer; legacy Tailwind names (`bg-surface`, `text-muted`, `bg-accent`...) aliased to it so existing utilities snap to new values with no per-file churn. `--text-*` overridden to the five-size scale; `--radius-sm/md`. `src/lib/console-theme/palette.ts` (TS mirror) + `contrast.test.ts` (reuses builder's `contrastRatio`, enforces AA on every rendered pair) -- +22 tests. New test glob in `package.json`.
+- **Shared components:** Button 5 variants -> 4 (`outline` deleted == secondary); new `LinkButton`. Badge `accent` tone removed; five semantic tones, optional dot. `status-badge.tsx` retoned to the canonical map. Card/PageHeader/DataTable/Field/MetricCard tightened to the scale, one border weight. New `EmptyState` and `InlineCallout`.
+- **Screens restyled:** layout shell + sidebar; `/today` (queue is one bordered card of hairline rows, position numbers, primary "Open" action); `/leads/[id]` (mini-cards gone, Next actions is a hairline list, section rhythm opened to 24px); `/leads`, `/customers`, `/customers/[id]` (hover/empty/subscription-row cleanup). Repo-wide `text-[10/11px]` -> `text-xs` outside the builder site renderers (visually identical under the new scale).
+- **Not reached / partial:** `/settings`, `/roadmap`, `/approvals`, `/analytics`, `/audits/*`, `/websites/*`, `/offers/*`, `/agents/*`, and the deeper form components (`verified-public-facts-form`, `offer-form`, `outreach-detail-view` -- the last builds its own page header instead of using `PageHeader`) got the token remap and the text-size sweep but not a full component-by-component consolidation pass. `outreach-detail-view.tsx` still has bespoke `emerald-200`/`text-xl font-semibold` markup. These inherit the new palette/scale and are consistent-enough; a follow-up can finish them.
+
+### Validation
+
+`npx tsc --noEmit`, `npm test` (677/677, up from 652 at M10 end: +3 work-item derive for `review_visuals`, +22 console-theme contrast), `npm run lint`, `npm run build`, `git diff --check` all clean.
+
+### Operator action required
+
+- Apply `supabase/migrations/20260904000000_work_items_review_visuals_type.sql` before a `review_visuals` work item can be inserted (the derive logic will try and the write will be logged-and-swallowed until the CHECK allows the value -- and the `/today` banner will now show that failure).
+- `20260904010000_dev_seed_lifecycle_mix.sql` is dev-seed only; apply it (or `supabase db reset`) only in a development database.
+
+### Assumptions / decisions the operator may want to veto
+
+- **Accent moved from teal to blue.** Teal collided with success-green and was doing double duty as "interactive" and "qualified status". This is a visible identity change. If you want teal kept as the accent, the semantic `info` tone needs a different hue instead.
+- Console stays dark (it already was; the brief confirmed density over airiness).
+- `review_visuals` is guarded by the same archived/rejected/customer terminal check as `review_site`.
+- The dev-seed premise: I did not find a seed defect producing "seven qualify_lead"; I read it as hosted-DB drift and added fixtures for the two uncovered types rather than rewriting lead statuses.
+
 
 ## Session: M10 -- Operator Console (navigation and information architecture)
 

@@ -270,6 +270,8 @@ src/
   lib/designer/     Designer Job worker: CLI discovery, sandboxing, prompt generation, output contract
   lib/leads/        Cross-agent lead composites (e.g. Commercial Potential)
                     lifecycle.ts     The single allowed-transitions table for lead status
+  lib/work-items/   /today operator queue: taxonomy + the one derivation of the desired open set
+  lib/console-theme/ Operator-console palette mirror + WCAG contrast test (see /DESIGN-SYSTEM.md)
   lib/roadmap/      Typed read-only milestone roadmap rendered at /roadmap
   lib/sales/        Deterministic outreach drafting, approval binding, attribution tokens
   lib/email/        Mock and guarded Resend provider, delivery policy, webhook verification
@@ -281,6 +283,19 @@ src/
 supabase/
   migrations/       Version-controlled schema and seed SQL
 ```
+
+### Operator console design system
+
+The authenticated admin console (`/today`, `/leads`, `/customers`, `/roadmap`,
+`/settings`, and the secondary debug surfaces) is styled by a single system
+documented in [`DESIGN-SYSTEM.md`](DESIGN-SYSTEM.md): a dark neutral palette
+with one blue accent and four semantic status tones, a five-size type scale,
+and a small shared component set (`src/components/shared`). Tokens live as
+`--sf-*` variables on `:root` in `src/app/globals.css`, bridged to Tailwind
+utility names via `@theme`. `src/lib/console-theme/contrast.test.ts` enforces
+WCAG AA on every rendered pair. This is a **separate system** from the builder
+template presets below -- same `--sf-` prefix, never shared tokens, never on
+the same page.
 
 ### Builder template system
 

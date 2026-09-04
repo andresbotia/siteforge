@@ -1,5 +1,5 @@
 /**
- * SiteForge roadmap, as of M10.
+ * SiteForge roadmap, as of M10.5.
  *
  * Deliberately a typed constant in source, not a database table: there is no
  * CRUD, no migration, and no admin editing surface. Git history is the audit
@@ -185,7 +185,7 @@ export const ROADMAP: readonly Milestone[] = [
   {
     id: "M10",
     title: "Operator Console",
-    status: "current",
+    status: "done",
     goal: "Make the daily operating surface answer 'what needs my attention right now' without hunting across pages.",
     exitCriteria: [
       "Primary nav collapsed to five task-shaped items; /leads/[id] operates a business end to end",
@@ -196,13 +196,14 @@ export const ROADMAP: readonly Milestone[] = [
   {
     id: "M10.5",
     title: "Visual System Pass",
-    status: "next",
+    status: "current",
     goal: "Bring the console onto one deliberate visual system instead of accumulated per-page styling.",
     exitCriteria: [
+      "DESIGN-SYSTEM.md authored; --sf-* token layer + five-size type scale in globals.css; contrast enforced by test",
       "Shared tokens and components applied consistently across pipeline and operations pages",
       "Responsive and accessible behavior verified, not assumed",
     ],
-    notes: "Deliberately after M10 so the layout settles before it is styled.",
+    notes: "Deliberately after M10 so the layout settles before it is styled. Task 0 carried M10's remaining fixes (reconcile out of render, reconcile-failure banner, review_visuals work item, dedup detail buttons, dev-seed mix).",
   },
   {
     id: "M11",
