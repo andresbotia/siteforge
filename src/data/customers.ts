@@ -1,6 +1,9 @@
 import "server-only";
 
-import { readTable } from "@/lib/supabase/server";
+import { recordActivityEvent } from "@/data/activity";
+import { syncWorkItemsForLead } from "@/data/work-items";
+import { mutateTable, readTable } from "@/lib/supabase/server";
+import { buildCustomerActivationPatch, canActivateCustomerSite } from "@/lib/customers/activation";
 import { inferPaymentEnvironment } from "@/lib/payments/conversion";
 import type { Customer, CustomerPlan, CustomerStatus } from "@/types";
 import type {
@@ -93,6 +96,7 @@ export async function listCustomers(): Promise<Customer[]> {
       paymentEnvironment,
       joinedAt: row.created_at,
       convertedAt: row.converted_at,
+      activatedAt: row.activated_at,
     };
   });
 }
@@ -169,6 +173,63 @@ export async function getCustomerById(id: string): Promise<CustomerDetail | null
     paymentEnvironment,
     joinedAt: row.created_at,
     convertedAt: row.converted_at,
+    activatedAt: row.activated_at,
     subscriptions: subscriptions ?? [],
   };
+}
+
+/**
+ * M10 fulfillment follow-up. The only way to move a customer from
+ * pending_setup to active: a manual operator confirmation ("Mark site
+ * live"), never auto-triggered. Domain registration, DNS, and deployment
+ * all happen outside this codebase (see FULFILLMENT-RUNBOOK.md) -- this
+ * function does not check any of that, it only records that the operator
+ * asserts it is done, and lets the existing work-item reconcile pass drop
+ * "Fulfil the paid site" now that the condition it watches is gone.
+ */
+export async function activateCustomerSite(
+  customerId: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const row = await readTable<Pick<
+    CustomerRow,
+    "id" | "status" | "lead_id" | "business_name"
+  > | null>((client) =>
+    client
+      .from("customers")
+      .select("id, status, lead_id, business_name")
+      .eq("id", customerId)
+      .maybeSingle(),
+  );
+  if (!row) return { ok: false, error: "Customer was not found." };
+
+  const check = canActivateCustomerSite(row.status);
+  if (!check.ok) return check;
+
+  const patch = buildCustomerActivationPatch();
+  // The status filter on the update (not just the read above) closes the
+  // race where two requests both pass the read-time check.
+  const updated = await mutateTable<Pick<CustomerRow, "id"> | null>((client) =>
+    client
+      .from("customers")
+      .update(patch)
+      .eq("id", row.id)
+      .eq("status", "pending_setup")
+      .select("id")
+      .maybeSingle(),
+  );
+  if (!updated) return { ok: false, error: "Could not mark the site live." };
+
+  await recordActivityEvent({
+    eventType: "customer_site_activated",
+    title: "Customer site marked live",
+    description: `${row.business_name}: pending_setup -> active`,
+    leadId: row.lead_id ?? undefined,
+    metadata: { customer_id: row.id },
+  });
+
+  if (row.lead_id) {
+    await syncWorkItemsForLead(row.lead_id).catch(() => {});
+  }
+
+  return { ok: true };
 }

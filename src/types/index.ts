@@ -488,6 +488,8 @@ export interface Customer {
   paymentEnvironment: PaymentEnvironment;
   joinedAt: string;
   convertedAt?: string | null;
+  /** When an operator manually confirmed the site is live (pending_setup -> active). */
+  activatedAt?: string | null;
 }
 
 export interface Subscription {

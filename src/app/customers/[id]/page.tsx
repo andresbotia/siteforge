@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ActivateSiteButton } from "@/components/customers/activate-site-button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -60,6 +61,15 @@ export default async function CustomerDetailPage({ params }: CustomerPageProps) 
             <p className="text-muted">
               Converted: {customer.convertedAt ? formatDateTime(customer.convertedAt) : "N/A"}
             </p>
+            <p className="text-muted">
+              Site marked live:{" "}
+              {customer.activatedAt ? formatDateTime(customer.activatedAt) : "Not yet"}
+            </p>
+            {customer.status === "pending_setup" ? (
+              <div className="border-t border-border-subtle pt-3">
+                <ActivateSiteButton customerId={customer.id} leadId={customer.leadId} />
+              </div>
+            ) : null}
             <p className="text-muted">
               Setup payment:{" "}
               {customer.setupAmountCents !== null

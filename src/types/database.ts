@@ -906,6 +906,7 @@ export type Database = {
           production_url: string | null;
           converted_at: string | null;
           conversion_metadata: Json;
+          activated_at: string | null;
         } & Timestamps;
         Insert: {
           id?: string;
@@ -920,6 +921,7 @@ export type Database = {
           production_url?: string | null;
           converted_at?: string | null;
           conversion_metadata?: Json;
+          activated_at?: string | null;
         };
         Update: {
           lead_id?: string | null;
@@ -933,6 +935,7 @@ export type Database = {
           production_url?: string | null;
           converted_at?: string | null;
           conversion_metadata?: Json;
+          activated_at?: string | null;
           updated_at?: string;
         };
         Relationships: [];
