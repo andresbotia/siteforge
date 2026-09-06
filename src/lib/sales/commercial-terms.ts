@@ -18,6 +18,15 @@ import { centsToUsd } from "@/lib/payments/money";
  * The previous copy stated "$99 setup plus optional $39/month" with no term
  * language, which implied the monthly began immediately. It does not: the
  * $99 one-time already includes the first year of hosting and the domain.
+ *
+ * 2026-09-06 correction: clause 3 previously said the domain was "registered
+ * in {business}'s name, with SiteForge listed only as the technical
+ * contact" -- that is not what actually happens. SiteForge is the
+ * registrant of record for as long as hosting is active (this is also what
+ * clause 4 already implied by saying we "transfer the domain to you" on
+ * lapse -- you cannot transfer what is already in someone else's name).
+ * Wording now states that plainly instead of implying the business is
+ * registrant from day one.
  */
 function money(cents: number): string {
   const usd = centsToUsd(cents);
@@ -36,7 +45,7 @@ export function commercialTermsLines(businessName: string): string[] {
   return [
     `The ${SETUP} is a one-time payment. It covers building and setting up the site, registering a domain, and the first year of hosting.`,
     `${MONTHLY}/month is optional and only applies after the first year. It covers hosting from then on plus any changes you want made. If you do not take it, nothing is owed after the ${SETUP}.`,
-    `The domain is registered in ${name}'s name, with SiteForge listed only as the technical contact. It transfers to you on request at any time.`,
+    `We handle ${name}'s domain registration and hosting -- you don't need to deal with any of that. If you ever decide to leave, we transfer the domain and site files to you. No lock-in, no hassle.`,
     `If the monthly is active and later lapses, the site stays online for 30 days and then comes down. Either way — lapsed or never started — we hand over the site files and transfer the domain to you.`,
   ];
 }
@@ -59,8 +68,8 @@ export const COMMERCIAL_TERMS_REQUIRED_PHRASES: readonly string[] = [
   "one-time payment",
   "the first year of hosting",
   "only applies after the first year",
-  "listed only as the technical contact",
-  "transfers to you on request",
+  "domain registration and hosting",
+  "transfer the domain and site files to you",
   "the site stays online for 30 days and then comes down",
   "transfer the domain to you",
 ];

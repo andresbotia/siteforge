@@ -1,6 +1,6 @@
 # Product Marketing Context
 
-**Document version:** v1
+**Document version:** v2
 **Last updated:** 2026-09-06
 
 ## Product Overview
@@ -49,7 +49,7 @@ Single-buyer B2B-ish sale — no formal buying committee. One row covers it:
 - We build the finished site FIRST, before any ask — proof, not a pitch
 - Flat, fixed price ($99) covering the build, domain, and a full year of hosting — no surprise line items
 - A real, local person handles it end to end, not a marketplace of freelancers or a self-serve tool
-- No lock-in: the domain is registered in the business's name and transfers on request at any time, whether or not they keep the monthly plan
+- No lock-in: we handle domain registration and hosting for the business — they don't need to deal with any of it. If they ever leave, we transfer the domain and site files to them, whether or not they kept the monthly plan
 **How we do it differently:** Instead of asking for a meeting or a deposit, we do the work speculatively and hand over a live, working preview link.
 **Why that's better:** The owner is judging a finished thing, not imagining one from a mockup or a sales call — removes the two biggest objections (will it actually look good, and will they actually deliver).
 **Why customers choose us:** They can see and click through the exact site they'd be buying before spending a dollar.
@@ -59,7 +59,7 @@ Single-buyer B2B-ish sale — no formal buying committee. One row covers it:
 |-----------|----------|
 | "How do I know this isn't a scam / low-effort template?" | The preview link is the answer — it's not a mockup or a pitch, it's the actual finished site running live. |
 | "What happens if I stop paying the $39/month?" | Nothing owed if you never start it. If it lapses after being active, the site stays up 30 days, then comes down — either way, you keep the site files and the domain transfers to you. |
-| "Is this locked in / will you own my domain?" | The domain is registered in your business's name from day one; SiteForge is only listed as the technical contact and transfers it to you on request, anytime. |
+| "Is this locked in / will you own my domain?" | We handle domain registration and hosting for you — you don't need to deal with any of that. If you ever decide to leave, we transfer the domain and site files to you, no lock-in, no hassle. |
 **Anti-persona:** Chains, franchises, or restaurants with an in-house marketing hire or an existing agency relationship — they don't feel the core pain (no time/no skill to maintain a site) and are not the target of cold outreach.
 
 ## Switching Dynamics
@@ -93,7 +93,7 @@ Single-buyer B2B-ish sale — no formal buying committee. One row covers it:
 | Theme | Proof |
 |-------|-------|
 | We finish before we ask | The email contains a live preview link, not a mockup or a sales deck |
-| No lock-in | Domain registered in the business's name; transfers on request anytime; site handed over even if the monthly lapses |
+| No lock-in | We register and host the domain for you; transfers to you on request or at offboarding; site handed over even if the monthly lapses |
 
 ## Goals
 **Primary business goal:** Convert cold-outreach and Instagram DM contacts in the Broward County restaurant vertical into paying $99 setup customers.
@@ -102,4 +102,5 @@ Single-buyer B2B-ish sale — no formal buying committee. One row covers it:
 
 ## Changelog
 *Newest first. One line per revision: what changed and why.*
+- v2 (2026-09-06) — Corrected the domain-ownership claim in Differentiation, Objections, and Proof Points: SiteForge is registrant of record during the hosting period (not the business, from day one); domain and site files transfer on request or at offboarding. Matches the actual fulfillment process and the corrected `commercial-terms.ts` outreach copy.
 - v1 (2026-09-06) — Initial context, drafted for the M9.9/M10 cold-email rewrite (marketing-skills installation).

@@ -15,7 +15,7 @@ describe("commercial terms", () => {
     assert.equal(lines.length, 4);
     assert.match(lines[0], /one-time payment.*registering a domain.*the first year of hosting/s);
     assert.match(lines[1], /only applies after the first year.*plus any changes/s);
-    assert.match(lines[2], /registered in Reef Pool Care's name.*technical contact.*transfers to you on request/s);
+    assert.match(lines[2], /We handle Reef Pool Care's domain registration and hosting.*transfer the domain and site files to you/s);
     assert.match(lines[3], /stays online for 30 days and then comes down.*hand over the site files and transfer the domain to you/s);
   });
 

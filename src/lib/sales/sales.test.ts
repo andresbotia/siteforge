@@ -95,9 +95,9 @@ describe("Sales Agent: M9.9 cold email additions", () => {
     assert.match(draft.body, /\$99 is a one-time payment.*registering a domain.*the first year of hosting/s);
     // $39/month is optional and only after year one -- it does not begin now.
     assert.match(draft.body, /\$39\/month is optional and only applies after the first year/);
-    // Domain ownership.
-    assert.match(draft.body, /registered in .+'s name, with SiteForge listed only as the technical contact/);
-    assert.match(draft.body, /transfers to you on request/);
+    // Domain ownership -- SiteForge is registrant during hosting, not the business.
+    assert.match(draft.body, /We handle .+'s domain registration and hosting/);
+    assert.match(draft.body, /transfer the domain and site files to you/);
     // Lapse handling.
     assert.match(draft.body, /the site stays online for 30 days and then comes down/);
     assert.match(draft.body, /we hand over the site files and transfer the domain to you/);
