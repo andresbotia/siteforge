@@ -799,6 +799,103 @@ describe("boundary isolation (source scans, matching the existing repo pattern)"
   });
 });
 
+/**
+ * M10 fulfillment follow-up: the founder payment notification.
+ *
+ * `processCheckoutCompletedEvent` has no fake-Supabase test harness anywhere
+ * in this repo (nothing mocks `createServerSupabaseClient`/`@supabase/
+ * supabase-js`, and `src/data/**` is not part of the test glob) -- every
+ * existing test that touches this function's invariants does so the same
+ * way, by scanning the source (see "boundary isolation" above). These tests
+ * follow that same convention for the three properties that matter here:
+ * (a) fires once per event, (b) a failure can't fail/block the webhook, and
+ * (c) a replayed event ID can't produce a duplicate send. The email
+ * content itself (name, amount, link) is covered by a real, DB-free unit
+ * test at src/lib/notifications/founder-payment.test.ts.
+ */
+describe("founder payment notification (source scans -- see comment above)", () => {
+  function readSource(...segments: string[]): string {
+    return readFileSync(join(process.cwd(), ...segments), "utf8");
+  }
+
+  it("(c) sits after the duplicate-event early return, so a replayed event ID never reaches it", () => {
+    const dataSource = readSource("src", "data", "payments.ts");
+    const duplicateReturnIndex = dataSource.indexOf(
+      "if (webhookError) return { ok: true, duplicate: true };",
+    );
+    assert.ok(
+      duplicateReturnIndex > -1,
+      "expected the existing duplicate-event early return to still exist, unmodified",
+    );
+    const notificationIndex = dataSource.indexOf("buildFounderPaymentNotificationEmail(");
+    assert.ok(notificationIndex > -1, "expected the founder notification call to exist");
+    assert.ok(
+      notificationIndex > duplicateReturnIndex,
+      "a replayed webhook (same Stripe event ID) hits the duplicate-insert conflict and returns before ever reaching the notification call",
+    );
+  });
+
+  it("(a) appears exactly once in the module -- not in a loop or a per-branch duplicate", () => {
+    const dataSource = readSource("src", "data", "payments.ts");
+    const matches = dataSource.match(/buildFounderPaymentNotificationEmail\(/g) ?? [];
+    assert.equal(matches.length, 1);
+  });
+
+  it("(b) a returned send failure or a thrown exception is caught locally and never turns into a {ok:false} webhook response", () => {
+    const dataSource = readSource("src", "data", "payments.ts");
+    const notificationIndex = dataSource.indexOf("buildFounderPaymentNotificationEmail(");
+    const markProcessedIndex = dataSource.indexOf(
+      'await markWebhook(client, webhookRow, "processed", null);',
+    );
+    assert.ok(notificationIndex > -1 && markProcessedIndex > notificationIndex);
+
+    const tryIndex = dataSource.lastIndexOf("try {", notificationIndex);
+    const block = dataSource.slice(tryIndex, markProcessedIndex);
+
+    // Both failure shapes are handled inside this block...
+    assert.match(block, /if \(!sendResult\.ok\)/); // a provider-returned {ok:false}
+    assert.match(block, /catch \(error\)/); // a thrown exception (e.g. network failure)
+    // ...and neither one produces an early `{ ok: false, ... }` return --
+    // execution always falls through to markWebhook + the final ok:true.
+    assert.doesNotMatch(block, /return \{ ?ok: false/);
+  });
+
+  it("is a plain internal send, not outreach -- none of the approval/content-hash/suppression machinery applies", () => {
+    const dataSource = readSource("src", "data", "payments.ts");
+    const notificationIndex = dataSource.indexOf("buildFounderPaymentNotificationEmail(");
+    const surrounding = dataSource.slice(
+      Math.max(0, notificationIndex - 600),
+      notificationIndex + 900,
+    );
+    assert.doesNotMatch(
+      surrounding,
+      /verifyApprovedOutreachContent|isDuplicateSendBlocked|isRecipientSuppressed|hasUnsubscribeLanguage/,
+    );
+  });
+
+  it("the founder recipient comes only from FOUNDER_NOTIFY_EMAIL, with no hardcoded fallback address", () => {
+    const dataSource = readSource("src", "data", "payments.ts");
+    const line = dataSource.split("\n").find((l) => l.includes("const founderEmail ="));
+    assert.ok(line, "expected a founderEmail assignment reading the env var");
+    assert.match(line!, /process\.env\.FOUNDER_NOTIFY_EMAIL/);
+    assert.doesNotMatch(line!, /@[a-z0-9.-]+\.[a-z]{2,}/i);
+  });
+
+  it("does nothing (no crash, no send attempt) when FOUNDER_NOTIFY_EMAIL is not configured", () => {
+    const dataSource = readSource("src", "data", "payments.ts");
+    const founderEmailLine = dataSource
+      .split("\n")
+      .findIndex((l) => l.includes("const founderEmail ="));
+    assert.ok(founderEmailLine > -1);
+    const notificationIndex = dataSource.indexOf("buildFounderPaymentNotificationEmail(");
+    const guardBlock = dataSource.slice(
+      dataSource.indexOf("const founderEmail ="),
+      notificationIndex,
+    );
+    assert.match(guardBlock, /if \(founderEmail\)/);
+  });
+});
+
 describe("Settings UI wiring for Stripe runtime status", () => {
   function readSource(...segments: string[]): string {
     return readFileSync(join(process.cwd(), ...segments), "utf8");

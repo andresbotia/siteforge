@@ -3,8 +3,11 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { recordActivityEvent } from "@/data/activity";
 import { asRecord } from "@/lib/json";
+import { getEmailConfig } from "@/lib/email/config";
+import { DEFAULT_SENDER_EMAIL, getEmailProvider } from "@/lib/email/provider";
 import { buildCheckoutCancelUrl, buildCheckoutSuccessUrl, resolveAppOrigin } from "@/lib/payments/checkout-urls";
 import { centsToUsd, isPaymentCurrency } from "@/lib/payments/money";
+import { buildFounderPaymentNotificationEmail } from "@/lib/notifications/founder-payment";
 import {
   buildCommercialOfferDraft,
   canCreateCheckoutForOffer,
@@ -1144,6 +1147,41 @@ export async function processCheckoutCompletedEvent(
     } catch {
       // Unique-index conflict on retry is expected and harmless.
     }
+  }
+
+  // M10 fulfillment follow-up: best-effort founder notification. This runs
+  // exactly once per real event because everything above already returns
+  // early for a duplicate/replayed one -- the stripe_webhook_events insert
+  // conflict at the top of this function (`if (webhookError) return {ok:
+  // true, duplicate: true};`) is what makes that true; nothing new is added
+  // here to re-derive dedupe. A notification failure (missing config, a
+  // provider error, even a thrown network error) must never fail the
+  // webhook or skip marking it processed -- Stripe would otherwise retry an
+  // event that was already fully handled. Not prospect outreach, so none of
+  // delivery-policy.ts's approval/content-hash/attribution machinery
+  // applies; it goes through the same generic mock/live provider gate as
+  // every other email in this codebase.
+  try {
+    const founderEmail = (process.env.FOUNDER_NOTIFY_EMAIL ?? "").trim();
+    if (founderEmail) {
+      const emailConfig = getEmailConfig();
+      const message = buildFounderPaymentNotificationEmail(
+        {
+          businessName: lead.business_name,
+          amountTotalCents: event.amountTotalCents ?? session.amount_total_cents,
+          currency: event.currency ?? session.currency,
+          leadId: lead.id,
+          leadUrl: `${resolveAppOrigin()}/leads/${lead.id}`,
+        },
+        { to: founderEmail, from: emailConfig.from ?? DEFAULT_SENDER_EMAIL },
+      );
+      const sendResult = await getEmailProvider().sendEmail(message);
+      if (!sendResult.ok) {
+        console.error("Founder payment notification failed to send:", sendResult.error);
+      }
+    }
+  } catch (error) {
+    console.error("Founder payment notification threw:", error);
   }
 
   await markWebhook(client, webhookRow, "processed", null);

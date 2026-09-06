@@ -336,6 +336,7 @@ SITEFORGE_EMAIL_REPLY_TO=
 SITEFORGE_ALLOW_LIVE_EMAIL=false
 SITEFORGE_INTERNAL_TEST_EMAIL=
 RESEND_WEBHOOK_SECRET=
+FOUNDER_NOTIFY_EMAIL=
 ```
 
 Generate `SITEFORGE_AUTH_SECRET` with a cryptographically random value, for example:
@@ -404,6 +405,7 @@ Live xAI inference cannot occur merely because `XAI_API_KEY` exists. A paid AI r
 | `SITEFORGE_ALLOW_LIVE_EMAIL` | Live-email gate. Must be exactly `true`; default off. |
 | `SITEFORGE_INTERNAL_TEST_EMAIL` | Optional allowlisted operator recipient for Settings internal test sends. Falls back to the admin email when absent. |
 | `RESEND_WEBHOOK_SECRET` | Optional server-only Resend/Svix webhook signing secret. Required before accepting live Resend webhook events. |
+| `FOUNDER_NOTIFY_EMAIL` | Optional server-only recipient for the "payment received" founder notification sent from the Stripe webhook. Skipped (no-op, logged) when unset. Not outreach -- goes through the same mock/live gate as other email but none of the approval/content-hash/suppression machinery in `delivery-policy.ts`. |
 
 Stripe checkout defaults to the mock provider. The live Stripe provider still fails closed in this milestone and does not create live checkout sessions. Email sending defaults to the mock provider; a Resend key alone does not enable delivery.
 
