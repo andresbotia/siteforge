@@ -90,8 +90,11 @@ export function composeSalesDraft(
   const addressedFixes = (website.auditFixes || []).filter((f) => f.addressed);
   if (addressedFixes.length > 0) {
     const fix = addressedFixes[0];
+    // builderAction is already written as a verb-first action phrase
+    // ("Adds...", "Replaces...", "Embeds..."); prepending another verb here
+    // produced a doubled verb ("adds adds...", "adds replaces...").
     improvement = fix.builderAction
-      ? `adds ${fix.builderAction.toLowerCase()}`
+      ? fix.builderAction.toLowerCase()
       : "improves mobile navigation and primary call-to-action layout";
     evidence.push({
       type: "builder_fix",
@@ -110,7 +113,9 @@ export function composeSalesDraft(
   }
 
   // 3. Construct Subject & Body
-  const subject = `Quick website concept for ${businessName}`;
+  // Short, lowercase, non-salesy subject (cold-email skill: 2-4 words,
+  // internal-looking beats a pitch in the subject line).
+  const subject = newWebsiteOpportunity ? "no website found" : "quick site note";
   evidence.push({
     type: "preview_link",
     text: `Active preview ending ${preview.tokenHint}; outreach link ending ${preview.attributionTokenHint}`,
@@ -138,18 +143,33 @@ export function composeSalesDraft(
     source: "lib/payments/limits",
   });
 
+  // Problem: what the observation actually costs them. Tied to the same
+  // evidence branch as the observation itself -- never a decorative detail
+  // (cold-email skill: "if your personalization has nothing to do with the
+  // problem you solve, it's just an attention hack").
+  let costLine = "";
+  if (newWebsiteOpportunity) {
+    costLine =
+      "When someone searches for you and finds nothing, they call the next place instead.";
+  } else if (audit.findings && audit.findings.length > 0 && audit.findings[0].category === "seo") {
+    costLine = "That usually means fewer people find you when they search nearby.";
+  } else {
+    costLine =
+      "That's the kind of thing that quietly costs you calls or reservations before anyone complains.";
+  }
+
   const body = [
     `Hi ${businessName} team,`,
     "",
     newWebsiteOpportunity
-      ? `I was researching ${lead.industry.toLowerCase()} businesses in ${lead.city} and came across ${businessName}. ${observation}.`
-      : `I was researching ${lead.industry.toLowerCase()} businesses in ${lead.city} and came across ${businessName}. While inspecting your current website, ${observation}.`,
+      ? `${observation}. ${costLine}`
+      : `Looking at ${businessName}'s website, ${observation}. ${costLine}`,
     "",
     newWebsiteOpportunity
-      ? `To show what a standalone site could look like, we drafted a clean concept that ${improvement}.`
-      : `To show what an updated version could look like, we drafted a clean replacement that ${improvement}.`,
+      ? `To show what that could look like, we built a standalone site that ${improvement}.`
+      : `To show what that could look like, we built a site that ${improvement}.`,
     "",
-    `You can view the live interactive preview here:`,
+    `Here's the live preview -- take a look and let me know what you think, good or bad:`,
     "{{OUTREACH_PREVIEW_LINK}}",
     ...(suggestedDomain
       ? [
@@ -161,7 +181,7 @@ export function composeSalesDraft(
     COMMERCIAL_TERMS_HEADING,
     ...commercialTermsLines(businessName),
     "",
-    `If you like the direction or have any questions about how it works, just reply directly to this email.`,
+    `No pressure either way -- just reply and let me know what you think.`,
     "",
     `Best,`,
     `${senderName}`,

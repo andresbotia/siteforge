@@ -80,7 +80,7 @@ export function composeFollowUpDraft(
   const body = [
     `Hi ${businessName} team,`,
     "",
-    `Thanks for your interest. Here is everything you need to move forward.`,
+    `Thanks for the interest -- here's everything you need to move forward.`,
     "",
     `What you're purchasing: a website setup for ${money(offer.setupAmountCents)} one time. We build and set up your website, then hand it over ready to use.`,
     "",

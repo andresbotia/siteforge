@@ -204,7 +204,7 @@ describe("Sales Agent: deterministic $0 drafting & factual integrity", () => {
   test("generates personalized draft referencing audit and builder fixes", () => {
     const draft = composeSalesDraft(mockLead, mockAudit, mockWebsite, mockPreview);
 
-    assert.equal(draft.subject, "Quick website concept for Atlantic Drain Plumbing");
+    assert.equal(draft.subject, "quick site note");
     assert.match(draft.body, /Hi Atlantic Drain Plumbing team,/);
     assert.match(draft.body, /missing tap-to-call phone button/i);
     assert.match(draft.body, /adds immediate click-to-call header/i);
