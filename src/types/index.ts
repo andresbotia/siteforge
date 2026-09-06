@@ -490,6 +490,8 @@ export interface Customer {
   convertedAt?: string | null;
   /** When an operator manually confirmed the site is live (pending_setup -> active). */
   activatedAt?: string | null;
+  /** When the one-time welcome email was sent. Null until it has been. */
+  welcomeEmailSentAt?: string | null;
 }
 
 export interface Subscription {

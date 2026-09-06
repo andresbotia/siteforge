@@ -163,25 +163,35 @@ issued certificate before telling the customer the link is live.
 
 ## Step 6 — Send the customer their live link + welcome email
 
-**In-app tooling: none.** SiteForge's outreach system only has two kinds
-today — `cold_outreach` and `follow_up` (`OUTREACH_KINDS` in
-`src/lib/sales/kinds.ts:12`) — there is no third kind for a post-purchase
-welcome/onboarding email, and no such template exists anywhere in
-`src/lib/email` or `src/lib/sales`. Nothing in the checkout-completed path
-sends any email to the customer.
+**In-app tooling: partial, added 2026-09-06.** A "Send welcome email" action
+now exists on `/customers/[id]` (`src/data/customers.ts:sendWelcomeEmail`),
+gated on `customers.status = "active"` (i.e. only after Step 7's "Mark site
+live" action) and guarded by a one-time `customers.welcome_email_sent_at`
+timestamp so it cannot fire twice. The operator supplies the live URL in a
+form field at send time — that same value is what populates the
+previously-unused `customers.production_url` column. Content is
+deterministic ($0, no LLM): the domain/hosting/no-lock-in language is
+`commercialTermsLines()` from `src/lib/sales/commercial-terms.ts` embedded
+verbatim, the same source of truth the cold and payment-follow-up emails
+already use, so this message can't drift from what the customer was told
+before they paid.
 
-**Manual action (outside the codebase):** the founder composes and sends the
-welcome email by hand (outside SiteForge's mock/guarded Resend path, which
-is only wired for the two existing outreach kinds), including the live site
-URL from Step 3/4.
+This is deliberately **not** folded into the `cold_outreach`/`follow_up`
+outreach-table pipeline (`OUTREACH_KINDS`, approval binding, content-hash,
+attribution tokens) — that machinery exists for pre-purchase prospect email,
+where a human must approve exact content before persuading a stranger. A
+welcome email to an already-paying customer, with fixed content sourced from
+already-agreed terms, doesn't carry that risk, so it sends immediately on
+the operator's one click rather than sitting in an approval queue. It still
+goes through the same generic mock/live email gate
+(`SITEFORGE_ALLOW_LIVE_EMAIL`) as everything else.
 
-**Active time:** ~10 min.
+**Manual action still required:** the operator must know the live URL to
+enter it (nothing in the codebase verifies deployment or looks it up) — that
+part of this step is still outside the codebase, matching Steps 2-5 above.
+
+**Active time:** ~2 min (open the customer, paste the URL, click send).
 **Elapsed time:** 0.
-
-**Gap to flag:** if this should eventually become a real third outreach kind
-(with its own approval binding, like `cold_outreach` and `follow_up` have),
-that's a genuine scope decision for a future milestone, not something to
-back into here.
 
 ---
 

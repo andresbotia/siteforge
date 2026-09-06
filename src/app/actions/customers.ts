@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { activateCustomerSite } from "@/data/customers";
+import { activateCustomerSite, sendWelcomeEmail } from "@/data/customers";
 import { requireAdminSession } from "@/lib/auth/guard";
 
 export type ActivateCustomerSiteActionState = { ok: boolean; error?: string } | null;
@@ -30,5 +30,32 @@ export async function activateCustomerSiteAction(
   revalidatePath(`/customers/${customerId}`);
   if (leadId) revalidatePath(`/leads/${leadId}`);
   revalidatePath("/today");
+  return { ok: true };
+}
+
+export type SendWelcomeEmailActionState = { ok: boolean; error?: string } | null;
+
+/**
+ * "Send welcome email." Manual, one-time. Requires customers.status =
+ * "active" (set by "Mark site live" above) -- see canSendWelcomeEmail in
+ * src/lib/customers/welcome-email.ts for the exact gate.
+ */
+export async function sendWelcomeEmailAction(
+  _previousState: SendWelcomeEmailActionState,
+  formData: FormData,
+): Promise<SendWelcomeEmailActionState> {
+  await requireAdminSession();
+
+  const customerId = String(formData.get("customerId") ?? "").trim();
+  const leadId = String(formData.get("leadId") ?? "").trim();
+  const siteUrl = String(formData.get("siteUrl") ?? "").trim();
+  if (!customerId) return { ok: false, error: "Missing customer." };
+  if (!siteUrl) return { ok: false, error: "Enter the live site URL." };
+
+  const result = await sendWelcomeEmail(customerId, siteUrl);
+  if (!result.ok) return result;
+
+  revalidatePath(`/customers/${customerId}`);
+  if (leadId) revalidatePath(`/leads/${leadId}`);
   return { ok: true };
 }

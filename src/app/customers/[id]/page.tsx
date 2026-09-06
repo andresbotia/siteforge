@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ActivateSiteButton } from "@/components/customers/activate-site-button";
+import { SendWelcomeEmailButton } from "@/components/customers/send-welcome-email-button";
 import { Card, CardBody, CardHeader } from "@/components/shared/card";
 import { EmptyState } from "@/components/shared/empty-state";
 import { PageHeader } from "@/components/shared/page-header";
@@ -65,9 +66,22 @@ export default async function CustomerDetailPage({ params }: CustomerPageProps) 
               Site marked live:{" "}
               {customer.activatedAt ? formatDateTime(customer.activatedAt) : "Not yet"}
             </p>
+            <p className="text-muted">
+              Welcome email:{" "}
+              {customer.welcomeEmailSentAt ? `Sent ${formatDateTime(customer.welcomeEmailSentAt)}` : "Not yet"}
+            </p>
             {customer.status === "pending_setup" ? (
               <div className="border-t border-border-subtle pt-3">
                 <ActivateSiteButton customerId={customer.id} leadId={customer.leadId} />
+              </div>
+            ) : null}
+            {customer.status === "active" && !customer.welcomeEmailSentAt ? (
+              <div className="border-t border-border-subtle pt-3">
+                <SendWelcomeEmailButton
+                  customerId={customer.id}
+                  leadId={customer.leadId}
+                  defaultSiteUrl={customer.website}
+                />
               </div>
             ) : null}
             <p className="text-muted">

@@ -4,6 +4,13 @@ import { recordActivityEvent } from "@/data/activity";
 import { syncWorkItemsForLead } from "@/data/work-items";
 import { mutateTable, readTable } from "@/lib/supabase/server";
 import { buildCustomerActivationPatch, canActivateCustomerSite } from "@/lib/customers/activation";
+import {
+  buildWelcomeEmailSentPatch,
+  canSendWelcomeEmail,
+  composeWelcomeCustomerEmail,
+} from "@/lib/customers/welcome-email";
+import { DEFAULT_SENDER_EMAIL, getEmailProvider } from "@/lib/email/provider";
+import { getEmailConfig } from "@/lib/email/config";
 import { inferPaymentEnvironment } from "@/lib/payments/conversion";
 import type { Customer, CustomerPlan, CustomerStatus } from "@/types";
 import type {
@@ -97,6 +104,7 @@ export async function listCustomers(): Promise<Customer[]> {
       joinedAt: row.created_at,
       convertedAt: row.converted_at,
       activatedAt: row.activated_at,
+      welcomeEmailSentAt: row.welcome_email_sent_at,
     };
   });
 }
@@ -174,6 +182,7 @@ export async function getCustomerById(id: string): Promise<CustomerDetail | null
     joinedAt: row.created_at,
     convertedAt: row.converted_at,
     activatedAt: row.activated_at,
+    welcomeEmailSentAt: row.welcome_email_sent_at,
     subscriptions: subscriptions ?? [],
   };
 }
@@ -230,6 +239,96 @@ export async function activateCustomerSite(
   if (row.lead_id) {
     await syncWorkItemsForLead(row.lead_id).catch(() => {});
   }
+
+  return { ok: true };
+}
+
+/**
+ * M10 fulfillment follow-up. The manual, one-time "welcome, your site is
+ * live" send -- see the design note at the top of
+ * src/lib/customers/welcome-email.ts for why this is a customers-table
+ * timestamp guard rather than an approval-bound outreach-table row. Unlike
+ * the best-effort founder payment notification (src/data/payments.ts),
+ * this IS the primary action the operator explicitly triggered, so a send
+ * failure is returned as an explicit error rather than swallowed -- the
+ * operator needs to know it didn't go out so they can retry.
+ */
+export async function sendWelcomeEmail(
+  customerId: string,
+  siteUrl: string,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const trimmedUrl = siteUrl.trim();
+  if (!/^https?:\/\/.+/i.test(trimmedUrl)) {
+    return { ok: false, error: "A live site URL (starting with http:// or https://) is required." };
+  }
+
+  const row = await readTable<Pick<
+    CustomerRow,
+    "id" | "status" | "lead_id" | "business_name" | "contact_email" | "welcome_email_sent_at"
+  > | null>((client) =>
+    client
+      .from("customers")
+      .select("id, status, lead_id, business_name, contact_email, welcome_email_sent_at")
+      .eq("id", customerId)
+      .maybeSingle(),
+  );
+  if (!row) return { ok: false, error: "Customer was not found." };
+
+  const check = canSendWelcomeEmail(row.status, Boolean(row.welcome_email_sent_at));
+  if (!check.ok) return check;
+
+  const recipient = (row.contact_email ?? "").trim();
+  if (!recipient) return { ok: false, error: "Customer has no contact email on file." };
+
+  const { subject, body } = composeWelcomeCustomerEmail({
+    businessName: row.business_name,
+    siteUrl: trimmedUrl,
+  });
+
+  const emailConfig = getEmailConfig();
+  const sendResult = await getEmailProvider().sendEmail({
+    to: recipient,
+    from: emailConfig.from ?? DEFAULT_SENDER_EMAIL,
+    subject,
+    text: body,
+    metadata: { notification: "customer_welcome_email", customer_id: row.id },
+  });
+  if (!sendResult.ok) {
+    return { ok: false, error: sendResult.error ?? "The welcome email failed to send." };
+  }
+
+  const patch = buildWelcomeEmailSentPatch(trimmedUrl);
+  // Same race-safety idiom as activateCustomerSite: the update itself
+  // re-checks both guard conditions, not just the read above.
+  const updated = await mutateTable<Pick<CustomerRow, "id"> | null>((client) =>
+    client
+      .from("customers")
+      .update(patch)
+      .eq("id", row.id)
+      .eq("status", "active")
+      .is("welcome_email_sent_at", null)
+      .select("id")
+      .maybeSingle(),
+  );
+  if (!updated) {
+    return {
+      ok: false,
+      error: "The email sent, but the customer record could not be updated. Check the activity log before retrying.",
+    };
+  }
+
+  await recordActivityEvent({
+    eventType: "customer_welcome_email_sent",
+    title: "Welcome email sent",
+    description: `${row.business_name}: welcome email sent to ${recipient}.`,
+    leadId: row.lead_id ?? undefined,
+    metadata: {
+      customer_id: row.id,
+      provider: sendResult.provider,
+      message_id: sendResult.messageId ?? "",
+      simulated: sendResult.simulated ?? false,
+    },
+  });
 
   return { ok: true };
 }
